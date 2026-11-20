@@ -27,7 +27,11 @@ export type ShowcaseAppId =
   | "subsc"
   | "kaden"
   | "pta"
-  | "norikae";
+  | "norikae"
+  | "sagi"
+  | "invoice"
+  | "dokusho"
+  | "gokinjo";
 
 export interface ShowcaseAppConfig {
   id: ShowcaseAppId;
@@ -699,5 +703,95 @@ export const SHOWCASE_APPS: Record<ShowcaseAppId, ShowcaseAppConfig> = {
     gasPrefix: "[迂回レスキュー]",
     systemInstruction:
       "あなたは鉄道遅延やベビーカー・車いす移動時のパニックを落ち着かせる移動案内アシスタントです（最新の運行状況と振替輸送実施有無は必ず駅員・公式アプリで確認するよう明記してください）。入力された状況から、alert_level (high/medium/low)、alert_title（移動の緊急度と振替輸送確認ポイント）、alert_message（ベビーカー・大荷物時に避けるべき乗り換えや公式運行確認の注意）、items（代替路線の考え方・タクシー相乗り/休憩判断の3つの選択肢）、checklist（振替乗車票・エレベーター位置・ICカード残高確認）、copyable_draft（待ち合わせ相手や職場へすぐ送れる丁寧な遅延連絡メッセージ）、suggested_tasks（経路再確認・到着予定更新タスク）を日本語で構造化してください。",
+  },
+  sagi: {
+    id: "sagi",
+    name: "あやしい SMS・SNS 詐欺チェッカー",
+    category: "暮らしと家族の部門",
+    tagline: "親に届いた怪しい SMS や SNS 広告のスクショから詐欺手口と安全行動を即診断",
+    subtitle:
+      "高齢の親が一人で抱え込みがちなフィッシング SMS や偽投資広告。Gemini 3.8 Flash が危険サインをわかりやすく解説し、家族と #9110・188 への相談メモを整えます。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 家族防犯ガード",
+    accentColor: "#dc2626",
+    accentSoft: "#fef2f2",
+    inputLabel: "届いた SMS・メール・SNS 広告の文面や状況（またはスクショ）",
+    inputPlaceholder: "例: 「国税庁より未納税金のお知らせ。本日中に下記URLから納付してください...」",
+    sampleText:
+      "【70代の親に届いたSMS】\n「【重要】お客様のお荷物は住所不明のため持ち帰りました。本日中に下記リンクより再配達手続きをお願いします。http://example-delivery-check.xyz」\n※親がURLを押しそうで不安。詐欺の根拠と親に優しく説明する文章、もし入力した後の対処法を整理したい。",
+    submitLabel: "詐欺リスクと親への説明メモを診断",
+    section1Title: "1. 検出された危険サイン＆詐欺手口の特徴",
+    section2Title: "2. 絶対にやってはいけないこと＆安全設定チェック",
+    section3Title: "3. 親へ優しく送れる説明メモ（#9110 / 188 案内つき）",
+    gasPrefix: "[詐欺チェッカー]",
+    systemInstruction:
+      "あなたは高齢の親をフィッシング詐欺やSNS偽広告から守る優しい防犯アドバイザーです。入力された文面・スクショから、alert_level (high/medium/low)、alert_title（詐欺リスク判定）、alert_message（URLを踏まない・折り返し電話しない等の緊急注意）、items（不自然なドメインや緊急性を煽る文言など危険サイン3点）、checklist（iPhone/Androidの不明送信者フィルタ設定や被害時の#9110・消費者ホットライン188連絡確認）、copyable_draft（親を責めずに安心感を与えるやさしいLINE説明文）、suggested_tasks（実家のスマホ安全設定・共有タスク）を日本語で構造化してください。",
+  },
+  invoice: {
+    id: "invoice",
+    name: "副業インボイス・経費仕分けコーチ",
+    category: "はたらく・まなぶ部門",
+    tagline: "副業の領収書や案件メモから経費区分・インボイス確認・請求メールを一括作成",
+    subtitle:
+      "副業・フリーランスが悩む「請求書や領収書の管理が面倒」を解決。Gemini 3.8 Flash が勘定科目の目安・記載漏れチェック・請求送信文を構造化します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 副業事務コーチ",
+    accentColor: "#2563eb",
+    accentSoft: "#eff6ff",
+    inputLabel: "副業の売上・経費メモや請求したい案件内容（または領収書写真）",
+    inputPlaceholder: "例: Web記事執筆 30,000円（源泉徴収あり？）、取材カフェ代 1,200円、書籍 2,400円",
+    sampleText:
+      "【今月の副業メモ】\n・デザイン制作案件 1件：報酬 55,000円（税込）、クライアントは法人、自分はインボイス未登録の個人\n・経費メモ：参考書籍 2,860円、打ち合わせカフェ代 1,100円、作業用USBハブ 3,200円\n※経費の勘定科目目安と、クライアントへ送る丁寧な請求連絡文を作りたい。",
+    submitLabel: "経費仕分けと請求連絡メモを生成",
+    section1Title: "1. 経費の勘定科目目安＆インボイス確認ポイント",
+    section2Title: "2. 請求書発行・確定申告前の確認チェックリスト",
+    section3Title: "3. クライアントへそのまま送れる請求書送付メール",
+    gasPrefix: "[副業インボイスコーチ]",
+    systemInstruction:
+      "あなたは副業・フリーランス初心者を支援する事務・経理ガイドです（最終的な税務・会計処理は税理士・会計ソフト・税務署の案内に従うよう明記してください）。入力された取引・経費メモから、alert_level (high/medium/low)、alert_title（インボイス・源泉徴収の確認重要度）、alert_message（未登録時の消費税扱いや証憑保管の注意点）、items（各支出の勘定科目目安と家事按分の考え方）、checklist（請求書記載事項・振込期日・領収書保存チェック）、copyable_draft（件名つきの丁寧な請求書送付メール文面）、suggested_tasks（入金確認・月次記帳のカレンダー登録タスク）を日本語で構造化してください。",
+  },
+  dokusho: {
+    id: "dokusho",
+    name: "読書メモ「行動アクション」変換 AI",
+    category: "はたらく・まなぶ部門",
+    tagline: "本や記事の読書メモを「今週試す3つの行動」と復習クイズへ変換し知識を定着",
+    subtitle:
+      "「本を読んでもすぐ忘れてしまう」を解消。Gemini 3.8 Flash が読書メモを自分の仕事・生活に活かすアクションプランへ落とし込み、カレンダーに登録します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 読書定着コーチ",
+    accentColor: "#7c3aed",
+    accentSoft: "#f5f3ff",
+    inputLabel: "読んだ本のタイトル・気になったフレーズ・活かしたい場面",
+    inputPlaceholder: "例: 『エッセンシャル思考』より「90点ルール」…仕事で全部引き受けてしまうのを直したい",
+    sampleText:
+      "【本・記事のメモ】ビジネス書の「重要でない9割を捨て、本当に大事な1割に集中する」「断る勇気を持つには、自分の優先順位を3つ以内に絞っておくことが重要」という箇所が刺さった。\n【活かしたい場面】毎日の残業を減らし、副業と家族の時間を確保したい。",
+    submitLabel: "今週の行動アクションと定着メモを生成",
+    section1Title: "1. 自分の生活に引き寄せた 3 つの実践アクション",
+    section2Title: "2. 知識を忘れず定着させる振り返りチェック",
+    section3Title: "3. SNS・読書ノートにそのまま貼れる 3 行アウトプット",
+    gasPrefix: "[読書アクションAI]",
+    systemInstruction:
+      "あなたは読書を「読んで終わり」にせず行動変容につなげる学習コーチです。読書メモと活かしたい場面から、alert_level (high/medium/low)、alert_title（この学びが効く最大のボトルネック）、alert_message（知識を行動に変えるときの落とし穴）、items（今日から1週間で試せる具体的な行動プラン3つ）、checklist（週末に振り返るセルフチェック項目）、copyable_draft（SNSや社内共有・読書ノートに貼れる簡潔な学びアウトプット）、suggested_tasks（実践リマインド・1週間後振り返りのカレンダー登録タスク）を日本語で構造化してください。",
+  },
+  gokinjo: {
+    id: "gokinjo",
+    name: "ご近所・マンション相談クッション AI",
+    category: "まちと地球の未来部門",
+    tagline: "騒音・ごみ出し・駐輪などの近隣モヤモヤを角の立たない管理会社・自治会相談文に変換",
+    subtitle:
+      "直接言いにくい近隣トラブルを冷静に整理。Gemini 3.8 Flash が感情を抑えた客観的な相談メモと管理規約チェックリストを作成します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 地域調和サポート",
+    accentColor: "#0d9488",
+    accentSoft: "#f0fdfa",
+    inputLabel: "困っている状況・日時・頻度（個人を特定する情報は伏せて入力）",
+    inputPlaceholder: "例: 深夜1時頃の足音とドアの開閉音が週3回ほど続いて眠れない...",
+    sampleText:
+      "【状況】マンションのゴミ集積場に、指定曜日以外の燃えないごみや段ボールが毎週放置されており、カラスや悪臭で困っている。\n【希望】誰かを名指しして責めたり直接揉めたりせず、管理会社や自治会から建物全体へ柔らかい注意喚起チラシを出してもらえるよう相談したい。",
+    sampleLocation: "居住マンション・管理組合窓口",
+    showLocationInput: true,
+    submitLabel: "客観的な相談メモと解決ステップを生成",
+    section1Title: "1. トラブルを悪化させない解決ステップ",
+    section2Title: "2. 相談前に揃えておくとスムーズな記録チェック",
+    section3Title: "3. 管理会社・自治会へそのまま送れる丁寧な相談文",
+    gasPrefix: "[ご近所相談AI]",
+    systemInstruction:
+      "あなたは近隣トラブルやマンション管理の悩みを冷静かつ円満に解決へ導くコミュニティ調停アドバイザーです（危険・違法行為がある場合は警察#9110や自治体窓口へ相談するよう案内してください）。入力された状況から、alert_level (high/medium/low)、alert_title（トラブルの性質と適切な相談窓口）、alert_message（直接対立を避け第三者経由で進める重要性）、items（記録の取り方・管理会社/自治会への伝え方・段階的対応3点）、checklist（日時メモ・写真・管理規約確認チェック）、copyable_draft（感情を抑え事実ベースで依頼できる管理会社/自治会向け相談メール文）、suggested_tasks（経過記録・再確認のカレンダー登録タスク）を日本語で構造化してください。",
   },
 };
