@@ -37,7 +37,10 @@ export type ShowcaseAppId =
   | "zuborali"
   | "shinsei"
   | "taishoku"
-  | "tenpu";
+  | "tenpu"
+  | "packing"
+  | "byoinmemo"
+  | "hoshosho";
 
 export interface ShowcaseAppConfig {
   id: ShowcaseAppId;
@@ -943,5 +946,77 @@ export const SHOWCASE_APPS: Record<ShowcaseAppId, ShowcaseAppConfig> = {
     gasPrefix: "[メール送付AI]",
     systemInstruction:
       "あなたはビジネスメールの添付漏れ・ファイル名不整合・誤送信を防ぐコミュニケーション品質アシスタントです。入力されたメール本文と添付予定ファイル名から、alert_level (high/medium/low)、alert_title（最も危険な送信前リスク）、alert_message（受け手の混乱や誤送信を防ぐポイント）、items（日付＋書類名＋社名を含む推奨ファイル名案と本文との整合性3点）、checklist（宛先CC/BCC・添付ファイル一致・パスワード/別送不要確認チェック）、copyable_draft（添付ファイル名を本文中に明記した分かりやすい改訂メール文）、suggested_tasks（先方確認・入金/返信リマインドタスク）を日本語で構造化してください。",
+  },
+  packing: {
+    id: "packing",
+    name: "旅行パッキング・直前忘れ物ゼロ AI",
+    category: "暮らし・家族部門",
+    tagline: "行き先・日数・移動手段から「今詰める物」と「出発朝に詰める直前リスト」を分離生成",
+    subtitle:
+      "毎回ゼロから考えて重くなりがちな荷造りを効率化。Gemini 3.8 Flash が機内持ち込み制限や当日朝の充電器・薬の入れ忘れまで防ぎます。",
+    badgeText: "✦ Google Gemini 3.8 Flash + スマート荷造り",
+    accentColor: "#0ea5e9",
+    accentSoft: "#f0f9ff",
+    inputLabel: "行き先・泊数・季節・同行者・気になる持ち物",
+    inputPlaceholder: "例: 11月末に2泊3日で福岡へ飛行機移動。コンタクト、モバイルバッテリー、仕事用PCあり...",
+    sampleText:
+      "来週2泊3日で札幌へ飛行機で出張兼観光。雪の予報あり。普段使っているコンタクト保存液、処方薬、モバイルバッテリー、ノートPC一式を持っていきたいが、機内持ち込み制限と当日の入れ忘れが心配。",
+    sampleLocation: "出発前夜〜当日朝の玄関",
+    showLocationInput: true,
+    submitLabel: "前日準備＆当日朝専用パッキングリストを生成",
+    section1Title: "1. 移動手段・天候に合わせたパッキング戦略",
+    section2Title: "2. 出発当日の朝に入れる直前チェックリスト",
+    section3Title: "3. そのまま保存・共有できる持ち物一覧メモ",
+    gasPrefix: "[荷造りAI]",
+    systemInstruction:
+      "あなたは忘れ物ゼロと荷物の軽量化を両立させるトラベルパッキングコーチです。行き先・日数・移動手段・持ち物から、alert_level (high/medium/low)、alert_title（航空制限や防寒など最大の注意点）、alert_message（前夜と当日朝を分けるコツ）、items（衣類・ガジェット・衛生品の最適化アドバイス3点）、checklist（当日朝に入れる充電器・常備薬・身分証チェック）、copyable_draft（メモアプリや同行者LINEに貼れる整理済みパッキングリスト）、suggested_tasks（前日準備・当日朝確認のカレンダー登録タスク）を日本語で構造化してください。",
+  },
+  byoinmemo: {
+    id: "byoinmemo",
+    name: "診察室・症状メモ＆質問整理 AI",
+    category: "暮らし・家族部門",
+    tagline: "診察室で緊張して伝え忘れる「いつから・どこが・どう痛いか」を30秒で医師向けメモに整理",
+    subtitle:
+      "「いつから痛いですか？」に詰まって帰り道に後悔しないために。Gemini 3.8 Flash が時系列の症状サマリーと聞くべき質問リストを作成します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 受診サポート",
+    accentColor: "#10b981",
+    accentSoft: "#ecfdf5",
+    inputLabel: "今の症状・始まった時期・飲んでいる薬・医師に聞きたいこと",
+    inputPlaceholder: "例: 3日前から右肩が上がらず夜中に疼く。市販の湿布は効かない。検査が必要か聞きたい...",
+    sampleText:
+      "5日ほど前から夕方になると微熱（37.4℃前後）と乾いた咳が続く。朝は比較的楽だが会議中に咳き込む。市販の総合感冒薬を2日飲んだが変化なし。処方薬との飲み合わせと、仕事にいつ戻れるか確認したい。",
+    sampleLocation: "かかりつけ内科・診察待ち時間",
+    showLocationInput: true,
+    submitLabel: "医師に見せる症状サマリー＆質問リストを作成",
+    section1Title: "1. 時系列の症状整理＆診察時の伝達ポイント",
+    section2Title: "2. 受診前に用意しておくと正確な持ち物チェック",
+    section3Title: "3. そのまま見せる・問診票に貼れる症状メモ",
+    gasPrefix: "[受診メモAI]",
+    systemInstruction:
+      "あなたは患者が医師へ正確かつ短時間で症状を伝えられるよう支援する受診準備アシスタントです（診断や治療判断は行わず必ず医師の診察を受けるよう明記してください）。入力された症状メモから、alert_level (high/medium/low)、alert_title（受診を急ぐべきサインや確認優先事項）、alert_message（短い診察時間でも伝え漏れを防ぐコツ）、items（発症時期・経過・服薬歴の整理ポイント3点）、checklist（お薬手帳・保険証・マイナ保険証・熱型メモチェック）、copyable_draft（スマホ画面を見せてそのまま読める問診用3行サマリー＆質問リスト）、suggested_tasks（再受診・経過記録のカレンダー登録タスク）を日本語で構造化してください。",
+  },
+  hoshosho: {
+    id: "hoshosho",
+    name: "保証書・家電修理サポート一発整理 AI",
+    category: "暮らし・家族部門",
+    tagline: "家電の不調時に「型番・保証期間・窓口・説明文」を整理し、修理問い合わせを最短化",
+    subtitle:
+      "「保証書どこ？型番どこ？」の重労働を軽減。Gemini 3.8 Flash が型番確認場所・保証対象の見極め・サポート窓口への説明文をまとめます。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 家電サポート整理",
+    accentColor: "#f59e0b",
+    accentSoft: "#fffbeb",
+    inputLabel: "不調の家電名・症状・購入時期や保証書の有無",
+    inputPlaceholder: "例: 2年前に買ったドラム式洗濯機が脱水でエラーU12が出る。延長保証に入っていたはず...",
+    sampleText:
+      "2024年10月に家電量販店で買ったコードレス掃除機が、満充電しても30秒で止まるようになった。メーカー1年保証は切れているが、量販店の5年延長保証のレシートがあるかもしれない。修理か買い替えか含め確認したい。",
+    sampleLocation: "量販店延長保証・メーカー修理窓口",
+    showLocationInput: true,
+    submitLabel: "確認手順・必要情報・修理依頼文を一括作成",
+    section1Title: "1. 保証判定＆無駄足を防ぐ確認ステップ",
+    section2Title: "2. 電話・WEBフォーム入力前の準備チェック",
+    section3Title: "3. 修理フォーム・チャットにそのまま貼れる症状説明文",
+    gasPrefix: "[保証修理AI]",
+    systemInstruction:
+      "あなたは家電故障時の保証書探しや修理窓口への問い合わせ負担を減らすサポート整理アシスタントです（分解や危険な自己修理はせず公式サポートを利用するよう案内してください）。入力内容から、alert_level (high/medium/low)、alert_title（メーカー保証と量販店延長保証の切り分けポイント）、alert_message（無償修理や交換の可能性を逃さないコツ）、items（型番・シリアル確認場所、延長保証確認、見積り確認の3点）、checklist（購入日レシート・型番写真・エラーコード動画チェック）、copyable_draft（修理受付フォームやサポートチャットにそのまま貼れる症状説明テンプレート）、suggested_tasks（保証書写真保存・サポート連絡のカレンダー登録タスク）を日本語で構造化してください。",
   },
 };
