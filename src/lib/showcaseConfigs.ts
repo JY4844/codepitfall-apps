@@ -23,7 +23,11 @@ export type ShowcaseAppId =
   | "hikkoshi"
   | "kodomokyuu"
   | "moshimo"
-  | "kaji";
+  | "kaji"
+  | "subsc"
+  | "kaden"
+  | "pta"
+  | "norikae";
 
 export interface ShowcaseAppConfig {
   id: ShowcaseAppId;
@@ -605,5 +609,95 @@ export const SHOWCASE_APPS: Record<ShowcaseAppId, ShowcaseAppConfig> = {
     gasPrefix: "[名もなき家事みえる化]",
     systemInstruction:
       "あなたは夫婦・パートナー間の家事分担を責め合いではなく協力と感謝に変えるライフコーチです。入力された家事メモとモヤモヤから、alert_level (high/medium/low)、alert_title（隠れた負担の診断結果）、alert_message（パートナーに悪気なく見落とされがちなポイント）、items（抽出された名もなき家事の具体リストと所要負荷）、checklist（仕組み化・家電活用・固定担当化の改善案）、copyable_draft（相手を責めずに感謝と協力依頼を伝えるやさしいLINEメッセージ）、suggested_tasks（週末の担当ルーティン・カレンダー登録タスク）を日本語で構造化してください。",
+  },
+  subsc: {
+    id: "subsc",
+    name: "サブスク解約忘れガード",
+    category: "暮らしと家族の部門",
+    tagline: "明細スクショや契約メモから隠れ固定費と解約期限を抽出しカレンダーへ自動通知",
+    subtitle:
+      "SNSで共感の多い「無料トライアルの解約忘れ」「使っていない自動課金」を防止。Gemini 3.8 Flash が固定費を見える化し解約手順を整理します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 固定費見直し AI",
+    accentColor: "#0f766e",
+    accentSoft: "#f0fdfa",
+    inputLabel: "利用中のサブスク一覧・明細メモ・無料トライアル期限（またはスクショ）",
+    inputPlaceholder: "例: 動画配信1,490円、音楽980円、先月入ったAIツール無料体験が25日まで...",
+    sampleText:
+      "【今月の引き落とし・無料トライアルメモ】\n・動画配信A：1,490円/月（最近ほぼ見ていない）\n・クラウドストレージB：400円/月（家族と重複契約かも）\n・英語学習アプリC：7日間無料トライアル中（11月24日 23:59までに解約しないと年額14,800円自動課金）\n・ジムD：7,980円/月（今月1回しか行けていない）",
+    submitLabel: "ムダ課金リスクと解約手順を診断",
+    section1Title: "1. サブスク別の継続／見直し判定",
+    section2Title: "2. 解約・重複整理のアクションチェックリスト",
+    section3Title: "3. 年間節約額試算＆解約リマインドメモ",
+    gasPrefix: "[サブスク解約ガード]",
+    systemInstruction:
+      "あなたは家計の固定費削減を支援するサブスク整理アドバイザーです。入力された契約・明細メモから、alert_level (high/medium/low)、alert_title（最優先の自動課金警告と年間節約目安）、alert_message（年額課金への自動移行リスクや重複の指摘）、items（サービスごとの継続/解約/プラン変更提案）、checklist（アプリストア/Web解約手順・ファミリー共有確認チェック）、copyable_draft（家族共有や自分用の固定費見直しサマリー）、suggested_tasks（解約期限3日前リマインドのカレンダー登録タスク）を日本語で構造化してください。",
+  },
+  kaden: {
+    id: "kaden",
+    name: "家電・保証書トラブルレスキュー",
+    category: "暮らしと家族の部門",
+    tagline: "家電の型番シールやエラー表示を撮るだけで保証期限・原因切り分け・修理連絡文を生成",
+    subtitle:
+      "「壊れたのに説明書も保証書も見つからない」を即解決。Gemini 3.8 Flash が症状別の応急処置とメーカーサポートへの連絡文を作成します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 家電サポート AI",
+    accentColor: "#0284c7",
+    accentSoft: "#f0f9ff",
+    inputLabel: "家電の型番・購入時期・出ているエラー表示や症状（または写真）",
+    inputPlaceholder: "例: ドラム式洗濯機 NA-VX〇〇、購入2年半、エラーU11が出て排水できない",
+    sampleText:
+      "【家電】ドラム式洗濯乾燥機（2024年3月購入・延長保証5年あり、レシートは引き出し）\n【症状】脱水前にエラー「U11」が出て止まった。排水口まわりは少し詰まり気味かも。取扱説明書が見当たらない。\n※自分で直せる範囲の応急処置と、ダメだった場合のメーカー修理依頼メモを作りたい。",
+    submitLabel: "原因切り分けと修理依頼メモを生成",
+    section1Title: "1. 考えられる原因＆安全確認ポイント",
+    section2Title: "2. 修理を呼ぶ前に試せるセルフチェックリスト",
+    section3Title: "3. メーカー窓口にそのまま送れる修理相談メモ",
+    gasPrefix: "[家電レスキュー]",
+    systemInstruction:
+      "あなたは家電トラブルの一次切り分けと保証管理を支援する親切なサポート担当です（感電・発煙・水漏れ時は必ずコンセントを抜いて専門窓口へ連絡するよう明記してください）。入力された型番・症状から、alert_level (high/medium/low)、alert_title（症状の緊急度と保証対象の可能性）、alert_message（安全上の注意と自己解決できる可能性）、items（主な原因と確認箇所）、checklist（電源抜き・フィルター清掃・型番確認など安全チェック）、copyable_draft（メーカー修理窓口へそのまま貼れる症状・型番・購入日連絡文）、suggested_tasks（保証期限登録・部品点検のカレンダー登録タスク）を日本語で構造化してください。",
+  },
+  pta: {
+    id: "pta",
+    name: "PTA・町内会おしらせ回覧 AI",
+    category: "まちと地球の未来部門",
+    tagline: "役員の雑多なメモから角の立たない回覧文・出欠催促・個人情報配慮チェックを一括生成",
+    subtitle:
+      "SNSで負担が語られる「PTAや町内会の連絡文作成」を数十秒に短縮。Gemini 3.8 Flash が柔らかい回覧文とプライバシー確認リストを作ります。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 地域コミュニティ支援",
+    accentColor: "#16a34a",
+    accentSoft: "#f0fdf4",
+    inputLabel: "伝えたい行事・依頼内容・締切メモ（個人名や住所は伏せて入力）",
+    inputPlaceholder: "例: 12/7午前9時から公園清掃。軍手持参、雨天中止。出欠を11/30までに出してほしい。",
+    sampleText:
+      "【団体】〇〇小学校 PTA・地域防犯パトロール係\n【伝えたいこと】12月6日（土）午前9時〜10時に通学路の落ち葉清掃と危険箇所点検を行います。軍手・飲み物持参、小雨決行・荒天中止（当日朝7時半に連絡網でお知らせ）。まだ半数ほど出欠回答が来ていないので、11月29日までにフォーム回答をお願いしたい。\n※強制感を出さず、参加しやすい柔らかい回覧文を作りたい。",
+    submitLabel: "柔らかい回覧文と役員チェックリストを生成",
+    section1Title: "1. トーン別の工夫ポイント（参加しやすさ・配慮）",
+    section2Title: "2. 配布前の個人情報・日程ミス防止チェックリスト",
+    section3Title: "3. そのまま印刷・連絡網に貼れる回覧お知らせ完成文",
+    gasPrefix: "[PTA・町内会回覧AI]",
+    systemInstruction:
+      "あなたはPTAや町内会・地域ボランティアの広報負担を軽くするコミュニティ支援ライターです。入力されたメモから、alert_level (high/medium/low)、alert_title（文面のトーン＆伝達漏れリスク診断）、alert_message（保護者が参加しやすい表現の工夫や個人情報配慮の注意点）、items（件名案・柔らかい催促表現・雨天時連絡の工夫）、checklist（配布前の日時/集合場所/個人情報マスキング確認リスト）、copyable_draft（紙の回覧板やメール連絡網にそのまま使える丁寧で温かいお知らせ文）、suggested_tasks（締切リマインド・当日朝判断のカレンダー登録タスク）を日本語で構造化してください。",
+  },
+  norikae: {
+    id: "norikae",
+    name: "遅延・子連れ迂回レスキュー",
+    category: "まちと地球の未来部門",
+    tagline: "電車遅延や大荷物・ベビーカー移動時の状況からパニックを防ぐ迂回・休憩プランを整理",
+    subtitle:
+      "移動中の突然の運転見合わせに対応。Gemini 3.8 Flash が条件に合う迂回判断・子連れ／バリアフリー確認・遅刻連絡文を一気に作成します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 移動トラブル支援",
+    accentColor: "#7c3aed",
+    accentSoft: "#f5f3ff",
+    inputLabel: "現在の駅・目的地・遅延状況・移動条件（ベビーカー・大荷物など）",
+    inputPlaceholder: "例: 新宿駅で山手線が運転見合わせ。ベビーカーありで東京駅へ15時までに行きたい。",
+    sampleText:
+      "【現在地】JR新宿駅 付近\n【目的地】東京駅（15:00の待ち合わせ）\n【状況】中央線・山手線が人身事故で運転見合わせ中。ベビーカー＋大きなスーツケースあり。階段ばかりの乗り換えは避けたい。\n※落ち着いて選べる代替移動手段の考え方と、待ち合わせ相手への丁寧な遅刻連絡文を作りたい。",
+    sampleLocation: "東京都新宿区新宿駅",
+    showLocationInput: true,
+    submitLabel: "迂回プランと遅刻連絡文を即生成",
+    section1Title: "1. 条件に合う代替ルートの選び方（エレベーター・振替輸送）",
+    section2Title: "2. 駅構内・振替乗車前の確認チェックリスト",
+    section3Title: "3. 待ち合わせ先・職場へそのまま送れる遅刻連絡文",
+    gasPrefix: "[迂回レスキュー]",
+    systemInstruction:
+      "あなたは鉄道遅延やベビーカー・車いす移動時のパニックを落ち着かせる移動案内アシスタントです（最新の運行状況と振替輸送実施有無は必ず駅員・公式アプリで確認するよう明記してください）。入力された状況から、alert_level (high/medium/low)、alert_title（移動の緊急度と振替輸送確認ポイント）、alert_message（ベビーカー・大荷物時に避けるべき乗り換えや公式運行確認の注意）、items（代替路線の考え方・タクシー相乗り/休憩判断の3つの選択肢）、checklist（振替乗車票・エレベーター位置・ICカード残高確認）、copyable_draft（待ち合わせ相手や職場へすぐ送れる丁寧な遅延連絡メッセージ）、suggested_tasks（経路再確認・到着予定更新タスク）を日本語で構造化してください。",
   },
 };
