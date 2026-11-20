@@ -18,7 +18,12 @@ export type ShowcaseAppId =
   | "nazenaze"
   | "shikaku"
   | "softmail"
-  | "akiya";
+  | "akiya"
+  | "nenmatsu"
+  | "hikkoshi"
+  | "kodomokyuu"
+  | "moshimo"
+  | "kaji";
 
 export interface ShowcaseAppConfig {
   id: ShowcaseAppId;
@@ -490,5 +495,115 @@ export const SHOWCASE_APPS: Record<ShowcaseAppId, ShowcaseAppConfig> = {
     gasPrefix: "[地域資源マッチング]",
     systemInstruction:
       "あなたは空き家再生と地域コミュニティづくりのまちづくりプランナーです。物件条件や写真から、alert_level (high/medium/low)、alert_title（活用ポテンシャルと初期確認リスク）、alert_message（耐震・消防・用途変更などの重要確認事項）、items（地域課題に寄り添う活用案3つと想定利用者）、checklist（現地内覧や自治体補助金窓口で確認すべき項目）、copyable_draft（地域協議会や自治体へそのまま提出できる企画相談メモ）、suggested_tasks（現地調査・商工会相談のカレンダー登録タスク）を日本語で構造化してください。",
+  },
+  nenmatsu: {
+    id: "nenmatsu",
+    name: "控除・医療費スッキリナビ",
+    category: "はたらく・まなぶ部門",
+    tagline: "控除証明書や病院領収書を撮るだけで年末調整・確定申告の入力項目と必要書類を整理",
+    subtitle:
+      "XやInstagramで毎年嘆かれる「控除書類が意味不明」「医療費領収書の計算が面倒」を解決。Gemini 3.8 Flash が書類別の記入先と提出チェックリストを構造化します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 申告書類ナビ",
+    accentColor: "#0f766e",
+    accentSoft: "#f0fdfa",
+    inputLabel: "手元の控除証明書・医療費領収書メモ・家族状況（または写真）",
+    inputPlaceholder: "例: 生命保険料控除証明書2枚、ふるさと納税ワンストップ特例、今年の医療費合計12万円...",
+    sampleText:
+      "【状況】会社員（年末調整＋医療費控除の確定申告を検討中）\n【手元の書類】\n・一般生命保険料控除証明書（年間払込 85,000円）\n・個人年金保険料控除証明書（年間払込 60,000円）\n・家族3人分の病院・薬局の領収書（合計 約118,000円）\n・ふるさと納税 4自治体分\n※どこに何を書けばいいか、医療費控除の対象になるか整理したい。",
+    submitLabel: "控除項目と提出チェックリストを整理",
+    section1Title: "1. 書類別の判定（年末調整 / 確定申告の記入先）",
+    section2Title: "2. 提出前の漏れ・計算ミス防止チェックリスト",
+    section3Title: "3. そのまま申告メモ・家族確認に使えるまとめ",
+    gasPrefix: "[控除・医療費ナビ]",
+    systemInstruction:
+      "あなたは年末調整や確定申告の書類整理に悩む会社員・フリーランスを支援する税務情報整理アシスタントです（個別税務判断の最終確認は税務署・勤務先案内を案内してください）。入力された控除書類・医療費情報から、alert_level (high/medium/low)、alert_title（年末調整と確定申告の要否判定）、alert_message（見落としやすい控除対象・上限や期限の注意点）、items（書類ごとの扱いと記入欄の目安）、checklist（紛失確認・再発行・保管期限チェック）、copyable_draft（自分用の申告整理メモ）、suggested_tasks（提出期限・e-Tax準備のカレンダー登録タスク）を日本語で構造化してください。",
+  },
+  hikkoshi: {
+    id: "hikkoshi",
+    name: "引っ越し手続きバトンナビ",
+    category: "暮らしと家族の部門",
+    tagline: "転居条件を入れるだけで役所・インフラ・銀行のバラバラな手続きを時系列タスク化",
+    subtitle:
+      "SNSで不満の多い「引っ越し後の住所変更が多すぎて限界」を解消。Gemini 3.8 Flash がいつ・どこに・何を持って行くかを家族分担つきで整理します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 転居コンシェルジュ",
+    accentColor: "#2563eb",
+    accentSoft: "#eff6ff",
+    inputLabel: "引っ越しの条件（単身/家族、自治体またぎ、車・ペット・子どもの有無）",
+    inputPlaceholder: "例: 来月15日に別市へ家族3人で引っ越し。軽自動車あり、保育園転園あり。",
+    sampleText:
+      "【引っ越し条件】12月10日に東京都から神奈川県へ夫婦＋小学生1人で引っ越し（別自治体）\n【保有・契約】マイナンバーカードあり、普通車1台、ペット（犬）1匹、インターネット回線、生命保険2社\n※転出届から14日以内の手続き、学校・犬の登録変更まで漏れなく順番に並べたい。",
+    submitLabel: "時系列の手続きロードマップを生成",
+    section1Title: "1. 時期別の必須手続きリスト（転居前 / 当日 / 14日以内）",
+    section2Title: "2. 窓口へ行く前の持ち物・オンライン完結チェック",
+    section3Title: "3. パートナーと分担できる住所変更メモ（コピー用）",
+    gasPrefix: "[引っ越しバトンナビ]",
+    systemInstruction:
+      "あなたは複雑な引っ越し手続きを漏れなく案内するライフイベントコンシェルジュです。転居条件から、alert_level (high/medium/low)、alert_title（手続きの複雑さと最優先期限）、alert_message（14日以内ルールや平日窓口の注意点）、items（時期別・機関別の手続き一覧とオンライン可否）、checklist（マイナンバーカード・車検証・印鑑など持参物チェック）、copyable_draft（家族で分担できる住所変更リスト）、suggested_tasks（転出届・転入届・ライフライン切替のカレンダー登録タスク）を日本語で構造化してください。",
+  },
+  kodomokyuu: {
+    id: "kodomokyuu",
+    name: "こども夜間安心トリアージメモ",
+    category: "暮らしと家族の部門",
+    tagline: "夜間・休日の急な発熱やケガのメモから受診目安・#8000相談用メモを即整理",
+    subtitle:
+      "育児SNSで切実な「夜間救急に行くべきか焦って判断できない」を支援。Gemini 3.8 Flash が観察すべき危険サインと電話相談で伝える要点を整理します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 小児見守りメモ",
+    accentColor: "#e11d48",
+    accentSoft: "#fff1f2",
+    inputLabel: "子どもの年齢・体温・現在の様子（いつから・水分・顔色など）",
+    inputPlaceholder: "例: 3歳、夜9時に38.9℃。水分は一口ずつ飲めるがぐったり気味...",
+    sampleText:
+      "【子ども】3歳2ヶ月（体重14kg）\n【経過】夕方18時から38.7℃の発熱。21時時点で39.1℃。咳が少しあるが、けいれんや発疹はなし。麦茶はスプーンで少しずつ飲めている。おしっこは19時に出た。\n※今すぐ夜間救急に行くべきか、#8000（小児救急電話相談）に電話する前に観察点と伝え方を整理したい。",
+    submitLabel: "観察ポイントと #8000 相談メモを整理",
+    section1Title: "1. 今すぐ受診すべき危険サイン＆観察ポイント",
+    section2Title: "2. 受診・電話相談の前に確認すべきチェックリスト",
+    section3Title: "3. #8000・小児科医にそのまま読み上げられる経過メモ",
+    gasPrefix: "[こども夜間安心メモ]",
+    systemInstruction:
+      "あなたは夜間・休日の子どもの急変時に保護者が冷静に情報を整理できるよう支援する小児見守り情報アシスタントです（医療診断は行わず、意識障害・呼吸困難・けいれん等があれば迷わず119番・救急受診するよう必ず明記してください）。入力された経過から、alert_level (high/medium/low)、alert_title（受診判断の緊急度目安と#8000活用案内）、alert_message（すぐ救急受診を検討すべき危険サイン）、items（呼吸・水分・排尿・機嫌の観察ポイント）、checklist（受診時の持ち物・記録項目）、copyable_draft（#8000や医師へそのまま読み上げられる時系列メモ）、suggested_tasks（翌朝のかかりつけ医予約・経過メモタスク）を日本語で構造化してください。",
+  },
+  moshimo: {
+    id: "moshimo",
+    name: "もしもの家族手続きコンシェルジュ",
+    category: "暮らしと家族の部門",
+    tagline: "親の入院・介護・相続など「何から手をつければいいか分からない」手続きを時系列化",
+    subtitle:
+      "SNSで共感の多い「緊急時に銀行・保険・年金の手順がバラバラで疲弊する」を解消。状況に合わせて必要な連絡先と期限を家族で共有できます。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 家族手続き支援",
+    accentColor: "#475569",
+    accentSoft: "#f8fafc",
+    inputLabel: "現在の状況（急な入院・退院調整・名義変更・相続など）と関係機関メモ",
+    inputPlaceholder: "例: 離れて暮らす父が急に入院。高額療養費制度や保険請求、仕事との調整が分からない。",
+    sampleText:
+      "【状況】75歳の父が骨折で2週間入院することになった（後期高齢者医療保険加入、民間の医療保険1社あり）\n【困りごと】高額療養費制度や限度額適用認定証の手続き、病院への書類、離れて暮らす姉との分担を何から手をつければいいか順番に整理したい。",
+    submitLabel: "手続きの優先順位と家族分担表を生成",
+    section1Title: "1. 優先順位つきの手続きステップ（今すぐ / 退院まで / 退院後）",
+    section2Title: "2. 病院・保険会社・役所で揃える書類チェックリスト",
+    section3Title: "3. 家族・きょうだいに共有できる役割分担メモ",
+    gasPrefix: "[もしもの手続き支援]",
+    systemInstruction:
+      "あなたは急な入院や介護・相続など家族の緊急時に手続きを整理する優しいコンシェルジュです。入力された状況から、alert_level (high/medium/low)、alert_title（最優先で動くべき制度・手続き）、alert_message（申請期限や事前取得で負担が減る制度のポイント）、items（時期別・機関別の手続き内容）、checklist（マイナンバー・保険証・診断書などの必要書類チェック）、copyable_draft（きょうだいや親族へそのまま共有できる役割分担メモ）、suggested_tasks（窓口申請・退院調整のカレンダー登録タスク）を日本語で構造化してください。",
+  },
+  kaji: {
+    id: "kaji",
+    name: "名もなき家事みえる化＆感謝ログ",
+    category: "暮らしと家族の部門",
+    tagline: "1日の家事メモから「見えない負担」を可視化し、無理のない分担と感謝カードを生成",
+    subtitle:
+      "XやInstagramで絶えない「家事分担の不公平感」を前向きに解決。Gemini 3.8 Flash が名もなき家事を言語化し、パートナーと笑い合える分担案を作ります。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 家事みえる化 AI",
+    accentColor: "#db2777",
+    accentSoft: "#fdf2f8",
+    inputLabel: "今日やった家事・パートナーに伝えたいモヤモヤやお願い",
+    inputPlaceholder: "例: ゴミ袋の交換、洗剤の詰め替え、保育園の連絡帳、在庫チェックまで全部自分...",
+    sampleText:
+      "【今日の自分の家事】朝のゴミ出し前の分別と袋セット、トイレットペーパーや洗剤の補充、保育園の持ち物準備、ネットスーパー注文、子どもの上履き洗い\n【モヤモヤ】パートナーは「料理と皿洗い」だけやって満足そう。細かい名もなき家事の多さを責めずに共有して、週末の分担を見直したい。",
+    submitLabel: "名もなき家事を可視化して分担案を作成",
+    section1Title: "1. 言語化された「名もなき家事」＆負荷バランス",
+    section2Title: "2. 責めずに話し合える週末分担チェックリスト",
+    section3Title: "3. パートナーへそのまま送れる感謝＆相談メッセージ",
+    gasPrefix: "[名もなき家事みえる化]",
+    systemInstruction:
+      "あなたは夫婦・パートナー間の家事分担を責め合いではなく協力と感謝に変えるライフコーチです。入力された家事メモとモヤモヤから、alert_level (high/medium/low)、alert_title（隠れた負担の診断結果）、alert_message（パートナーに悪気なく見落とされがちなポイント）、items（抽出された名もなき家事の具体リストと所要負荷）、checklist（仕組み化・家電活用・固定担当化の改善案）、copyable_draft（相手を責めずに感謝と協力依頼を伝えるやさしいLINEメッセージ）、suggested_tasks（週末の担当ルーティン・カレンダー登録タスク）を日本語で構造化してください。",
   },
 };
