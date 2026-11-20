@@ -13,7 +13,12 @@ export type ShowcaseAppId =
   | "minutes"
   | "heatstroke"
   | "foodloss"
-  | "inbound";
+  | "inbound"
+  | "fridge"
+  | "nazenaze"
+  | "shikaku"
+  | "softmail"
+  | "akiya";
 
 export interface ShowcaseAppConfig {
   id: ShowcaseAppId;
@@ -373,5 +378,117 @@ export const SHOWCASE_APPS: Record<ShowcaseAppId, ShowcaseAppConfig> = {
     gasPrefix: "[多言語あんしん案内]",
     systemInstruction:
       "あなたは多文化共生と災害時多言語支援の専門家です。入力された日本語の地域案内・チラシ・店舗ルールから、alert_level (high/medium/low)、alert_title（伝達緊急度と対象者サマリー）、alert_message（誤解されやすい日本特有の表現や最重要伝達事項）、items（やさしい日本語・英語・中国語(簡体字)・韓国語の4カード：labelに言語名、badgeに用途、detailに自然な翻訳）、checklist（ふりがな・ピクトグラム・問い合わせ先明記などの掲示チェック）、copyable_draft（掲示板・PDF・SNSにそのまま貼れる4言語まとめテキスト）、suggested_tasks（掲示更新・多言語確認のタスク）を構造化してください。",
+  },
+  fridge: {
+    id: "fridge",
+    name: "冷蔵庫スッキリ献立 AI",
+    category: "暮らしと家族の部門",
+    tagline: "冷蔵庫の残り物写真から買い足しゼロの時短レシピと食材使い切り順を提案",
+    subtitle:
+      "冷蔵庫の中身や残り物メモから、Gemini 3.8 Flash が傷みやすい食材を優先した救済レシピと最小限の買い足しメモを自動生成します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 食材救済レシピ",
+    accentColor: "#059669",
+    accentSoft: "#ecfdf5",
+    inputLabel: "冷蔵庫にある残り物・賞味期限が近い食材（または写真）",
+    inputPlaceholder: "例: 半端な大根1/3本、使いかけのツナ缶1個、卵2個、賞味期限間近の牛乳300ml",
+    sampleText:
+      "【冷蔵庫の残り物】\n・しなびかけの大根 1/3本、長ねぎ 1/2本\n・賞味期限が明日の豆腐 1丁、卵 2個\n・使いかけの豚ひき肉 150g、スライスチーズ 2枚\n※買い物に行かずに20分以内で作れる家族向けの夕食レシピを提案してほしい。",
+    submitLabel: "今ある食材だけで救済レシピを生成",
+    section1Title: "1. 優先消費すべき食材＆時短レシピ提案",
+    section2Title: "2. 調理の段取り＆フードロス防止チェック",
+    section3Title: "3. 家族へ送れる今日の献立＆買い足しゼロメモ",
+    gasPrefix: "[冷蔵庫スッキリ献立]",
+    systemInstruction:
+      "あなたは家庭の食品ロスをなくす時短料理アドバイザーです。冷蔵庫の残り物から、alert_level (high/medium/low)、alert_title（今すぐ使い切るべき最優先食材）、alert_message（鮮度・保存上の注意点）、items（提案レシピ2〜3品：手順と所要時間）、checklist（下ごしらえや保存のコツ）、copyable_draft（家族に共有できる今日の献立と買い物メモ）、suggested_tasks（冷凍保存・使い切りリマインドタスク）を日本語で構造化してください。",
+  },
+  nazenaze: {
+    id: "nazenaze",
+    name: "子どもの「なぜなぜ」図鑑メーカー",
+    category: "暮らしと家族の部門",
+    tagline: "子どもの素朴な疑問を「やさしい例え・5分実験・親子クイズ」のミニ図鑑に変換",
+    subtitle:
+      "「なぜ空は青いの？」などの疑問から、Gemini 3.8 Flash が年齢に合わせた例え話と家でできる体験遊びを構造化生成します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 親子探究図鑑",
+    accentColor: "#f59e0b",
+    accentSoft: "#fffbeb",
+    inputLabel: "子どもの年齢と「なぜ？」「どうして？」の質問",
+    inputPlaceholder: "例: 5歳児「なんで海の水はしょっぱいのに、雨はしょっぱくないの？」",
+    sampleText:
+      "【子ども】小学1年生（7歳）\n【質問】「なんで空は昼間は青いのに、夕方は赤くなるの？夜はどうして暗いの？」\n※専門用語を使わずに、家にある懐中電灯やコップで一緒に試せる実験も教えてほしい。",
+    submitLabel: "親子で楽しめるミニ図鑑を生成",
+    section1Title: "1. 子ども向けやさしい例え話＆仕組みカード",
+    section2Title: "2. おうちでできる 5 分プチ実験チェックリスト",
+    section3Title: "3. そのまま読み聞かせできる親子お話し台本",
+    gasPrefix: "[なぜなぜ図鑑]",
+    systemInstruction:
+      "あなたは幼児・小学生の好奇心を伸ばす優しい科学の先生です。子どもの質問から、alert_level (high/medium/low)、alert_title（今日の疑問テーマ）、alert_message（親が答えるときのいちばん大切な視点）、items（年齢に合わせたたとえ話・なぜそうなるか・関連する豆知識）、checklist（家にある身近な道具でできる5分実験の安全手順）、copyable_draft（そのまま読み聞かせできるやさしいお話し台本）、suggested_tasks（図書館で借りる本や週末の観察予定）を日本語で構造化してください。",
+  },
+  shikaku: {
+    id: "shikaku",
+    name: "資格・試験「苦手つぶし」問題集メーカー",
+    category: "はたらく・まなぶ部門",
+    tagline: "間違えた問題やテキストの抜粋から類題・ひっかけ対策・暗記ポイントを自動生成",
+    subtitle:
+      "資格試験や定期テストの苦手メモから、Gemini 3.8 Flash が失点パターンを分析し、本番で点を落とさない演習セットを作成します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 試験対策コーチ",
+    accentColor: "#6366f1",
+    accentSoft: "#eef2ff",
+    inputLabel: "目指す資格・テスト名と、間違えた問題や苦手な単元",
+    inputPlaceholder: "例: 情報セキュリティマネジメント：共通鍵暗号と公開鍵暗号の使い分けがよく混乱する",
+    sampleText:
+      "【試験】ITパスポート／基本情報技術者\n【苦手な単元】データベースの正規化（第1・第2・第3正規形）とトランザクションのACID特性。\n毎回選択肢のひっかけで間違えてしまうので、見分け方と類題を作って復習したい。",
+    submitLabel: "弱点分析と類題演習セットを生成",
+    section1Title: "1. 失点パターンの分析＆覚え方カード",
+    section2Title: "2. 本番で迷わないための見分けチェックリスト",
+    section3Title: "3. そのまま復習ノートに貼れる要点＆類題まとめ",
+    gasPrefix: "[苦手つぶし問題集]",
+    systemInstruction:
+      "あなたは難関資格の合格者を多数育てたプロ講師です。受験生の苦手単元やミス内容から、alert_level (high/medium/low)、alert_title（つまずきの核心原因）、alert_message（試験で狙われやすいひっかけポイント）、items（混同しやすい概念の比較と直感的な覚え方）、checklist（問題文を読むときの確認手順）、copyable_draft（オリジナル類題2問＋解説＋暗記まとめ）、suggested_tasks（3日後・1週間後の復習カレンダー登録タスク）を日本語で構造化してください。",
+  },
+  softmail: {
+    id: "softmail",
+    name: "クレーム・お断りメール角なし変換 AI",
+    category: "はたらく・まなぶ部門",
+    tagline: "感情的になりがちな断り・催促・謝罪の下書きを相手別の丁寧なビジネス文面へ変換",
+    subtitle:
+      "言いにくいお断りや納期催促のメモから、Gemini 3.8 Flash が関係を壊さないクッション言葉つきの返信案と送信前チェックを生成します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + ビジネスマナー AI",
+    accentColor: "#0f172a",
+    accentSoft: "#f1f5f9",
+    inputLabel: "伝えたい本音・状況（相手との関係性もあれば記入）",
+    inputPlaceholder: "例: 取引先に先週頼んだ見積もりがまだ来ない。急いでいるので今日中にほしい。",
+    sampleText:
+      "【相手】取引先の担当者（今後も付き合いは続けたい）\n【本音】提案された金額が予算オーバーなので今回は見送りたい。ただ、来期の別案件ではまた相談したいので、角を立てずに丁寧にお断りしたい。",
+    submitLabel: "角の立たない丁寧なメール文面を生成",
+    section1Title: "1. シーン別・相手別の言い換えポイント",
+    section2Title: "2. 送信前に確認すべき配慮・誤解防止チェック",
+    section3Title: "3. そのままコピーして送れるビジネスメール文面",
+    gasPrefix: "[角なしメール変換]",
+    systemInstruction:
+      "あなたはビジネスコミュニケーションと顧客対応の専門家です。ユーザーの本音・状況から、alert_level (high/medium/low)、alert_title（相手の受け止めリスク診断）、alert_message（関係を損ねないための最重要配慮ポイント）、items（クッション言葉・代替案・感謝の伝え方の3つの工夫）、checklist（送信前の件名・誤解表現・敬称確認チェック）、copyable_draft（件名つきのそのまま送れる丁寧なビジネスメール完成文）、suggested_tasks（返信確認や次回フォローのタスク）を日本語で構造化してください。",
+  },
+  akiya: {
+    id: "akiya",
+    name: "空き家・地域資源マッチング診断",
+    category: "まちと地球の未来部門",
+    tagline: "地域の空き家や遊休施設の写真から防災倉庫・子育て拠点などの再生プランを自動立案",
+    subtitle:
+      "空き家や空き店舗の写真・条件から、Gemini 3.8 Flash が地域課題に合った活用案・修繕リスク・自治体相談メモを構造化生成します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 地域再生まちづくり",
+    accentColor: "#b45309",
+    accentSoft: "#fef3c7",
+    inputLabel: "空き家・遊休スペースの場所、広さ、状態メモ（または写真）",
+    inputPlaceholder: "例: 商店街の元文具店（1階40平米・駅徒歩4分）。シャッターは動くが水回り古め。",
+    sampleText:
+      "【物件】商店街の空き店舗（1階45平米、駅徒歩5分、築40年木造）\n【周辺環境】近くに小学校と高齢者の多い住宅街がある。平日の日中と放課後に地域の居場所や防災備蓄拠点として使えないか検討中。",
+    sampleLocation: "地域の商店街・駅徒歩5分",
+    showLocationInput: true,
+    submitLabel: "地域活用プランと安全・補助金チェックを生成",
+    section1Title: "1. 地域ニーズに合う活用アイデア 3 案",
+    section2Title: "2. 利活用前の耐震・法規・地域合意チェックリスト",
+    section3Title: "3. 自治体・商工会へ相談するための企画メモ",
+    gasPrefix: "[地域資源マッチング]",
+    systemInstruction:
+      "あなたは空き家再生と地域コミュニティづくりのまちづくりプランナーです。物件条件や写真から、alert_level (high/medium/low)、alert_title（活用ポテンシャルと初期確認リスク）、alert_message（耐震・消防・用途変更などの重要確認事項）、items（地域課題に寄り添う活用案3つと想定利用者）、checklist（現地内覧や自治体補助金窓口で確認すべき項目）、copyable_draft（地域協議会や自治体へそのまま提出できる企画相談メモ）、suggested_tasks（現地調査・商工会相談のカレンダー登録タスク）を日本語で構造化してください。",
   },
 };
