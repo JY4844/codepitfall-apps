@@ -31,7 +31,10 @@ export type ShowcaseAppId =
   | "sagi"
   | "invoice"
   | "dokusho"
-  | "gokinjo";
+  | "gokinjo"
+  | "codemistake"
+  | "tsundoku"
+  | "zuborali";
 
 export interface ShowcaseAppConfig {
   id: ShowcaseAppId;
@@ -793,5 +796,77 @@ export const SHOWCASE_APPS: Record<ShowcaseAppId, ShowcaseAppConfig> = {
     gasPrefix: "[ご近所相談AI]",
     systemInstruction:
       "あなたは近隣トラブルやマンション管理の悩みを冷静かつ円満に解決へ導くコミュニティ調停アドバイザーです（危険・違法行為がある場合は警察#9110や自治体窓口へ相談するよう案内してください）。入力された状況から、alert_level (high/medium/low)、alert_title（トラブルの性質と適切な相談窓口）、alert_message（直接対立を避け第三者経由で進める重要性）、items（記録の取り方・管理会社/自治会への伝え方・段階的対応3点）、checklist（日時メモ・写真・管理規約確認チェック）、copyable_draft（感情を抑え事実ベースで依頼できる管理会社/自治会向け相談メール文）、suggested_tasks（経過記録・再確認のカレンダー登録タスク）を日本語で構造化してください。",
+  },
+  codemistake: {
+    id: "codemistake",
+    name: "パーソナル・コードミス＆作業落とし穴チェッカー AI",
+    category: "シゴト・学び部門",
+    tagline: "自分のやりがちミス履歴と「今からやる作業」から、バグ予防チェックリストと修正テンプレを自動生成",
+    subtitle:
+      "コードと過去のミスパターン・作業内容を入力するだけ。Gemini 3.8 Flash があなた専用の危険箇所を検出し、作業別のよくある間違いテンプレートを出力します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + パーソナライズド品質ガード",
+    accentColor: "#6366f1",
+    accentSoft: "#eef2ff",
+    inputLabel: "チェックしたいコード・今からやる作業・あなたの過去のやりがちミス",
+    inputPlaceholder: "例: 【作業】外部API連携の非同期処理 【自分のクセ】await忘れ、nullチェック漏れ...",
+    sampleText:
+      "【今からやる作業】Next.js のフォーム送信と外部 API 連携の実装\n【自分の過去のやりがちミス】fetch の await 忘れ、response.ok を見ずに json() してクラッシュ、Windows パス区切りと環境変数未設定\n【書いたコード断片】\nconst res = fetch('/api/submit', { method: 'POST', body: JSON.stringify(data) });\nconst json = res.json();",
+    sampleLocation: "VS Code / GitHub PR セルフレビュー前",
+    showLocationInput: true,
+    submitLabel: "パーソナルミス検出＆落とし穴テンプレを生成",
+    section1Title: "1. あなたのクセを踏まえた危険箇所＆修正ポイント",
+    section2Title: "2. 作業別「よくある間違い」事前防止テンプレート",
+    section3Title: "3. そのまま使える PR セルフレビュー／修正済みコード雛形",
+    gasPrefix: "[コードミスAI]",
+    systemInstruction:
+      "あなたは開発者の過去のミスパターンに寄り添うパーソナライズド・コードレビュアーです。入力されたコード断片・作業内容・過去のやりがちミスから、alert_level (high/medium/low)、alert_title（最優先で防ぐべきミス）、alert_message（この作業＋この人のクセで起きやすい事故の解説）、items（コード内の具体的な危険箇所と直し方3点）、checklist（この作業の前に必ず確認する「よくある間違いテンプレート」チェック項目）、copyable_draft（修正済みコード雛形またはPRセルフレビュー用チェックリスト）、suggested_tasks（テスト実行・PR前確認タスク）を日本語で構造化してください。",
+  },
+  tsundoku: {
+    id: "tsundoku",
+    name: "積読・プロンプト資産化ダイジェスト AI",
+    category: "シゴト・学び部門",
+    tagline: "溜まった記事メモや毎回打ち直すAI指示文を「3行要約＋再利用テンプレート」に一発変換",
+    subtitle:
+      "読めていない記事のメモや何度も書いているプロンプトを貼るだけ。Gemini 3.8 Flash が要点抽出と使い回し用テンプレートを整理します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + ナレッジ資産化",
+    accentColor: "#8b5cf6",
+    accentSoft: "#f5f3ff",
+    inputLabel: "積読メモ・記事の抜き書き・よく使うAI指示文",
+    inputPlaceholder: "例: 毎回メールの丁寧な断り文や要約プロンプトをゼロから打ち直している...",
+    sampleText:
+      "【溜まっているメモ】\n・Firebase AI Logic のハイブリッド推論記事（オンデバイス Gemini Nano とクラウドフォールバックの使い分け）\n・毎回「これを中学生にも分かるように3行で要約して、アクションも出して」とAIに打ち直していて地味に面倒。",
+    sampleLocation: "朝の10分インプット整理タイム",
+    showLocationInput: true,
+    submitLabel: "3行要約＆再利用プロンプト資産を作成",
+    section1Title: "1. 積読メモのコア要点＆今日活かすポイント",
+    section2Title: "2. 溜め込まないための 10 分消化チェック",
+    section3Title: "3. 辞書登録・メモ帳に貼って使い回せるテンプレート",
+    gasPrefix: "[積読資産AI]",
+    systemInstruction:
+      "あなたは情報過多と毎回同じ指示文を書く手間を解消するナレッジ整理アシスタントです。入力された積読メモやAI指示文の悩みから、alert_level (high/medium/low)、alert_title（情報消化・再利用のボトルネック）、alert_message（溜め込みや手打ちを減らすコツ）、items（要点と実務への活かし方3点）、checklist（週1回の積読整理＆テンプレ更新チェック）、copyable_draft（ユーザ辞書やスニペットにそのまま登録できる万能プロンプトテンプレート）、suggested_tasks（10分ダイジェスト消化のカレンダー登録タスク）を日本語で構造化してください。",
+  },
+  zuborali: {
+    id: "zuborali",
+    name: "ずぼらメモ・1行投げ込み自動仕分け AI",
+    category: "暮らし・家族部門",
+    tagline: "日記・タスク・買い物・予定が混ざった雑多なメモを、分類不要でカレンダー＆チェックリストに自動仕分け",
+    subtitle:
+      "分類やタグ付けが面倒で続かない人向け。思いついたまま1行で投げ込むだけで、Gemini 3.8 Flash が予定・買い物・やることに綺麗に整理します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + ずぼらライフログ",
+    accentColor: "#ec4899",
+    accentSoft: "#fdf2f8",
+    inputLabel: "思いついたメモをそのまま投げ込み（分類・整形不要）",
+    inputPlaceholder: "例: 牛乳切れた、金曜15時歯医者、来週までに電気代確認、今日ランチ美味しかった...",
+    sampleText:
+      "洗濯洗剤あと少し、木曜19時オンライン面談のURL確認しなきゃ、土曜午前中に市役所でマイナンバー更新、昨日夜更かしして眠い、冷蔵庫の卵明日まで",
+    sampleLocation: "帰宅後の1分メモ整理",
+    showLocationInput: true,
+    submitLabel: "分類ゼロで予定・買い物・日記に自動仕分け",
+    section1Title: "1. 期限・優先度つきに整理されたアクション",
+    section2Title: "2. うっかり忘れを防ぐ買い物・確認チェック",
+    section3Title: "3. そのまま保存できる整った今日の1行ログ",
+    gasPrefix: "[ずぼら仕分けAI]",
+    systemInstruction:
+      "あなたは分類やタグ付けが面倒でメモが続かない人を助ける、超やさしいずぼら専用ライフログ整理アシスタントです。雑多なメモから、alert_level (high/medium/low)、alert_title（今日・今週いちばん忘れると困る期限）、alert_message（無理なく続けるためのひと言サポート）、items（期限順のやるべきこと3点）、checklist（買い物・持ち物・確認事項チェック）、copyable_draft（そのまま日記やメモアプリに貼れる綺麗に整った振り返りログ）、suggested_tasks（期限つきの具体的なカレンダー登録タスク）を日本語で構造化してください。",
   },
 };
