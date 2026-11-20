@@ -34,7 +34,10 @@ export type ShowcaseAppId =
   | "gokinjo"
   | "codemistake"
   | "tsundoku"
-  | "zuborali";
+  | "zuborali"
+  | "shinsei"
+  | "taishoku"
+  | "tenpu";
 
 export interface ShowcaseAppConfig {
   id: ShowcaseAppId;
@@ -868,5 +871,77 @@ export const SHOWCASE_APPS: Record<ShowcaseAppId, ShowcaseAppConfig> = {
     gasPrefix: "[ずぼら仕分けAI]",
     systemInstruction:
       "あなたは分類やタグ付けが面倒でメモが続かない人を助ける、超やさしいずぼら専用ライフログ整理アシスタントです。雑多なメモから、alert_level (high/medium/low)、alert_title（今日・今週いちばん忘れると困る期限）、alert_message（無理なく続けるためのひと言サポート）、items（期限順のやるべきこと3点）、checklist（買い物・持ち物・確認事項チェック）、copyable_draft（そのまま日記やメモアプリに貼れる綺麗に整った振り返りログ）、suggested_tasks（期限つきの具体的なカレンダー登録タスク）を日本語で構造化してください。",
+  },
+  shinsei: {
+    id: "shinsei",
+    name: "補助金・公的手続き期限ナビ AI",
+    category: "まちと地球の未来部門",
+    tagline: "窓口ごとにバラバラな公的手続き・補助金申請の「期限・必要書類・提出先」を一発整理",
+    subtitle:
+      "「どこに何をいつまでに出すのか分からない」行政手続きのストレスを解消。Gemini 3.8 Flash が申請スケジュールと不足書類チェックリストを作ります。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 行政手続きナビ",
+    accentColor: "#0284c7",
+    accentSoft: "#f0f9ff",
+    inputLabel: "やりたい手続き・補助金・届出の内容と現在の状況",
+    inputPlaceholder: "例: 自治体の省エネ家電買い替え補助金を申請したいが、レシートや領収書の条件が分かりにくい...",
+    sampleText:
+      "自治体の省エネ家電買い替え補助金を申請したい。古い冷蔵庫を今週買い替える予定だが、領収書の宛名条件やリサイクル券の控え、マイナンバーカードの写しが必要か、いつまでにどこへ出せばよいか整理したい。",
+    sampleLocation: "居住自治体の補助金・環境窓口",
+    showLocationInput: true,
+    submitLabel: "申請期限・必要書類・提出手順を整理",
+    section1Title: "1. 期限に間に合わせる申請ステップ",
+    section2Title: "2. 窓口・オンライン申請前の必要書類チェック",
+    section3Title: "3. 自治体窓口への確認電話・問い合わせメモ",
+    gasPrefix: "[公的手続きAI]",
+    systemInstruction:
+      "あなたは自治体手続きや補助金申請の複雑さをわかりやすく解きほぐす行政手続きナビゲーターです（最終要件は必ず公式窓口ページで確認するよう案内してください）。入力された状況から、alert_level (high/medium/low)、alert_title（最も見落としやすい期限・不備リスク）、alert_message（差し戻しを防ぐ事前確認ポイント）、items（購入前・申請時・提出後の3ステップ）、checklist（領収書・証明書・本人確認書類チェック）、copyable_draft（自治体窓口へ確認する際の簡潔な質問メモ）、suggested_tasks（申請期限・書類準備のカレンダー登録タスク）を日本語で構造化してください。",
+  },
+  taishoku: {
+    id: "taishoku",
+    name: "退職・転職・育休手続きロードマップ AI",
+    category: "暮らし・家族部門",
+    tagline: "健康保険・年金・雇用保険・住民税の複雑な切替手順を、日付順のやることリストに整理",
+    subtitle:
+      "ライフイベントのたびに調べ直す社会保険と税金の届出。Gemini 3.8 Flash が抜け漏れゼロの時系列ロードマップを作成します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + ライフイベント支援",
+    accentColor: "#7c3aed",
+    accentSoft: "#f5f3ff",
+    inputLabel: "予定しているライフイベント（退職・転職・育休など）と時期",
+    inputPlaceholder: "例: 来月末で退職し、2週間あけて次の会社へ転職予定。健康保険や年金の切り替えが不安...",
+    sampleText:
+      "来月末で現在の会社を退職し、1か月ほど休養してから転職先に入社予定。任意継続と国民健康保険のどちらが良いか、国民年金の切替期限、離職票の受け取りタイミングを整理したい。",
+    sampleLocation: "市区町村役場・ハローワーク・年金事務所",
+    showLocationInput: true,
+    submitLabel: "時系列手続きロードマップを生成",
+    section1Title: "1. 退職前〜入社後までの重要手続きステップ",
+    section2Title: "2. 会社・役所へ提出・受取する書類チェック",
+    section3Title: "3. 人事・総務へそのまま送れる離職票等確認メール",
+    gasPrefix: "[ライフ手続きAI]",
+    systemInstruction:
+      "あなたは退職・転職・産休育休に伴う社会保険・税金手続きをミスなく案内するライフイベントアドバイザーです。入力内容から、alert_level (high/medium/low)、alert_title（14日以内など最も厳しい法定・切替期限）、alert_message（空白期間や未納を防ぐ重要ポイント）、items（退職前・退職直後・次の勤務先/復帰時の3段階ガイド）、checklist（離職票・資格喪失証明書・年金手帳等の受取確認リスト）、copyable_draft（退職元または転職先の人事総務へ送れる丁寧な書類確認メール）、suggested_tasks（14日以内切替等のカレンダー登録タスク）を日本語で構造化してください。",
+  },
+  tenpu: {
+    id: "tenpu",
+    name: "添付ファイル＆メール送付前ミス防止 AI",
+    category: "シゴト・学び部門",
+    tagline: "メール本文と添付ファイル名のズレ・添付忘れ・宛先誤認を送信前にチェック＆命名統一",
+    subtitle:
+      "「どのファイルがどの書類か相手が迷う」「添付忘れが怖い」を解消。Gemini 3.8 Flash が分かりやすいファイル名案と送付前確認リストを提案します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + ビジネス送付ガード",
+    accentColor: "#ea580c",
+    accentSoft: "#fff7ed",
+    inputLabel: "送りたいメール本文・添付予定のファイル名一覧",
+    inputPlaceholder: "例: 本文では請求書と見積書と言っているが、添付ファイル名が document1.pdf のまま...",
+    sampleText:
+      "【メール案】〇〇株式会社 佐藤様\nお世話になっております。先日の打ち合わせでお話しした11月分の御請求書と、修正版のご提案資料をお送りします。\n【添付予定ファイル名】\n・scan_20261120.pdf\n・資料最終fix2.pptx",
+    sampleLocation: "メール送信直前の最終チェック",
+    showLocationInput: true,
+    submitLabel: "添付ズレ検出＆綺麗なファイル名・本文を生成",
+    section1Title: "1. 相手が迷わないファイル名リネーム案＆注意点",
+    section2Title: "2. 送信ボタン押下前の最終確認チェックリスト",
+    section3Title: "3. ファイル名を明記した丁寧な送付メール改訂案",
+    gasPrefix: "[メール送付AI]",
+    systemInstruction:
+      "あなたはビジネスメールの添付漏れ・ファイル名不整合・誤送信を防ぐコミュニケーション品質アシスタントです。入力されたメール本文と添付予定ファイル名から、alert_level (high/medium/low)、alert_title（最も危険な送信前リスク）、alert_message（受け手の混乱や誤送信を防ぐポイント）、items（日付＋書類名＋社名を含む推奨ファイル名案と本文との整合性3点）、checklist（宛先CC/BCC・添付ファイル一致・パスワード/別送不要確認チェック）、copyable_draft（添付ファイル名を本文中に明記した分かりやすい改訂メール文）、suggested_tasks（先方確認・入金/返信リマインドタスク）を日本語で構造化してください。",
   },
 };
