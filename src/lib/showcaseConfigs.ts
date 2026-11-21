@@ -50,7 +50,12 @@ export type ShowcaseAppId =
   | "bento"
   | "studyplan"
   | "renrakucho"
-  | "water";
+  | "water"
+  | "mensetsu"
+  | "souzoku"
+  | "condate"
+  | "koutsuu"
+  | "kyouiku";
 
 export interface ShowcaseAppConfig {
   id: ShowcaseAppId;
@@ -1268,5 +1273,125 @@ export const SHOWCASE_APPS: Record<ShowcaseAppId, ShowcaseAppConfig> = {
     gasPrefix: "[備蓄AI]",
     systemInstruction:
       "あなたはマンション高層階や子ども・ペット連れ家庭の実情に寄り添う地域防災アドバイザーです。世帯構成と現在の備蓄から、alert_level (high/medium/low)、alert_title（最も致命的な備蓄不足項目）、alert_message（ローリングストックで無理なく備えるコツ）、items（水・簡易トイレ・電源/食料の具体的な必要量と不足分3点）、checklist（ハザードマップ・家具固定・連絡手段・ペット避難品チェック）、copyable_draft（今週末の買い物にそのまま使える防災買い足しメモ）、suggested_tasks（半年ごとの賞味期限ローリング点検タスク）を日本語で構造化してください。",
+  },
+  mensetsu: {
+    id: "mensetsu",
+    name: "転職・就活・面接想定問答コーチ AI",
+    category: "シゴト・学び部門",
+    tagline: "志望先メモと自分の経歴から「深掘りされやすい鋭い質問」と1分回答構成を即作成",
+    subtitle:
+      "「面接で想定外の質問に詰まる…」を防ぐ事前リハーサル相棒。Gemini 3.8 Flash がSTAR法ベースの回答骨子と逆質問リストを生成します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 面接リハーサル",
+    accentColor: "#2563eb",
+    accentSoft: "#eff6ff",
+    inputLabel: "応募職種・自分の経験メモ・面接で不安なポイント",
+    inputPlaceholder: "例: IT企業のWebエンジニア面接。前職の退職理由とチーム開発経験の伝え方が不安...",
+    sampleText:
+      "事業会社のDX推進担当へ転職面接。前職は営業3年＋社内Excel自動化ツールの自作経験あり。未経験職種への志望動機と「なぜエンジニア専任ではないのか」という深掘り質問への答え方を整えたい。",
+    sampleLocation: "オンライン一次面接の前夜",
+    showLocationInput: true,
+    submitLabel: "想定深掘り質問＆1分回答スクリプトを生成",
+    section1Title: "1. よく聞かれる深掘り質問＆回答骨子3選",
+    section2Title: "2. オンライン・対面面接直前の環境＆準備チェック",
+    section3Title: "3. そのまま練習できる1分自己紹介＆逆質問メモ",
+    gasPrefix: "[面接AI]",
+    systemInstruction:
+      "あなたは採用現場を熟知したキャリア面接コーチです。応募職種と経歴メモから、alert_level (high/medium/low)、alert_title（最も厳しく深掘りされやすいポイント）、alert_message（誠実かつ前向きに伝えるコツ）、items（想定質問とSTAR法ベースの回答骨子3点）、checklist（カメラ位置・音声・企業最新ニュース・逆質問準備チェック）、copyable_draft（そのまま声に出して練習できる1分自己紹介と鋭い逆質問2つ）、suggested_tasks（前日リハーサル・当日の接続テストタスク）を日本語で構造化してください。",
+  },
+  souzoku: {
+    id: "souzoku",
+    name: "親の終活・デジタル遺品エンディング整理 AI",
+    category: "暮らし・家族部門",
+    tagline: "聞きにくい「親の銀行・サブスク・スマホロック」を角を立てずに整理する家族共有ガイド",
+    subtitle:
+      "「いざという時パスワードも契約も分からない」を防ぐ優しい終活ナビ。Gemini 3.8 Flash が会話の切り出し方と整理シートを作成します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 家族安心エンディング",
+    accentColor: "#7c3aed",
+    accentSoft: "#f5f3ff",
+    inputLabel: "親の状況・気になっている管理項目（口座・保険・スマホ・実家など）",
+    inputPlaceholder: "例: 70代の親がスマホ決済やサブスクを使っているが、何が契約中か家族が知らない...",
+    sampleText:
+      "70代の両親が実家で二人暮らし。ネット銀行や携帯の有料オプション、生命保険の証券がどこにあるか家族が把握できていない。縁起でもないと怒られずに、帰省時に明るく確認を始める方法を知りたい。",
+    sampleLocation: "実家帰省時の家族団らん",
+    showLocationInput: true,
+    submitLabel: "角の立たない切り出し方＆整理シートを作成",
+    section1Title: "1. 親に嫌がられず進める優しい3ステップ",
+    section2Title: "2. 最低限まとめておきたいデジタル＆契約チェック",
+    section3Title: "3. 帰省前に家族LINEへ送れるやさしい提案文",
+    gasPrefix: "[終活整理AI]",
+    systemInstruction:
+      "あなたは親の尊厳を大切にしながら家族の不安を減らす終活・デジタル遺品整理アドバイザーです（法務・税務判断は専門家へ相談するよう案内してください）。入力内容から、alert_level (high/medium/low)、alert_title（放置すると家族が最も困りやすい項目）、alert_message（親が前向きに協力してくれる切り出し方のコツ）、items（スマホ・金融・保険の3段階整理アプローチ）、checklist（緊急連絡先・かかりつけ医・保険証券・引き落とし一覧チェック）、copyable_draft（帰省前にきょうだいや親へ送れる角の立たない相談メッセージ）、suggested_tasks（帰省時の30分整理タイム予定タスク）を日本語で構造化してください。",
+  },
+  condate: {
+    id: "condate",
+    name: "1週間まとめ買い＆使い切り献立プランナー AI",
+    category: "暮らし・家族部門",
+    tagline: "予算・人数・苦手な食材から「食材ロスゼロの平日5日献立＋売り場別買い物リスト」を一発生成",
+    subtitle:
+      "「毎日夕方17時にメニューを考えるのが限界…」を解消。Gemini 3.8 Flash が食材を使い切る5日献立と効率的な買い物メモを作ります。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 平日献立オートプラン",
+    accentColor: "#16a34a",
+    accentSoft: "#f0fdf4",
+    inputLabel: "家族人数・1週間の食費目安・苦手食材・忙しい曜日",
+    inputPlaceholder: "例: 大人2人＋小学生1人、平日5日分で6,000円目安。水曜は帰りが遅いので10分メニュー希望...",
+    sampleText:
+      "大人2人・未就学児1人。平日5日分の夕食を食費7,000円以内で回したい。子どもは辛いものが苦手。火曜と木曜は習い事の送迎で帰宅が19時になるので15分以内で作れるメニューにしたい。",
+    sampleLocation: "週末スーパーのまとめ買い前",
+    showLocationInput: true,
+    submitLabel: "食材使い切り5日献立＆売り場別リストを生成",
+    section1Title: "1. 食材を使い切る平日献立＆時短の工夫3点",
+    section2Title: "2. スーパーで迷わない売り場別まとめ買いチェック",
+    section3Title: "3. 冷蔵庫ドア・家族LINEに貼れる今週の献立表",
+    gasPrefix: "[献立AI]",
+    systemInstruction:
+      "あなたは食材ロスと夕方の献立疲れを同時に解消する家庭料理プランナーです。人数・予算・忙しい曜日から、alert_level (high/medium/low)、alert_title（予算と調理時間を守る最大のポイント）、alert_message（食材を余らせず着回すコツ）、items（前半・中盤・後半の食材着回し戦略3点）、checklist（野菜・肉魚・日配・常備品の売り場別買い物チェック）、copyable_draft（そのままメモアプリや冷蔵庫に貼れる月〜金の5日間献立表）、suggested_tasks（週末まとめ買い・下味冷凍タスク）を日本語で構造化してください。",
+  },
+  koutsuu: {
+    id: "koutsuu",
+    name: "悪天候・台風・交通マヒ初動ナビ AI",
+    category: "まちと地球の未来部門",
+    tagline: "台風・大雪・計画運休の予報時に「出社/在宅判断・代替移動・帰宅タイミング」を即整理",
+    subtitle:
+      "「電車が止まって帰れない！」を防ぐ悪天候日の行動プランナー。Gemini 3.8 Flash が安全な移動判断と職場・家族連絡文を作成します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 悪天候モビリティ支援",
+    accentColor: "#0284c7",
+    accentSoft: "#f0f9ff",
+    inputLabel: "気象予報・通勤通学ルート・外せない予定",
+    inputPlaceholder: "例: 明日の夕方から台風直撃で計画運休の可能性あり。午前中だけ出社予定だが帰れるか不安...",
+    sampleText:
+      "明日の午後15時頃から強い雪予報で、利用している私鉄が遅延・運転見合わせになりやすい。午前中に取引先訪問があるが、午後は早退かリモートワークへ切り替えるべきか判断と連絡文を整理したい。",
+    sampleLocation: "悪天候前夜の行動判断",
+    showLocationInput: true,
+    submitLabel: "安全優先の行動判断＆連絡テンプレを生成",
+    section1Title: "1. 帰宅困難を防ぐ時間帯別アクション3ステップ",
+    section2Title: "2. 悪天候日の持ち物・充電・運行情報チェック",
+    section3Title: "3. 上司・取引先へそのまま送れるリモート/日程変更文",
+    gasPrefix: "[悪天候AI]",
+    systemInstruction:
+      "あなたは台風・大雪・交通マヒ時の帰宅困難や事故を防ぐ安全モビリティアドバイザーです（最新の気象庁・鉄道公式情報を必ず確認するよう案内してください）。入力内容から、alert_level (high/medium/low)、alert_title（最も危険な移動時間帯と運休リスク）、alert_message（早めの判断で安全を守るポイント）、items（前夜確認・当日午前・帰宅判断の3ステップ）、checklist（モバイルバッテリー・防水靴・公式運行アプリ・リモート環境チェック）、copyable_draft（上司や取引先へ角を立てず相談できるリモート切替・時間変更メール）、suggested_tasks（朝6時運行確認・早期帰宅リマインドタスク）を日本語で構造化してください。",
+  },
+  kyouiku: {
+    id: "kyouiku",
+    name: "子どものスマホ・ゲーム約束円満合意 AI",
+    category: "暮らし・家族部門",
+    tagline: "毎日ケンカになる「YouTube・ゲーム時間」を、子どもも納得できる親子ルール表へ変換",
+    subtitle:
+      "「いい加減やめなさい！」の怒鳴り合いを卒業。Gemini 3.8 Flash が年齢に合った現実的なデジタルルールと声かけ例を作ります。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 親子デジタル合意",
+    accentColor: "#f59e0b",
+    accentSoft: "#fffbeb",
+    inputLabel: "子どもの学年・困っている場面・親として守りたいライン",
+    inputPlaceholder: "例: 小学3年生がゲームを1時間で終われず毎晩ケンカになる。宿題のあとにしてほしい...",
+    sampleText:
+      "小学4年生。平日のゲームと動画視聴を1時間と決めているが、キリのいいところまでと言って毎回30分オーバーし、注意すると不機嫌になって親子で疲れてしまう。納得感のあるルールに作り直したい。",
+    sampleLocation: "週末の親子ルール会議",
+    showLocationInput: true,
+    submitLabel: "親子で納得できる約束ルール＆声かけ例を生成",
+    section1Title: "1. ケンカを減らす仕組み化＆声かけ3ポイント",
+    section2Title: "2. 端末ペアレンタル設定＆タイマー準備チェック",
+    section3Title: "3. リビングに貼って一緒にサインできる親子約束表",
+    gasPrefix: "[親子ルールAI]",
+    systemInstruction:
+      "あなたは親子が感情的にぶつからず、子どもの自主性を育てながらデジタル機器の約束を作るファミリーコーチです。学年と困りごとから、alert_level (high/medium/low)、alert_title（ケンカが起きている本当のトリガー）、alert_message（一方的な禁止より納得合意が効く理由）、items（キリよく終わる事前予告・ご褒美設計・仕組み化3点）、checklist（スクリーンタイム設定・充電場所固定・見直し日設定チェック）、copyable_draft（子どもと一緒に読んでサインできる優しい親子デジタル約束表）、suggested_tasks（1週間後のルール振り返り親子会議タスク）を日本語で構造化してください。",
   },
 };
