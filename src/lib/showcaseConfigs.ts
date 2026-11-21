@@ -70,7 +70,12 @@ export type ShowcaseAppId =
   | "bousaipet"
   | "gakuchika"
   | "denwa"
-  | "kaimono";
+  | "kaimono"
+  | "sentaku"
+  | "furusato"
+  | "hikitsugi"
+  | "mimamori"
+  | "stretch";
 
 export interface ShowcaseAppConfig {
   id: ShowcaseAppId;
@@ -1768,5 +1773,125 @@ export const SHOWCASE_APPS: Record<ShowcaseAppId, ShowcaseAppConfig> = {
     gasPrefix: "[買い物ガードAI]",
     systemInstruction:
       "あなたはネット通販での衝動買いや粗悪品・サイズミスを防ぐ消費者目線の買い物アドバイザーです。検討中の商品情報から、alert_level (high/medium/low)、alert_title（最も注意すべき失敗リスク・維持費の落とし穴）、alert_message（星の数だけでなく低評価レビューや公式スペックを見るコツ）、items（レビュー信頼性・適応能力/サイズ・ランニングコスト3点）、checklist（販売元/発送元・返品特約・設置寸法・PSE等安全表示チェック）、copyable_draft（購入前に自分や家族で最終確認する検討サマリーメモ）、suggested_tasks（他店価格比較・24時間クールダウン検討タスク）を日本語で構造化してください。",
+  },
+  sentaku: {
+    id: "sentaku",
+    name: "洗濯・部屋干し生乾き＆天気急変レスキュー AI",
+    category: "暮らし・家族部門",
+    tagline: "天気・湿度・洗濯物の種類から「生乾き臭ゼロの干し方＆乾燥機使い分け」を即提案",
+    subtitle:
+      "「雨続きで部屋干しが臭う…」「ニットを縮ませたくない！」を解消。Gemini 3.8 Flash が最速で乾く配置とケア手順を作成します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 洗濯レスキュー",
+    accentColor: "#0ea5e9",
+    accentSoft: "#f0f9ff",
+    inputLabel: "今日の天気・湿度・洗いたい衣類・使える家電（サーキュレーター等）",
+    inputPlaceholder: "例: 梅雨で湿度80%、バスタオル4枚と子どもの体操服を今夜中に乾かしたい...",
+    sampleText:
+      "外は雨で夕方から洗濯開始。バスタオル3枚、厚手のパーカー2着、子どもの給食着を明朝7時までに生乾き臭なしで乾かしたい。サーキュレーターとエアコンの除湿機能がある。",
+    sampleLocation: "夕方19:00の洗面所・室内干し",
+    showLocationInput: true,
+    submitLabel: "生乾きゼロの干し方＆最速乾燥プランを生成",
+    section1Title: "1. 最速で乾かすアーチ干し＆家電配置3ステップ",
+    section2Title: "2. 雑菌・生乾き臭を防ぐ洗濯前チェックリスト",
+    section3Title: "3. 家族で共有できる洗濯・取り込みメモ",
+    gasPrefix: "[洗濯AI]",
+    systemInstruction:
+      "あなたは洗濯表示と室内乾燥の科学に詳しい家事レスキューコーチです。天気・衣類・家電条件から、alert_level (high/medium/low)、alert_title（生乾きや縮みの最大リスク）、alert_message（5時間以内に乾かすための風と除湿のコツ）、items（アーチ干し・サーキュレーター角度・厚手衣類の工夫3点）、checklist（酸素系漂白剤・脱水追加・フィルター掃除チェック）、copyable_draft（洗濯機横に貼れる部屋干し最速ルールメモ）、suggested_tasks（洗濯槽クリーナー・朝取り込みリマインドタスク）を日本語で構造化してください。",
+  },
+  furusato: {
+    id: "furusato",
+    name: "ふるさと納税・年末駆け込み失敗防止ナビ AI",
+    category: "暮らし・家族部門",
+    tagline: "ワンストップ特例と確定申告の落とし穴・冷凍庫パンクを防ぎ、計画的に返礼品を選ぶ",
+    subtitle:
+      "「12月末に駆け込んで冷凍庫に入らない」「ワンストップ期限を忘れた」をゼロに。Gemini 3.8 Flash が手続きと配送分散を整理します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + ふるさと納税ナビ",
+    accentColor: "#16a34a",
+    accentSoft: "#f0fdf4",
+    inputLabel: "寄付予定額・自治体数・医療費控除など確定申告の有無・欲しいジャンル",
+    inputPlaceholder: "例: 残り3万円分を年内に寄付したい。既に4自治体へ寄付済み、医療費控除も予定あり...",
+    sampleText:
+      "今年の残り控除枠が約35,000円。すでに4自治体に寄付済みで、あと2自治体に追加したいが、ワンストップ特例の5自治体上限を超えるとどうなるか？冷凍庫が小さいので常温や日用品も混ぜたい。",
+    sampleLocation: "年末のふるさと納税確認",
+    showLocationInput: true,
+    submitLabel: "控除ミス防止＆冷凍庫に優しい配分案を生成",
+    section1Title: "1. 手続きミス・上限超過を防ぐ重要ポイント3選",
+    section2Title: "2. 寄付申込前〜1月10日必着チェックリスト",
+    section3Title: "3. 自分の寄付管理用サマリー＆リマインドメモ",
+    gasPrefix: "[ふるさと納税AI]",
+    systemInstruction:
+      "あなたはふるさと納税の制度ミス（5自治体超過・確定申告併用・名義違い）と冷凍庫パンクを防ぐ家計アドバイザーです（正確な控除上限や税務判断は公式シミュレーター・税務署で確認するよう案内してください）。入力内容から、alert_level (high/medium/low)、alert_title（ワンストップ特例無効や上限超過の注意点）、alert_message（日用品・定期便で冷凍庫を守るコツ）、items（制度切替・配送分散・おすすめ返礼品ジャンル3点）、checklist（決済名義一致・1/10必着・マイナンバーオンライン申請チェック）、copyable_draft（今年の寄付先と申請状況を管理するチェック表）、suggested_tasks（12/31決済締切・1/10書類提出タスク）を日本語で構造化してください。",
+  },
+  hikitsugi: {
+    id: "hikitsugi",
+    name: "業務引き継ぎ＆README 3分自動整理 AI",
+    category: "シゴト・学び部門",
+    tagline: "頭の中にしかない業務手順や属人化した運用メモを「初見の人でも迷わない引き継ぎ書」へ変換",
+    subtitle:
+      "「異動・休職・退職前に引き継ぎ資料を作る時間がない！」を解決。Gemini 3.8 Flash が権限・手順・例外対応を抜け漏れなく構造化します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 属人化解消ドキュメント",
+    accentColor: "#6366f1",
+    accentSoft: "#eef2ff",
+    inputLabel: "引き継ぎたい業務・使用ツール・毎月の定例作業・よくあるトラブル",
+    inputPlaceholder: "例: 月初の請求データ集計と顧客メール配信。たまにCSVの文字化けが起きる...",
+    sampleText:
+      "来月異動するため、毎月1日の売上CSV集計とSlackレポート投稿、問い合わせフォームの一次振り分け業務を後任へ引き継ぎたい。権限譲渡が必要なツールはGoogleドライブ、Slack、管理画面の3つ。",
+    sampleLocation: "異動2週間前の引き継ぎ準備",
+    showLocationInput: true,
+    submitLabel: "抜け漏れゼロの引き継ぎ書＆権限リストを生成",
+    section1Title: "1. 後任がつまずきやすい罠＆優先説明3ポイント",
+    section2Title: "2. 権限譲渡・アカウント・パスワード確認チェック",
+    section3Title: "3. Notion・Wiki・README にそのまま貼れる引き継ぎ書",
+    gasPrefix: "[引き継ぎAI]",
+    systemInstruction:
+      "あなたは属人化した業務を誰でも再現できるドキュメントへ落とし込む業務設計の専門家です。業務メモから、alert_level (high/medium/low)、alert_title（引き継ぎ漏れすると業務が止まる最重要ポイント）、alert_message（実演＋並走期間で定着させるコツ）、items（定例手順・例外トラブル対処・権限移管の3本柱）、checklist（アカウント権限・共有フォルダ・連絡窓口・緊急連絡先チェック）、copyable_draft（そのままNotionやGitHub READMEに貼れる構造化引き継ぎドキュメント雛形）、suggested_tasks（後任並走MTG・権限テストタスク）を日本語で構造化してください。",
+  },
+  mimamori: {
+    id: "mimamori",
+    name: "地域の高齢者見守り・声かけサポート AI",
+    category: "まちと地球の未来部門",
+    tagline: "猛暑・寒波・災害前後に、離れて暮らす親や地域の高齢者へ負担なく安否確認する声かけガイド",
+    subtitle:
+      "「気にかけたいけど、どう声をかければ押し付けがましくない？」を解決。Gemini 3.8 Flash が自然な連絡文と気づきチェックを作ります。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 地域見守りコミュニティ",
+    accentColor: "#0d9488",
+    accentSoft: "#f0fdfa",
+    inputLabel: "見守りたい相手の状況・季節や天候・気になっている変化",
+    inputPlaceholder: "例: 一人暮らしの80代の叔母。今週急に冷え込むので暖房や体調が心配だが、詮索されたくない性格...",
+    sampleText:
+      "隣に住む一人暮らしの高齢の方。今週から急激な寒波と大雪予報が出ており、買い物や暖房・ヒートショックが心配。プライバシーに踏み込みすぎず、近所として自然に声をかける方法と行政相談窓口を整理したい。",
+    sampleLocation: "寒波前日のご近所・家族見守り",
+    showLocationInput: true,
+    submitLabel: "自然な声かけ文＆地域見守りチェックを生成",
+    section1Title: "1. 相手が受け取りやすい自然な声かけ3パターン",
+    section2Title: "2. 異変に気づくためのさりげない確認ポイント",
+    section3Title: "3. 電話・LINE・メモで使える温かいひとこと文例",
+    gasPrefix: "[地域見守りAI]",
+    systemInstruction:
+      "あなたは地域包括支援センターの知見を活かした優しい高齢者見守りアドバイザーです（緊急の体調異変時は迷わず119番や地域包括支援センターへ連絡するよう案内してください）。状況から、alert_level (high/medium/low)、alert_title（この季節・状況で最も警戒すべき健康リスク）、alert_message（相手のプライドを守りながら繋がるコツ）、items（自然な声かけ・玄関先や郵便受けの気づき・地域包括支援センター連携3点）、checklist（暖房/水分・緊急連絡先・民生委員/包括窓口番号チェック）、copyable_draft（そのまま使える温かく自然な声かけメッセージ案）、suggested_tasks（寒波/猛暑当日の安否確認リマインドタスク）を日本語で構造化してください。",
+  },
+  stretch: {
+    id: "stretch",
+    name: "デスクワーク肩こり・眼精疲労 3分リセット AI",
+    category: "暮らし・家族部門",
+    tagline: "長時間PC作業の疲れ箇所と今の場所（オフィス/自宅）から、座ったまま3分で効くリセット手順を提案",
+    subtitle:
+      "「夕方になると首と目が限界…」を3分でリフレッシュ。Gemini 3.8 Flash が周囲を気にせずできる姿勢リセットと環境改善を作ります。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 3分ボディリセット",
+    accentColor: "#10b981",
+    accentSoft: "#ecfdf5",
+    inputLabel: "今の疲れ箇所（首・肩・腰・目など）・作業環境・使える時間",
+    inputPlaceholder: "例: ノートPC作業6時間目で右肩と目の奥が重い。オフィスなので座ったまま3分でほぐしたい...",
+    sampleText:
+      "在宅ワークでノートPCを5時間見続けて、首の後ろのハリと目の乾き・腰のだるさがつらい。次の会議まであと5分あるので、椅子に座ったままできるリセット手順と画面高さの改善ポイントを知りたい。",
+    sampleLocation: "午後15:00のデスクチェア",
+    showLocationInput: true,
+    submitLabel: "座ったまま3分リセット手順＆姿勢チェックを生成",
+    section1Title: "1. 椅子に座ったままできる3分リセット3メニュー",
+    section2Title: "2. 疲れを繰り返さないデスク環境・視線チェック",
+    section3Title: "3. モニター横に貼れる1時間ごとミニ休憩メモ",
+    gasPrefix: "[3分リセットAI]",
+    systemInstruction:
+      "あなたはデスクワーカーの疲労を安全に和らげるボディメンテナンスコーチです（強いしびれや鋭い痛みがある場合は無理をせず整形外科等を受診するよう案内してください）。疲れ箇所と環境から、alert_level (high/medium/low)、alert_title（今の疲労を引き起こしている姿勢のクセ）、alert_message（20-20-20ルールや呼吸で副交感神経を整えるコツ）、items（目・首肩・腰の座ったまま3分メニュー3点）、checklist（モニター高さ・椅子高さ・水分補給・ブルーライト休憩チェック）、copyable_draft（付箋に書いてモニターへ貼れる1時間ごとリセットメモ）、suggested_tasks（午後15時リセット休憩タイマータスク）を日本語で構造化してください。",
   },
 };
