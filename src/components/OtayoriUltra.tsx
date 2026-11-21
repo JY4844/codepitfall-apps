@@ -1517,71 +1517,72 @@ export default function OtayoriUltra() {
     }
   }
 
-  async function handleArchiveToDrive() {
+  function handleDownloadLocalMarkdown() {
+    const mdContent = [
+      `# ${analysis.title}`,
+      `- 分類: ${analysis.category}`,
+      `- 費用・集金: ${analysis.cost}`,
+      `- 要約: ${analysis.summary}`,
+      "",
+      lineGroupSummaryText,
+    ].join("\n");
+    const blob = new Blob([mdContent], {
+      type: "text/markdown;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `otayori-baton-${activePresetId}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function handleDownloadLocalJson() {
+    const payload = {
+      app: "OtayoriBaton Ultra",
+      savedAt: new Date().toISOString(),
+      presetId: activePresetId,
+      analysis,
+      checklist,
+      familyRoles,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `otayori-baton-${activePresetId}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function handleSaveToLocalDevice() {
     setArchivingDrive(true);
     setError(null);
     setNotice(null);
 
     try {
-      const res = await fetch("/api/drive-archive", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          app: "OtayoriBaton",
-          title: analysis.title,
-          jsonData: {
-            analysis,
-            checklist,
-            familyRoles,
-            savedAt: new Date().toISOString(),
-          },
-          markdown: lineGroupSummaryText,
-          imageBase64: imageBase64 || undefined,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.ok === false) {
-        throw new Error(
-          data.error || "Google Drive アーカイブ保存に失敗しました。"
-        );
-      }
-      const driveUrl =
-        typeof data.driveUrl === "string"
-          ? data.driveUrl
-          : typeof data.folderUrl === "string"
-          ? data.folderUrl
-          : typeof data.fileUrl === "string"
-          ? data.fileUrl
-          : typeof data.url === "string"
-          ? data.url
-          : undefined;
-
-      const folder =
-        typeof data.previewFolder === "string"
-          ? data.previewFolder
-          : "GoogleAIChallenge_5TB/OtayoriBaton";
-
+      handleDownloadLocalMarkdown();
       setDriveArchiveInfo({
-        mode: String(data.mode || "google-drive-5tb"),
-        url: driveUrl,
-        folder,
+        mode: "local-ssd-download",
+        folder: `Downloads/otayori-baton-${activePresetId}.md (.json)`,
         message:
-          typeof data.message === "string"
-            ? data.message
-            : "Google Drive (5TB) におたより構造化データ・LINEまとめ・画像をアーカイブ保存しました。",
-        timestamp:
-          typeof data.timestamp === "string"
-            ? data.timestamp
-            : new Date().toISOString(),
+          "設定不要・完全無料で PC・スマホのローカルストレージにおたよりまとめを保存しました（下のボタンで .md / .json を個別保存できます）。",
+        timestamp: new Date().toISOString(),
       });
       setNotice(
-        `☁️ Google Drive (5TB) アーカイブ完了：${folder} に「${analysis.title}」を保存しました！`
+        `💾 PC・スマホに「${analysis.title}」のまとめファイル (.md) を保存しました！`
       );
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : "Google Drive アーカイブ中にエラーが発生しました。"
+          : "ローカルファイル保存中にエラーが発生しました。"
       );
     } finally {
       setArchivingDrive(false);
@@ -2353,12 +2354,12 @@ export default function OtayoriUltra() {
             </div>
           </div>
 
-          {/* Bottom Dock: Calendar .ics + LINE Copy + Google Drive 5TB Archive + Google Workspace GAS Sync */}
+          {/* Bottom Dock: Calendar .ics + LINE Copy + Local PC/Smartphone Save (.json / .md) + Google Workspace GAS Sync */}
           <div className="ou-bottom-dock">
             <div className="ou-dock-left">
               <span className="ou-step-badge">STEP 3</span>
               <span className="ou-dock-title">
-                家族みんなのカレンダ―・LINE・Google Drive (5TB) へワンクリック共有
+                家族みんなのカレンダー・LINE・PC／スマホへワンクリック保存＆共有
               </span>
             </div>
             <div className="ou-dock-actions">
@@ -2380,11 +2381,11 @@ export default function OtayoriUltra() {
                 type="button"
                 className="ou-btn-drive"
                 disabled={archivingDrive}
-                onClick={handleArchiveToDrive}
+                onClick={handleSaveToLocalDevice}
               >
                 {archivingDrive
-                  ? "☁️ Drive 保存中..."
-                  : "☁️ Google Drive (5TB) にアーカイブ保存"}
+                  ? "💾 保存中..."
+                  : "💾 PC・スマホに保存 (.json / .md)"}
               </button>
               <button
                 type="button"
@@ -2402,29 +2403,34 @@ export default function OtayoriUltra() {
               <div className="ou-drive-status" role="status">
                 <div className="ou-drive-status-head">
                   <span>
-                    ☁️{" "}
+                    💾{" "}
                     <strong>
-                      Google Drive (5TB) アーカイブ保存完了 (
-                      {driveArchiveInfo.mode})
+                      PC・スマホへのローカル保存完了 ({driveArchiveInfo.mode})
                     </strong>
                   </span>
                   <span className="ou-drive-folder">
-                    📁 保存先: <code>{driveArchiveInfo.folder}</code>
+                    📁 保存ファイル: <code>{driveArchiveInfo.folder}</code>
                   </span>
                 </div>
                 {driveArchiveInfo.message && (
                   <p className="ou-drive-msg">{driveArchiveInfo.message}</p>
                 )}
-                {driveArchiveInfo.url && (
-                  <a
-                    href={driveArchiveInfo.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ou-drive-link"
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="ou-btn-secondary"
+                    onClick={handleDownloadLocalMarkdown}
                   >
-                    🔗 Google Drive で保存ファイルを開く ↗
-                  </a>
-                )}
+                    📝 Markdown (.md) を再ダウンロード
+                  </button>
+                  <button
+                    type="button"
+                    className="ou-btn-secondary"
+                    onClick={handleDownloadLocalJson}
+                  >
+                    📦 JSON (.json) をダウンロード
+                  </button>
+                </div>
               </div>
             )}
           </div>

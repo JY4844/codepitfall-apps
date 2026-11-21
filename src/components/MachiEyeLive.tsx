@@ -1332,60 +1332,23 @@ export default function MachiEyeLive() {
     }
   };
 
-  const handleDriveArchive = async () => {
+  const handleSaveToLocalDevice = () => {
     if (!selectedPin) return;
     setDriveArchiving(true);
     setDriveArchiveInfo(null);
     setDriveError("");
 
     try {
-      const res = await fetch("/api/drive-archive", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          app: "MachiEye",
-          title: selectedPin.analysis.title,
-          jsonData: selectedPin,
-          markdown: formattedMunicipalityReport,
-          imageBase64: imageBase64 || undefined,
-        }),
-      });
-      const data = (await res.json()) as Record<string, unknown>;
-      if (!res.ok || data.ok === false) {
-        throw new Error(
-          typeof data.error === "string"
-            ? data.error
-            : "Google Drive アーカイブ保存に失敗しました。"
-        );
-      }
-
-      const folder =
-        typeof data.previewFolder === "string"
-          ? data.previewFolder
-          : "GoogleAIChallenge_5TB/MachiEye";
-      const url =
-        typeof data.driveUrl === "string"
-          ? data.driveUrl
-          : typeof data.fileUrl === "string"
-          ? data.fileUrl
-          : typeof data.folderUrl === "string"
-          ? data.folderUrl
-          : typeof data.url === "string"
-          ? data.url
-          : undefined;
-      const mode =
-        typeof data.mode === "string" ? data.mode : "google-drive-5tb";
-      const message =
-        typeof data.message === "string"
-          ? data.message
-          : `Google Drive (5TB)「${folder}」に現場検査データ・Markdown通報書・写真をアーカイブ保存しました。`;
-
-      setDriveArchiveInfo({ mode, message, folder, url });
+      handleDownloadMarkdown();
+      const folder = `Downloads/machieye-report-${selectedPin.id}.md (.json)`;
+      const mode = "local-ssd-download";
+      const message = `設定不要・完全無料で PC・スマホのローカルストレージに通報レポート（${folder}）を保存しました。`;
+      setDriveArchiveInfo({ mode, message, folder });
     } catch (err) {
       setDriveError(
         err instanceof Error
           ? err.message
-          : "Google Drive アーカイブ保存中にエラーが発生しました。"
+          : "ローカル保存中にエラーが発生しました。"
       );
     } finally {
       setDriveArchiving(false);
@@ -3559,7 +3522,7 @@ export default function MachiEyeLive() {
                 </div>
               )}
 
-              {/* Google Workspace GAS & Google Drive (5TB) Archive Dock */}
+              {/* Local PC/Smartphone Save (.json / .md) & Google Workspace GAS Dock */}
               <div
                 style={{
                   display: "flex",
@@ -3574,12 +3537,12 @@ export default function MachiEyeLive() {
                 }}
               >
                 <span style={{ fontSize: "0.78rem", color: "#cbd5e1" }}>
-                  Google Drive (5TB) への現場写真・通報書アーカイブ保存、および地域安全台帳シート・カレンダー連携
+                  PC・スマホ（SSD／ローカル）への通報書ファイル保存（.json / .md）、および地域安全台帳シート・カレンダー連携
                 </span>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   <button
                     type="button"
-                    onClick={handleDriveArchive}
+                    onClick={handleSaveToLocalDevice}
                     disabled={driveArchiving}
                     style={{
                       padding: "8px 14px",
@@ -3594,8 +3557,8 @@ export default function MachiEyeLive() {
                     }}
                   >
                     {driveArchiving
-                      ? "⏳ Google Drive (5TB) 保存中..."
-                      : "☁️ Google Drive (5TB) にアーカイブ保存"}
+                      ? "⏳ 保存中..."
+                      : "💾 PC・スマホに保存 (.json / .md)"}
                   </button>
                   <button
                     type="button"
@@ -3630,11 +3593,11 @@ export default function MachiEyeLive() {
                     fontSize: "0.8rem",
                     display: "flex",
                     flexDirection: "column",
-                    gap: 4,
+                    gap: 6,
                   }}
                 >
                   <div>
-                    ☁️ <strong>Google Drive (5TB) アーカイブ完了</strong>{" "}
+                    💾 <strong>PC・スマホへのローカル保存完了</strong>{" "}
                     <span
                       style={{
                         fontSize: "0.72rem",
@@ -3650,23 +3613,43 @@ export default function MachiEyeLive() {
                   <div>{driveArchiveInfo.message}</div>
                   {driveArchiveInfo.folder && (
                     <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
-                      📁 保存先フォルダ: <code>{driveArchiveInfo.folder}</code>
+                      📁 保存ファイル: <code>{driveArchiveInfo.folder}</code>
                     </div>
                   )}
-                  {driveArchiveInfo.url && (
-                    <a
-                      href={driveArchiveInfo.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={handleDownloadMarkdown}
                       style={{
-                        color: "#38bdf8",
+                        padding: "5px 10px",
+                        borderRadius: 7,
+                        border: "1px solid rgba(56, 189, 248, 0.45)",
+                        background: "rgba(14, 165, 233, 0.2)",
+                        color: "#7dd3fc",
+                        fontSize: "0.75rem",
                         fontWeight: 700,
-                        textDecoration: "none",
+                        cursor: "pointer",
                       }}
                     >
-                      🔗 Google Drive でアーカイブファイルを開く ↗
-                    </a>
-                  )}
+                      📝 Markdown (.md) を再ダウンロード
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadJson}
+                      style={{
+                        padding: "5px 10px",
+                        borderRadius: 7,
+                        border: "1px solid rgba(148, 163, 184, 0.35)",
+                        background: "rgba(30, 41, 59, 0.85)",
+                        color: "#e2e8f0",
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      📦 JSON (.json) をダウンロード
+                    </button>
+                  </div>
                 </div>
               )}
               {driveError && (

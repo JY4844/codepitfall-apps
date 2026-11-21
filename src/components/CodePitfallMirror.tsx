@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import type {
   AuditResponse,
   ChecklistItem,
@@ -116,7 +117,7 @@ export interface PresetConfig {
 const FEATURED_PRESETS: PresetConfig[] = [
   {
     id: "preset-nextjs",
-    badge: "Preset 1 • Next.js API",
+    badge: "プリセット1 • Next.js API",
     title: "注文送信 API（await 抜け＆境界値バグ）",
     taskType: "Next.js API / フォーム送信",
     declaration: "Next.js の注文フォーム送信 API とレスポンス集計処理を実装する",
@@ -135,7 +136,7 @@ const FEATURED_PRESETS: PresetConfig[] = [
   },
   {
     id: "preset-python",
-    badge: "Preset 2 • Python ML",
+    badge: "プリセット2 • Python ML",
     title: "推論スコア集計（JS構文混同＆ゼロ除算＆UTF-8漏れ）",
     taskType: "Python ML / データ処理",
     declaration: "Python で JSON ログを読み込み重み付き平均スコアを算出する",
@@ -152,7 +153,7 @@ def load_scores(file_path: str, weights: list[float]):
   },
   {
     id: "preset-db-sec",
-    badge: "Preset 3 • DB & 認証",
+    badge: "プリセット3 • DB & 認証",
     title: "ユーザー検索＆マイグレーション（SQLi＆NOT NULL事故）",
     taskType: "DB マイグレーション",
     declaration: "ユーザーテーブルに電話番号カラムを追加しID検索クエリを実装する",
@@ -166,7 +167,7 @@ def load_scores(file_path: str, weights: list[float]):
   },
   {
     id: "preset-webhook",
-    badge: "Preset 4 • 決済 Webhook",
+    badge: "プリセット4 • 決済 Webhook",
     title: "Stripe 決済 Webhook（秘密鍵ハードコード＆消費税端数バグ）",
     taskType: "決済・外部Webhook",
     declaration: "Stripe Webhook を受け取り税込金額を計算して注文完了にする",
@@ -428,7 +429,7 @@ const TASK_TEMPLATES_DATA: Record<
 
 const SAMPLE_GITHUB_URLS = [
   {
-    label: "Next.js Example (route.ts)",
+    label: "Next.js Example (users.ts)",
     url: "https://github.com/vercel/next.js/blob/canary/examples/api-routes-rest/pages/api/users.ts",
   },
   {
@@ -450,7 +451,6 @@ function buildSideBySideDiff(beforeCode: string, afterCode: string): DiffRow[] {
   const afterLines = afterCode.split("\n");
   const rows: DiffRow[] = [];
 
-  // Line-aligned comparison supporting 1-to-N expansion from our deterministic fixer
   let bIdx = 0;
   let aIdx = 0;
 
@@ -473,7 +473,6 @@ function buildSideBySideDiff(beforeCode: string, afterCode: string): DiffRow[] {
       aIdx + 1 < afterLines.length &&
       afterLines[aIdx + 1] === bLine
     ) {
-      // An extra guard line was inserted before the original line
       rows.push({
         beforeLineNum: null,
         afterLineNum: aIdx + 1,
@@ -488,7 +487,6 @@ function buildSideBySideDiff(beforeCode: string, afterCode: string): DiffRow[] {
       aIdx + 1 < afterLines.length &&
       beforeLines[bIdx + 1] === afterLines[aIdx + 1]
     ) {
-      // 1-to-1 modified line
       rows.push({
         beforeLineNum: bIdx + 1,
         afterLineNum: aIdx + 1,
@@ -504,7 +502,6 @@ function buildSideBySideDiff(beforeCode: string, afterCode: string): DiffRow[] {
       aIdx + 2 < afterLines.length &&
       beforeLines[bIdx + 1] === afterLines[aIdx + 2]
     ) {
-      // 1 line replaced by 2 lines (e.g. if (!res.ok) + await res.json())
       rows.push({
         beforeLineNum: bIdx + 1,
         afterLineNum: aIdx + 1,
@@ -596,6 +593,10 @@ function detectTaskFromVoiceText(text: string): string | null {
 }
 
 export default function CodePitfallMirror() {
+  const [activeTab, setActiveTab] = useState<"basic" | "dna" | "github_voice">(
+    "basic"
+  );
+
   const [habits, setHabits] = useState<PersonalMistake[]>(DEFAULT_HABITS);
   const [newHabitText, setNewHabitText] = useState("");
   const [newHabitCategory, setNewHabitCategory] = useState("Async");
@@ -630,14 +631,7 @@ export default function CodePitfallMirror() {
     {}
   );
   const [dnaStatusMsg, setDnaStatusMsg] = useState<string>("");
-  const [driveSaving, setDriveSaving] = useState(false);
-  const [driveStatus, setDriveStatus] = useState<{
-    ok: boolean;
-    mode?: string;
-    message: string;
-    url?: string;
-    folder?: string;
-  } | null>(null);
+  const [localSaveBanner, setLocalSaveBanner] = useState<string>("");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -759,33 +753,40 @@ export default function CodePitfallMirror() {
     }
 
     persistHabits(next);
-    setLearnedTitles((prev) => ({ ...prev, [ `${diag.line}-${diag.title}` ]: true }));
-    setDnaStatusMsg(`🧬「${patternKey}」を自分のDNAに永久記憶しました！`);
+    setLearnedTitles((prev) => ({
+      ...prev,
+      [`${diag.line}-${diag.title}`]: true,
+    }));
+    setDnaStatusMsg(`🧬「${patternKey}」を自分のDNAに記憶しました！`);
     setTimeout(() => setDnaStatusMsg(""), 3000);
   };
 
-  // Export Personal DNA as JSON file
-  const handleExportDnaJson = () => {
+  // Save Git-friendly DNA file (.codepitfall.json) directly to PC / SSD
+  const handleSaveGitDnaFile = () => {
     const payload = {
-      app: "CodePitfall Mirror Ultra",
+      $schema: "https://codepitfall.local/schema/v1.json",
+      app: "CodePitfall Mirror",
       exportedAt: new Date().toISOString(),
       totalPatterns: habits.length,
       totalHits: dnaAnalytics.totalHits,
       habits,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: "application/json",
+      type: "application/json;charset=utf-8",
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "codepitfall-personal-dna.json";
+    a.download = ".codepitfall.json";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    setDnaStatusMsg("📥 ミスDNAプロファイルを JSON 出力しました");
-    setTimeout(() => setDnaStatusMsg(""), 2500);
+    setDnaStatusMsg("📂 Git 用 DNA ファイル (.codepitfall.json) を PC に保存しました");
+    setLocalSaveBanner(
+      "📂 Git リポジトリにコミット可能な「.codepitfall.json」を PC（ローカル SSD）に保存しました！"
+    );
+    setTimeout(() => setDnaStatusMsg(""), 3000);
   };
 
   // Import Personal DNA from JSON file
@@ -822,7 +823,8 @@ export default function CodePitfallMirror() {
               item.severity === "low"
                 ? item.severity
                 : ("high" as const),
-            hits: typeof item.hits === "number" && item.hits > 0 ? item.hits : 1,
+            hits:
+              typeof item.hits === "number" && item.hits > 0 ? item.hits : 1,
           }));
 
         if (valid.length === 0) {
@@ -857,7 +859,6 @@ export default function CodePitfallMirror() {
         .webkitSpeechRecognition;
 
     if (!SpeechRec) {
-      // Graceful fallback demo dictation when browser has no Web Speech API
       const demoSamples = [
         "Stripe決済Webhookの署名検証と税込金額の計算処理を実装する",
         "Pythonで学習データのJSONログを読み込み平均スコアを計算する",
@@ -882,7 +883,11 @@ export default function CodePitfallMirror() {
         interimResults: boolean;
         maxAlternatives: number;
         onstart: (() => void) | null;
-        onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+        onresult:
+          | ((event: {
+              results: ArrayLike<ArrayLike<{ transcript: string }>>;
+            }) => void)
+          | null;
         onerror: (() => void) | null;
         onend: (() => void) | null;
         start: () => void;
@@ -893,7 +898,9 @@ export default function CodePitfallMirror() {
 
       recognition.onstart = () => {
         setIsListening(true);
-        setVoiceStatus("🎙️ 聞き取り中...「今からやる作業」を話してください（日本語）");
+        setVoiceStatus(
+          "🎙️ 聞き取り中...「今からやる作業」を話してください（日本語）"
+        );
       };
 
       recognition.onresult = (event) => {
@@ -967,7 +974,7 @@ export default function CodePitfallMirror() {
       setActivePresetId("");
       setGithubStatus({
         type: "success",
-        message: `✓ ${data.fileName} (${data.lineCount}行) を取得しパーソナル監査を実行しました`,
+        message: `✓ ${data.fileName} (${data.lineCount}行) を取得し、下のワークスペースでチェックを実行しました！`,
         rawUrl: data.rawUrl,
       });
 
@@ -1137,14 +1144,14 @@ export default function CodePitfallMirror() {
       .join("\n");
 
     return [
-      `## 🛡️ CodePitfall Mirror Ultra — パーソナルコード監査レポート`,
+      `## 🛡️ CodePitfall Mirror — コードチェック＆修正レポート`,
       `- **対象作業**: ${taskType}`,
-      `- **作業宣言**: ${taskDeclaration}`,
-      `- **リスクスコア**: **${result.riskScore} / 100** (Engine: \`${result.source}\`)`,
+      `- **作業メモ**: ${taskDeclaration}`,
+      `- **危険度スコア**: **${result.riskScore} / 100** (Engine: \`${result.source}\`)`,
       `- **サマリー**: ${result.summary}`,
       ``,
-      `### 🔍 行単位の指摘事項 (${result.diagnostics.length}件)`,
-      diagLines,
+      `### 🔍 見つかった赤い行・注意点 (${result.diagnostics.length}件)`,
+      diagLines || "- 指摘事項はありません（安全です）",
       ``,
       `### 🔧 修正後コードパッチ (After)`,
       "```ts",
@@ -1164,57 +1171,22 @@ export default function CodePitfallMirror() {
     setTimeout(() => setCopiedPrMd(false), 2200);
   };
 
-  // 1-Click Archive to Google Drive (5TB) via /api/drive-archive
-  const handleArchiveToDrive = async () => {
-    setDriveSaving(true);
-    setDriveStatus(null);
-    try {
-      const md = buildPrMarkdownString();
-      const res = await fetch("/api/drive-archive", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          app: "CodePitfall",
-          title: `CodePitfall_${taskType.replace(/[\/\s]+/g, "_")}_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}`,
-          jsonData: {
-            taskType,
-            taskDeclaration,
-            personalMistakeDna: habits,
-            originalCode: code,
-            auditResult: result,
-            checklistProgress: `${completedCount}/${activeChecklist.length} (${progressPercent}%)`,
-          },
-          markdown: md,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok && data.ok) {
-        const driveUrl =
-          data.folderUrl || data.mdFileUrl || data.jsonFileUrl || data.url;
-        setDriveStatus({
-          ok: true,
-          mode: data.mode,
-          folder: data.previewFolder || "GoogleAIChallenge_5TB/CodePitfall",
-          url: typeof driveUrl === "string" ? driveUrl : undefined,
-          message:
-            data.mode === "google-drive-5tb"
-              ? "✓ Google Drive (5TB) へ監査レポート＆ミスDNAをアーカイブ保存しました！"
-              : `✓ アーカイブ保存完了 (${data.previewFolder || "GoogleAIChallenge_5TB/CodePitfall"}) — ${data.message || ""}`,
-        });
-      } else {
-        setDriveStatus({
-          ok: false,
-          message: data.error || "Google Drive アーカイブ保存に失敗しました。",
-        });
-      }
-    } catch {
-      setDriveStatus({
-        ok: false,
-        message: "アーカイブ通信中にエラーが発生しました。",
-      });
-    } finally {
-      setDriveSaving(false);
-    }
+  // Save Markdown report directly to user's PC / SSD (.md)
+  const handleSaveReportMarkdown = () => {
+    const md = buildPrMarkdownString();
+    if (!md) return;
+    const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `codepitfall-report-${new Date().toISOString().slice(0, 10)}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setLocalSaveBanner(
+      "💾 チェック結果レポート (.md) を PC（ローカル SSD）に保存しました！Git の PR コメントやドキュメントにそのまま使えます。"
+    );
   };
 
   // Side-by-Side Diff computation
@@ -1252,15 +1224,15 @@ export default function CodePitfallMirror() {
           'Inter, "Noto Sans JP", ui-sans-serif, system-ui, -apple-system, sans-serif',
       }}
     >
-      <div style={{ maxWidth: 1360, margin: "0 auto" }}>
+      <div style={{ maxWidth: 1320, margin: "0 auto" }}>
         {/* Top Hero Header */}
         <header
           style={{
-            background: "rgba(15, 23, 42, 0.82)",
+            background: "rgba(15, 23, 42, 0.88)",
             border: "1px solid rgba(99, 102, 241, 0.35)",
             borderRadius: 16,
             padding: "18px 22px",
-            marginBottom: 18,
+            marginBottom: 16,
             boxShadow: "0 12px 32px -8px rgba(0, 0, 0, 0.6)",
           }}
         >
@@ -1276,27 +1248,53 @@ export default function CodePitfallMirror() {
             <div>
               <div
                 style={{
-                  display: "inline-flex",
+                  display: "flex",
+                  flexWrap: "wrap",
                   alignItems: "center",
                   gap: 8,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: "#a5b4fc",
-                  background: "rgba(99, 102, 241, 0.16)",
-                  border: "1px solid rgba(99, 102, 241, 0.45)",
-                  padding: "4px 12px",
-                  borderRadius: 999,
                   marginBottom: 8,
                 }}
               >
-                <span>✦ はたらく・まなぶ部門 Flagship</span>
-                <span style={{ color: "#38bdf8" }}>•</span>
-                <span>Personal Mistake DNA × GitHub Live Diff × 音声作業宣言</span>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: "#a5b4fc",
+                    background: "rgba(99, 102, 241, 0.16)",
+                    border: "1px solid rgba(99, 102, 241, 0.45)",
+                    padding: "4px 12px",
+                    borderRadius: 999,
+                  }}
+                >
+                  ✦ はたらく・まなぶ部門 Flagship
+                </span>
+                <Link
+                  href="/gitbridge"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: "#6ee7b7",
+                    background: "rgba(16, 185, 129, 0.15)",
+                    border: "1px solid rgba(52, 211, 153, 0.45)",
+                    padding: "4px 12px",
+                    borderRadius: 999,
+                    textDecoration: "none",
+                  }}
+                >
+                  🌱 GitHub が初めての方へ：リポジトリ作成〜PR手順（GitBridge を開く）
+                </Link>
               </div>
+
               <h1
                 style={{
                   margin: 0,
-                  fontSize: 28,
+                  fontSize: 26,
                   fontWeight: 800,
                   letterSpacing: "-0.02em",
                   background:
@@ -1305,352 +1303,339 @@ export default function CodePitfallMirror() {
                   WebkitTextFillColor: "transparent",
                 }}
               >
-                CodePitfall Mirror Ultra
+                CodePitfall Mirror — 自分のクセで学ぶコード事前チェッカー
               </h1>
               <p
                 style={{
                   margin: "6px 0 0",
-                  color: "#94a3b8",
+                  color: "#cbd5e1",
                   fontSize: 13.5,
                   lineHeight: 1.5,
                 }}
               >
-                あなたの過去の「やりがちミスDNA」を記憶・分析し、GitHubコード直接監査・並列Diffパッチ生成・6種の作業別チェックリストで本番事故を未然に防ぐ専用AI IDEチェッカー
+                コードを貼ってボタンを押すだけ！あなたがつまずきやすい箇所（赤い行）と安全な修正コード（緑の行）をひと目で比較できます。
               </p>
             </div>
 
-            {/* Quick KPI Badges + 1-Click Google Drive (5TB) Archive */}
+            {/* Universal Free Local SSD & Git Download Buttons */}
             <div
               style={{
                 display: "flex",
-                gap: 10,
+                gap: 8,
                 flexWrap: "wrap",
                 alignItems: "center",
               }}
             >
-              <div
-                style={{
-                  background: "#020617",
-                  border: "1px solid #1e293b",
-                  borderRadius: 12,
-                  padding: "8px 14px",
-                  textAlign: "center",
-                }}
-              >
-                <div style={{ fontSize: 11, color: "#94a3b8" }}>記憶済みミスDNA</div>
-                <div style={{ fontSize: 18, fontWeight: 800, color: "#a5b4fc" }}>
-                  {habits.length} パターン
-                </div>
-              </div>
-              <div
-                style={{
-                  background: "#020617",
-                  border: "1px solid #1e293b",
-                  borderRadius: 12,
-                  padding: "8px 14px",
-                  textAlign: "center",
-                }}
-              >
-                <div style={{ fontSize: 11, color: "#94a3b8" }}>累積再発防止ヒット</div>
-                <div style={{ fontSize: 18, fontWeight: 800, color: "#38bdf8" }}>
-                  {dnaAnalytics.totalHits} 回
-                </div>
-              </div>
-              <div
-                style={{
-                  background: "#020617",
-                  border: "1px solid #1e293b",
-                  borderRadius: 12,
-                  padding: "8px 14px",
-                  textAlign: "center",
-                }}
-              >
-                <div style={{ fontSize: 11, color: "#94a3b8" }}>作業チェック進捗</div>
-                <div
-                  style={{
-                    fontSize: 18,
-                    fontWeight: 800,
-                    color: progressPercent === 100 ? "#34d399" : "#fbbf24",
-                  }}
-                >
-                  {progressPercent}% ({completedCount}/{activeChecklist.length})
-                </div>
-              </div>
               <button
                 type="button"
-                onClick={handleArchiveToDrive}
-                disabled={driveSaving}
+                onClick={handleSaveReportMarkdown}
                 style={{
                   background:
-                    "linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(14, 165, 233, 0.25))",
+                    "linear-gradient(135deg, rgba(16, 185, 129, 0.24), rgba(14, 165, 233, 0.24))",
                   color: "#6ee7b7",
                   border: "1px solid rgba(52, 211, 153, 0.5)",
-                  borderRadius: 12,
-                  padding: "10px 15px",
+                  borderRadius: 10,
+                  padding: "9px 14px",
                   fontSize: 12.5,
                   fontWeight: 800,
-                  cursor: driveSaving ? "not-allowed" : "pointer",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  boxShadow: "0 4px 14px rgba(16, 185, 129, 0.18)",
-                }}
-              >
-                <span>
-                  {driveSaving
-                    ? "☁️ Drive保存中..."
-                    : "☁️ Google Drive (5TB) にアーカイブ保存"}
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {driveStatus && (
-            <div
-              style={{
-                marginTop: 12,
-                padding: "9px 14px",
-                borderRadius: 10,
-                background: driveStatus.ok
-                  ? "rgba(16, 185, 129, 0.14)"
-                  : "rgba(244, 63, 94, 0.14)",
-                border: driveStatus.ok
-                  ? "1px solid rgba(52, 211, 153, 0.45)"
-                  : "1px solid rgba(244, 63, 94, 0.45)",
-                color: driveStatus.ok ? "#6ee7b7" : "#fda4af",
-                fontSize: 12.5,
-                display: "flex",
-                flexWrap: "wrap",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              <span>{driveStatus.message}</span>
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                {driveStatus.folder && (
-                  <code
-                    style={{
-                      fontSize: 11.5,
-                      color: "#a7f3d0",
-                      background: "rgba(2, 6, 23, 0.6)",
-                      padding: "2px 8px",
-                      borderRadius: 6,
-                    }}
-                  >
-                    📁 {driveStatus.folder}
-                  </code>
-                )}
-                {driveStatus.url && (
-                  <a
-                    href={driveStatus.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{
-                      color: "#38bdf8",
-                      fontWeight: 700,
-                      textDecoration: "underline",
-                      fontSize: 12,
-                    }}
-                  >
-                    Google Drive で開く ↗
-                  </a>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Voice Task Declaration + 6 Task Template Selector Bar */}
-          <div
-            style={{
-              marginTop: 16,
-              paddingTop: 14,
-              borderTop: "1px solid rgba(51, 65, 85, 0.6)",
-              display: "flex",
-              flexDirection: "column",
-              gap: 10,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 8,
-                alignItems: "center",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: "#38bdf8",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                🎙️ 今からやる作業を宣言:
-              </span>
-              <input
-                type="text"
-                value={taskDeclaration}
-                onChange={(e) => setTaskDeclaration(e.target.value)}
-                placeholder="例: Stripe Webhookの署名検証と注文データベース更新を実装する..."
-                style={{
-                  flex: 1,
-                  minWidth: 240,
-                  background: "#020617",
-                  color: "#f8fafc",
-                  border: "1px solid #334155",
-                  borderRadius: 10,
-                  padding: "8px 12px",
-                  fontSize: 13,
-                }}
-              />
-              <button
-                type="button"
-                onClick={handleVoiceDeclaration}
-                style={{
-                  background: isListening
-                    ? "linear-gradient(135deg, #e11d48, #f43f5e)"
-                    : "rgba(56, 189, 248, 0.16)",
-                  color: isListening ? "#fff" : "#38bdf8",
-                  border: isListening
-                    ? "1px solid #fb7185"
-                    : "1px solid rgba(56, 189, 248, 0.45)",
-                  borderRadius: 10,
-                  padding: "8px 14px",
-                  fontSize: 12,
-                  fontWeight: 700,
                   cursor: "pointer",
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 6,
                 }}
               >
-                <span>{isListening ? "🔴 音声認識中..." : "🎤 音声で作業宣言 (ja-JP)"}</span>
+                💾 PC にレポート保存 (.md)
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveGitDnaFile}
+                style={{
+                  background: "rgba(99, 102, 241, 0.2)",
+                  color: "#c7d2fe",
+                  border: "1px solid rgba(129, 140, 248, 0.5)",
+                  borderRadius: 10,
+                  padding: "9px 14px",
+                  fontSize: 12.5,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                📂 Git 用 DNA ファイル保存 (.codepitfall.json)
+              </button>
+            </div>
+          </div>
+
+          {localSaveBanner && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: "9px 14px",
+                borderRadius: 10,
+                background: "rgba(16, 185, 129, 0.14)",
+                border: "1px solid rgba(52, 211, 153, 0.45)",
+                color: "#6ee7b7",
+                fontSize: 12.5,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <span>{localSaveBanner}</span>
+              <button
+                type="button"
+                onClick={() => setLocalSaveBanner("")}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#6ee7b7",
+                  cursor: "pointer",
+                  fontSize: 13,
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* Clean 3-Step Quick Guide */}
+          <div
+            style={{
+              marginTop: 14,
+              padding: "12px 16px",
+              borderRadius: 12,
+              background: "rgba(2, 6, 23, 0.75)",
+              border: "1px solid rgba(56, 189, 248, 0.3)",
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+              gap: 10,
+              alignItems: "center",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span
+                style={{
+                  background: "#4f46e5",
+                  color: "#fff",
+                  fontWeight: 800,
+                  fontSize: 12,
+                  padding: "3px 9px",
+                  borderRadius: 999,
+                  flexShrink: 0,
+                }}
+              >
+                STEP 1
+              </span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#f8fafc" }}>
+                ① プリセットを選ぶかコードを貼る
+              </span>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span
+                style={{
+                  background: "#0284c7",
+                  color: "#fff",
+                  fontWeight: 800,
+                  fontSize: 12,
+                  padding: "3px 9px",
+                  borderRadius: 999,
+                  flexShrink: 0,
+                }}
+              >
+                STEP 2
+              </span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#f8fafc" }}>
+                ② 「コードをチェック」を押す
+              </span>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span
+                style={{
+                  background: "#059669",
+                  color: "#fff",
+                  fontWeight: 800,
+                  fontSize: 12,
+                  padding: "3px 9px",
+                  borderRadius: 999,
+                  flexShrink: 0,
+                }}
+              >
+                STEP 3
+              </span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#f8fafc" }}>
+                ③ 赤い行と修正案・作業テンプレを確認
+              </span>
+            </div>
+          </div>
+
+          {/* Clean Mode / Power-User Tabs Bar */}
+          <div
+            style={{
+              marginTop: 14,
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+            }}
+          >
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setActiveTab("basic")}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: 10,
+                  border:
+                    activeTab === "basic"
+                      ? "1px solid #38bdf8"
+                      : "1px solid #334155",
+                  background:
+                    activeTab === "basic"
+                      ? "linear-gradient(135deg, rgba(14,165,233,0.28), rgba(79,70,229,0.28))"
+                      : "#0f172a",
+                  color: activeTab === "basic" ? "#fff" : "#cbd5e1",
+                  fontSize: 12.5,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                ⚡ 基本チェック（シンプル画面）
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setActiveTab((prev) => (prev === "dna" ? "basic" : "dna"))
+                }
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: 10,
+                  border:
+                    activeTab === "dna"
+                      ? "1px solid #a5b4fc"
+                      : "1px solid #334155",
+                  background:
+                    activeTab === "dna"
+                      ? "rgba(99, 102, 241, 0.25)"
+                      : "#0f172a",
+                  color: activeTab === "dna" ? "#fff" : "#cbd5e1",
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                🧬 やりがちミスDNA管理 ({habits.length}件)
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setActiveTab((prev) =>
+                    prev === "github_voice" ? "basic" : "github_voice"
+                  )
+                }
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: 10,
+                  border:
+                    activeTab === "github_voice"
+                      ? "1px solid #38bdf8"
+                      : "1px solid #334155",
+                  background:
+                    activeTab === "github_voice"
+                      ? "rgba(56, 189, 248, 0.22)"
+                      : "#0f172a",
+                  color: activeTab === "github_voice" ? "#fff" : "#cbd5e1",
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                🔗 GitHub・音声入力（便利ツール）
               </button>
             </div>
 
-            {voiceStatus && (
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "#38bdf8",
-                  background: "rgba(56, 189, 248, 0.1)",
-                  border: "1px solid rgba(56, 189, 248, 0.3)",
-                  borderRadius: 8,
-                  padding: "6px 10px",
-                }}
-              >
-                {voiceStatus}
-              </div>
-            )}
-
-            {/* 6 Task-Specific Common Pitfalls Template Pills */}
             <div
               style={{
                 display: "flex",
-                flexWrap: "wrap",
-                gap: 6,
+                gap: 12,
+                fontSize: 12,
+                color: "#94a3b8",
                 alignItems: "center",
               }}
             >
-              <span
-                style={{
-                  fontSize: 11.5,
-                  fontWeight: 700,
-                  color: "#94a3b8",
-                  marginRight: 4,
-                }}
-              >
-                作業別テンプレート (6種):
+              <span>
+                記憶済みクセ:{" "}
+                <strong style={{ color: "#a5b4fc" }}>{habits.length}件</strong>
               </span>
-              {Object.keys(TASK_TEMPLATES_DATA).map((name) => {
-                const active = taskType === name;
-                return (
-                  <button
-                    key={name}
-                    type="button"
-                    onClick={() => handleSelectTaskTemplate(name)}
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: 999,
-                      border: active
-                        ? "1px solid #6366f1"
-                        : "1px solid #334155",
-                      background: active
-                        ? "linear-gradient(135deg, rgba(99,102,241,0.32), rgba(14,165,233,0.25))"
-                        : "#0f172a",
-                      color: active ? "#fff" : "#cbd5e1",
-                      fontSize: 12,
-                      fontWeight: active ? 700 : 500,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {active ? "✦ " : ""}
-                    {name}
-                  </button>
-                );
-              })}
+              <span>•</span>
+              <span>
+                累積防止ヒット:{" "}
+                <strong style={{ color: "#38bdf8" }}>
+                  {dnaAnalytics.totalHits}回
+                </strong>
+              </span>
             </div>
           </div>
         </header>
 
-        {/* Main 2-Column Layout: Left (Personal Mistake DNA Analytics) / Right (GitHub + Editor + Diff + Checklist) */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
-            gap: 18,
-            alignItems: "start",
-          }}
-        >
-          {/* Left Panel: Personal Mistake DNA Analytics & Management */}
-          <aside
+        {/* Collapsible Tab 2: Personal Mistake DNA Editor & Analytics */}
+        {activeTab === "dna" && (
+          <section
             style={{
-              background: "rgba(15, 23, 42, 0.9)",
-              border: "1px solid #1e293b",
+              background: "rgba(15, 23, 42, 0.94)",
+              border: "1px solid rgba(165, 180, 252, 0.4)",
               borderRadius: 16,
               padding: 18,
-              maxWidth: "100%",
+              marginBottom: 18,
             }}
           >
             <div
               style={{
                 display: "flex",
+                flexWrap: "wrap",
                 justifyContent: "space-between",
                 alignItems: "center",
-                gap: 8,
-                marginBottom: 8,
+                gap: 10,
+                marginBottom: 12,
               }}
             >
-              <h2
-                style={{
-                  margin: 0,
-                  fontSize: 14,
-                  fontWeight: 800,
-                  color: "#a5b4fc",
-                  letterSpacing: "0.03em",
-                }}
-              >
-                🧬 1. パーソナル・ミスDNA分析 ({habits.length}件)
-              </h2>
-              <div style={{ display: "flex", gap: 6 }}>
+              <div>
+                <h2
+                  style={{
+                    margin: 0,
+                    fontSize: 15,
+                    fontWeight: 800,
+                    color: "#a5b4fc",
+                  }}
+                >
+                  🧬 あなたの「やりがちミスDNA」管理・傾向分析 ({habits.length}件)
+                </h2>
+                <p style={{ margin: "4px 0 0", fontSize: 12, color: "#94a3b8" }}>
+                  登録したミス傾向はブラウザに自動保存されるほか、`.codepitfall.json` として Git リポジトリに保存・共有できます。
+                </p>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button
                   type="button"
-                  onClick={handleExportDnaJson}
+                  onClick={handleSaveGitDnaFile}
                   style={{
                     background: "#020617",
                     color: "#38bdf8",
-                    border: "1px solid rgba(56,189,248,0.4)",
-                    borderRadius: 7,
-                    padding: "4px 8px",
-                    fontSize: 11,
-                    fontWeight: 600,
+                    border: "1px solid rgba(56,189,248,0.45)",
+                    borderRadius: 8,
+                    padding: "6px 10px",
+                    fontSize: 11.5,
+                    fontWeight: 700,
                     cursor: "pointer",
                   }}
-                  title="ミスDNAをJSONファイルとしてエクスポート"
                 >
-                  📥 JSON出力
+                  📂 Git 用 DNA 保存 (.codepitfall.json)
                 </button>
                 <button
                   type="button"
@@ -1659,15 +1644,14 @@ export default function CodePitfallMirror() {
                     background: "#020617",
                     color: "#a5b4fc",
                     border: "1px solid rgba(165,180,252,0.4)",
-                    borderRadius: 7,
-                    padding: "4px 8px",
-                    fontSize: 11,
-                    fontWeight: 600,
+                    borderRadius: 8,
+                    padding: "6px 10px",
+                    fontSize: 11.5,
+                    fontWeight: 700,
                     cursor: "pointer",
                   }}
-                  title="JSONファイルからミスDNAをインポート"
                 >
-                  📤 JSON読込
+                  📤 DNAファイル読込 (.json)
                 </button>
                 <button
                   type="button"
@@ -1676,14 +1660,29 @@ export default function CodePitfallMirror() {
                     background: "#020617",
                     color: "#94a3b8",
                     border: "1px solid #334155",
-                    borderRadius: 7,
-                    padding: "4px 7px",
-                    fontSize: 11,
+                    borderRadius: 8,
+                    padding: "6px 10px",
+                    fontSize: 11.5,
                     cursor: "pointer",
                   }}
-                  title="初期DNAにリセット"
                 >
-                  ↺
+                  ↺ 初期状態に戻す
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("basic")}
+                  style={{
+                    background: "rgba(51, 65, 85, 0.5)",
+                    color: "#f8fafc",
+                    border: "1px solid #475569",
+                    borderRadius: 8,
+                    padding: "6px 10px",
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  ✕ 閉じる
                 </button>
                 <input
                   ref={fileInputRef}
@@ -1695,282 +1694,309 @@ export default function CodePitfallMirror() {
               </div>
             </div>
 
-            <p style={{ margin: "0 0 12px", fontSize: 12, color: "#94a3b8" }}>
-              AI監査結果の「＋自分のDNAに記憶」を押すか手動追加するとブラウザに永続保存され、次回監査から最優先で再発防止チェックされます。
-            </p>
-
             {dnaStatusMsg && (
               <div
                 style={{
                   marginBottom: 12,
-                  padding: "7px 10px",
+                  padding: "8px 12px",
                   borderRadius: 8,
                   background: "rgba(52, 211, 153, 0.14)",
                   border: "1px solid rgba(52, 211, 153, 0.4)",
                   color: "#6ee7b7",
                   fontSize: 12,
-                  fontWeight: 600,
+                  fontWeight: 700,
                 }}
               >
                 {dnaStatusMsg}
               </div>
             )}
 
-            {/* Visual Category Breakdown Bar */}
             <div
               style={{
-                background: "#020617",
-                border: "1px solid #1e293b",
-                borderRadius: 12,
-                padding: 12,
-                marginBottom: 14,
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+                gap: 14,
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: 8,
-                }}
-              >
-                <span style={{ fontSize: 11.5, fontWeight: 700, color: "#cbd5e1" }}>
-                  カテゴリ別ミスDNA傾向分布
-                </span>
-                <span style={{ fontSize: 11, color: "#94a3b8" }}>
-                  総ヒット数: {dnaAnalytics.totalHits}
-                </span>
-              </div>
-
-              {/* Multi-segment stacked bar */}
-              <div
-                style={{
-                  display: "flex",
-                  height: 12,
-                  width: "100%",
-                  borderRadius: 999,
-                  overflow: "hidden",
-                  background: "#0f172a",
-                  marginBottom: 10,
-                }}
-              >
-                {dnaAnalytics.breakdown.map((item) => (
-                  <div
-                    key={item.category}
-                    style={{
-                      width: `${Math.max(6, item.percent)}%`,
-                      background: item.meta.color,
-                      transition: "width 0.3s ease",
-                    }}
-                    title={`${item.meta.label}: ${item.hits}回 (${item.percent}%)`}
-                  />
-                ))}
-              </div>
-
-              {/* Category legend pills */}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {dnaAnalytics.breakdown.map((item) => (
-                  <span
-                    key={item.category}
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: item.meta.color,
-                      background: item.meta.bg,
-                      border: `1px solid ${item.meta.border}`,
-                      padding: "2px 8px",
-                      borderRadius: 999,
-                    }}
-                  >
-                    {item.category}: {item.hits}回 ({item.percent}%)
-                  </span>
-                ))}
-              </div>
-
-              {dnaAnalytics.topHabit && (
-                <div
-                  style={{
-                    marginTop: 10,
-                    paddingTop: 8,
-                    borderTop: "1px solid #1e293b",
-                    fontSize: 11.5,
-                    color: "#fda4af",
-                  }}
-                >
-                  🔥 最頻出の要注意クセ:{" "}
-                  <strong>{dnaAnalytics.topHabit.pattern}</strong> (
-                  {dnaAnalytics.topHabit.hits}回)
-                </div>
-              )}
-            </div>
-
-            {/* Add new habit form */}
-            <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-              <select
-                value={newHabitCategory}
-                onChange={(e) => setNewHabitCategory(e.target.value)}
-                style={{
-                  background: "#020617",
-                  color: "#e2e8f0",
-                  border: "1px solid #334155",
-                  borderRadius: 8,
-                  padding: "7px 8px",
-                  fontSize: 12,
-                }}
-              >
-                {Object.keys(CATEGORY_META).map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="text"
-                value={newHabitText}
-                onChange={(e) => setNewHabitText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleAddHabit();
-                }}
-                placeholder="自分のクセを手動追加..."
-                style={{
-                  flex: 1,
-                  background: "#020617",
-                  color: "#f8fafc",
-                  border: "1px solid #334155",
-                  borderRadius: 8,
-                  padding: "7px 10px",
-                  fontSize: 12,
-                }}
-              />
-              <button
-                type="button"
-                onClick={handleAddHabit}
-                style={{
-                  background: "#4f46e5",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 8,
-                  padding: "7px 12px",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
-              >
-                ＋記憶
-              </button>
-            </div>
-
-            {/* Habit list */}
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 8,
-                maxHeight: 460,
-                overflowY: "auto",
-                paddingRight: 2,
-              }}
-            >
-              {habits.map((h) => {
-                const meta = CATEGORY_META[h.category] ?? CATEGORY_META.Logic;
-                return (
-                  <div
-                    key={h.id}
-                    style={{
-                      background: "#020617",
-                      border: "1px solid #1e293b",
-                      borderLeft: `3px solid ${meta.color}`,
-                      borderRadius: 10,
-                      padding: "9px 11px",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: 8,
-                    }}
-                  >
-                    <div>
-                      <div
-                        style={{
-                          fontSize: 12.5,
-                          fontWeight: 600,
-                          color: "#f1f5f9",
-                        }}
-                      >
-                        {h.pattern}
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          marginTop: 4,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: 10.5,
-                            fontWeight: 700,
-                            color: meta.color,
-                            background: meta.bg,
-                            padding: "1px 7px",
-                            borderRadius: 999,
-                          }}
-                        >
-                          {h.category}
-                        </span>
-                        <span style={{ fontSize: 11, color: "#94a3b8" }}>
-                          再発防止ヒット: <strong style={{ color: "#e2e8f0" }}>{h.hits}回</strong>
-                        </span>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteHabit(h.id)}
-                      style={{
-                        background: "transparent",
-                        border: "none",
-                        color: "#64748b",
-                        cursor: "pointer",
-                        fontSize: 13,
-                        padding: 4,
-                      }}
-                      title="このクセを削除"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </aside>
-
-          {/* Right Panel: GitHub Fetcher + 4 Presets + Code Editor + Interactive Diff + Task Pitfalls */}
-          <main
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 16,
-              gridColumn: "span 2",
-              minWidth: 0,
-            }}
-          >
-            {/* Section 2: GitHub File URL Fetcher + 4 Realistic Presets + Code Editor */}
-            <section
-              style={{
-                background: "rgba(15, 23, 42, 0.9)",
-                border: "1px solid #1e293b",
-                borderRadius: 16,
-                padding: 18,
-              }}
-            >
-              {/* GitHub Raw/File URL Fetcher Bar */}
+              {/* Left: Category Breakdown + Add Habit */}
               <div
                 style={{
                   background: "#020617",
                   border: "1px solid #1e293b",
                   borderRadius: 12,
-                  padding: 12,
-                  marginBottom: 14,
+                  padding: 14,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 8,
+                  }}
+                >
+                  <span
+                    style={{ fontSize: 12, fontWeight: 700, color: "#cbd5e1" }}
+                  >
+                    カテゴリ別ミス傾向
+                  </span>
+                  <span style={{ fontSize: 11.5, color: "#94a3b8" }}>
+                    総ヒット数: {dnaAnalytics.totalHits}回
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    height: 12,
+                    width: "100%",
+                    borderRadius: 999,
+                    overflow: "hidden",
+                    background: "#0f172a",
+                    marginBottom: 10,
+                  }}
+                >
+                  {dnaAnalytics.breakdown.map((item) => (
+                    <div
+                      key={item.category}
+                      style={{
+                        width: `${Math.max(6, item.percent)}%`,
+                        background: item.meta.color,
+                      }}
+                      title={`${item.meta.label}: ${item.hits}回 (${item.percent}%)`}
+                    />
+                  ))}
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 6,
+                    marginBottom: 12,
+                  }}
+                >
+                  {dnaAnalytics.breakdown.map((item) => (
+                    <span
+                      key={item.category}
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: item.meta.color,
+                        background: item.meta.bg,
+                        border: `1px solid ${item.meta.border}`,
+                        padding: "2px 8px",
+                        borderRadius: 999,
+                      }}
+                    >
+                      {item.category}: {item.hits}回 ({item.percent}%)
+                    </span>
+                  ))}
+                </div>
+
+                {/* Add new habit form */}
+                <div style={{ display: "flex", gap: 6 }}>
+                  <select
+                    value={newHabitCategory}
+                    onChange={(e) => setNewHabitCategory(e.target.value)}
+                    style={{
+                      background: "#0f172a",
+                      color: "#e2e8f0",
+                      border: "1px solid #334155",
+                      borderRadius: 8,
+                      padding: "7px 8px",
+                      fontSize: 12,
+                    }}
+                  >
+                    {Object.keys(CATEGORY_META).map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={newHabitText}
+                    onChange={(e) => setNewHabitText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleAddHabit();
+                    }}
+                    placeholder="自分のクセを追加（例: nullチェック忘れ）"
+                    style={{
+                      flex: 1,
+                      background: "#0f172a",
+                      color: "#f8fafc",
+                      border: "1px solid #334155",
+                      borderRadius: 8,
+                      padding: "7px 10px",
+                      fontSize: 12,
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddHabit}
+                    style={{
+                      background: "#4f46e5",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 8,
+                      padding: "7px 12px",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    ＋追加
+                  </button>
+                </div>
+              </div>
+
+              {/* Right: Habit list */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+                  gap: 8,
+                  maxHeight: 220,
+                  overflowY: "auto",
+                }}
+              >
+                {habits.map((h) => {
+                  const meta = CATEGORY_META[h.category] ?? CATEGORY_META.Logic;
+                  return (
+                    <div
+                      key={h.id}
+                      style={{
+                        background: "#020617",
+                        border: "1px solid #1e293b",
+                        borderLeft: `3px solid ${meta.color}`,
+                        borderRadius: 10,
+                        padding: "8px 10px",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: "#f1f5f9",
+                          }}
+                        >
+                          {h.pattern}
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            marginTop: 3,
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              color: meta.color,
+                              background: meta.bg,
+                              padding: "1px 6px",
+                              borderRadius: 999,
+                            }}
+                          >
+                            {h.category}
+                          </span>
+                          <span style={{ fontSize: 10.5, color: "#94a3b8" }}>
+                            {h.hits}回ヒット
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteHabit(h.id)}
+                        style={{
+                          background: "transparent",
+                          border: "none",
+                          color: "#64748b",
+                          cursor: "pointer",
+                          fontSize: 12,
+                        }}
+                        title="削除"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Collapsible Tab 3: GitHub URL Fetch & Voice Declaration */}
+        {activeTab === "github_voice" && (
+          <section
+            style={{
+              background: "rgba(15, 23, 42, 0.94)",
+              border: "1px solid rgba(56, 189, 248, 0.4)",
+              borderRadius: 16,
+              padding: 18,
+              marginBottom: 18,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 10,
+                marginBottom: 12,
+              }}
+            >
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: 15,
+                  fontWeight: 800,
+                  color: "#38bdf8",
+                }}
+              >
+                🔗 GitHub ファイル直接読込 ＆ 🎤 音声で作業宣言
+              </h2>
+              <button
+                type="button"
+                onClick={() => setActiveTab("basic")}
+                style={{
+                  background: "rgba(51, 65, 85, 0.5)",
+                  color: "#f8fafc",
+                  border: "1px solid #475569",
+                  borderRadius: 8,
+                  padding: "5px 10px",
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                ✕ 閉じる
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+                gap: 14,
+              }}
+            >
+              {/* GitHub URL Fetcher */}
+              <div
+                style={{
+                  background: "#020617",
+                  border: "1px solid #1e293b",
+                  borderRadius: 12,
+                  padding: 14,
                 }}
               >
                 <div
@@ -1979,7 +2005,7 @@ export default function CodePitfallMirror() {
                     flexWrap: "wrap",
                     justifyContent: "space-between",
                     alignItems: "center",
-                    gap: 8,
+                    gap: 6,
                     marginBottom: 8,
                   }}
                 >
@@ -1990,7 +2016,7 @@ export default function CodePitfallMirror() {
                       color: "#38bdf8",
                     }}
                   >
-                    🐙 GitHub ファイル URL 直接インポート（github.com/.../blob/... を Raw URL へ自動変換）
+                    🐙 GitHub のファイル URL から読み込む
                   </span>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     {SAMPLE_GITHUB_URLS.map((sample) => (
@@ -2008,7 +2034,7 @@ export default function CodePitfallMirror() {
                           cursor: "pointer",
                         }}
                       >
-                        サンプル試す: {sample.label}
+                        サンプル: {sample.label}
                       </button>
                     ))}
                   </div>
@@ -2019,16 +2045,16 @@ export default function CodePitfallMirror() {
                     type="url"
                     value={githubUrl}
                     onChange={(e) => setGithubUrl(e.target.value)}
-                    placeholder="https://github.com/owner/repo/blob/main/src/api.ts または raw.githubusercontent.com/..."
+                    placeholder="https://github.com/owner/repo/blob/main/src/api.ts"
                     style={{
                       flex: 1,
-                      minWidth: 240,
+                      minWidth: 200,
                       background: "#0f172a",
                       color: "#f8fafc",
                       border: "1px solid #334155",
                       borderRadius: 8,
-                      padding: "8px 12px",
-                      fontSize: 12.5,
+                      padding: "8px 10px",
+                      fontSize: 12,
                     }}
                   />
                   <button
@@ -2040,7 +2066,7 @@ export default function CodePitfallMirror() {
                       color: "#fff",
                       border: "none",
                       borderRadius: 8,
-                      padding: "8px 14px",
+                      padding: "8px 12px",
                       fontSize: 12,
                       fontWeight: 700,
                       cursor:
@@ -2050,7 +2076,7 @@ export default function CodePitfallMirror() {
                       opacity: githubLoading || !githubUrl.trim() ? 0.6 : 1,
                     }}
                   >
-                    {githubLoading ? "取得中..." : "GitHubから取得＆監査"}
+                    {githubLoading ? "取得中..." : "読み込んでチェック"}
                   </button>
                 </div>
 
@@ -2063,8 +2089,7 @@ export default function CodePitfallMirror() {
                       wordBreak: "break-all",
                     }}
                   >
-                    自動変換 Raw URL:{" "}
-                    <code style={{ color: "#7dd3fc" }}>{convertedRawPreview}</code>
+                    Raw URL: <code style={{ color: "#7dd3fc" }}>{convertedRawPreview}</code>
                   </div>
                 )}
 
@@ -2078,21 +2103,9 @@ export default function CodePitfallMirror() {
                       background:
                         githubStatus.type === "error"
                           ? "rgba(244,63,94,0.14)"
-                          : githubStatus.type === "success"
-                            ? "rgba(52,211,153,0.14)"
-                            : "rgba(56,189,248,0.12)",
-                      border:
-                        githubStatus.type === "error"
-                          ? "1px solid rgba(244,63,94,0.4)"
-                          : githubStatus.type === "success"
-                            ? "1px solid rgba(52,211,153,0.4)"
-                            : "1px solid rgba(56,189,248,0.3)",
+                          : "rgba(52,211,153,0.14)",
                       color:
-                        githubStatus.type === "error"
-                          ? "#fda4af"
-                          : githubStatus.type === "success"
-                            ? "#6ee7b7"
-                            : "#7dd3fc",
+                        githubStatus.type === "error" ? "#fda4af" : "#6ee7b7",
                     }}
                   >
                     {githubStatus.message}
@@ -2100,538 +2113,303 @@ export default function CodePitfallMirror() {
                 )}
               </div>
 
-              {/* 4 Realistic Built-in Presets */}
-              <div style={{ marginBottom: 12 }}>
+              {/* Voice Declaration */}
+              <div
+                style={{
+                  background: "#020617",
+                  border: "1px solid #1e293b",
+                  borderRadius: 12,
+                  padding: 14,
+                }}
+              >
                 <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: "#a5b4fc",
+                    marginBottom: 8,
+                  }}
+                >
+                  🎙️ 今からやる作業を声やテキストで宣言（チェックリストを自動切替）
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <input
+                    type="text"
+                    value={taskDeclaration}
+                    onChange={(e) => setTaskDeclaration(e.target.value)}
+                    placeholder="例: Stripe Webhookの署名検証を実装する..."
+                    style={{
+                      flex: 1,
+                      minWidth: 200,
+                      background: "#0f172a",
+                      color: "#f8fafc",
+                      border: "1px solid #334155",
+                      borderRadius: 8,
+                      padding: "8px 10px",
+                      fontSize: 12,
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleVoiceDeclaration}
+                    style={{
+                      background: isListening
+                        ? "linear-gradient(135deg, #e11d48, #f43f5e)"
+                        : "rgba(56, 189, 248, 0.16)",
+                      color: isListening ? "#fff" : "#38bdf8",
+                      border: "1px solid rgba(56, 189, 248, 0.45)",
+                      borderRadius: 8,
+                      padding: "8px 12px",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {isListening ? "🔴 認識中..." : "🎤 音声入力"}
+                  </button>
+                </div>
+                {voiceStatus && (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      fontSize: 11.5,
+                      color: "#38bdf8",
+                    }}
+                  >
+                    {voiceStatus}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* MAIN SUPER-CLEAN 2-COLUMN WORKSPACE */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))",
+            gap: 18,
+            alignItems: "start",
+          }}
+        >
+          {/* LEFT COLUMN: ① Preset Pills + Code Textarea + ② ONE Prominent Check Button */}
+          <section
+            style={{
+              background: "rgba(15, 23, 42, 0.92)",
+              border: "1px solid rgba(99, 102, 241, 0.35)",
+              borderRadius: 16,
+              padding: 20,
+              display: "flex",
+              flexDirection: "column",
+              gap: 14,
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 8,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 800,
+                    color: "#a5b4fc",
+                  }}
+                >
+                  ① サンプルを選ぶ（1クリックで試せます）
+                </span>
+                <span style={{ fontSize: 11.5, color: "#94a3b8" }}>
+                  または下の欄に自分のコードを貼り付け
+                </span>
+              </div>
+
+              {/* 4 Preset Pills */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(195px, 1fr))",
+                  gap: 8,
+                }}
+              >
+                {FEATURED_PRESETS.map((preset) => {
+                  const isSelected = activePresetId === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => handleSelectPreset(preset)}
+                      style={{
+                        textAlign: "left",
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        border: isSelected
+                          ? "1.5px solid #6366f1"
+                          : "1px solid #1e293b",
+                        background: isSelected
+                          ? "rgba(99, 102, 241, 0.22)"
+                          : "#020617",
+                        color: "#f8fafc",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 10.5,
+                          fontWeight: 700,
+                          color: isSelected ? "#a5b4fc" : "#38bdf8",
+                          marginBottom: 2,
+                        }}
+                      >
+                        {preset.badge}
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 700 }}>
+                        {preset.title}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Compact Task Type Selector Pills */}
+              <div
+                style={{
+                  marginTop: 10,
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 6,
+                  alignItems: "center",
+                }}
+              >
+                <span
                   style={{
                     fontSize: 11.5,
                     fontWeight: 700,
                     color: "#94a3b8",
-                    marginBottom: 8,
                   }}
                 >
-                  ⚡ ワンクリック検証プリセット（4種のリアルな事故コード例）:
-                </div>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-                    gap: 8,
-                  }}
-                >
-                  {FEATURED_PRESETS.map((preset) => {
-                    const isSelected = activePresetId === preset.id;
-                    return (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        onClick={() => handleSelectPreset(preset)}
-                        style={{
-                          textAlign: "left",
-                          padding: "10px 12px",
-                          borderRadius: 10,
-                          border: isSelected
-                            ? "1px solid #6366f1"
-                            : "1px solid #1e293b",
-                          background: isSelected
-                            ? "rgba(99, 102, 241, 0.2)"
-                            : "#020617",
-                          color: "#f8fafc",
-                          cursor: "pointer",
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: 10.5,
-                            fontWeight: 700,
-                            color: isSelected ? "#a5b4fc" : "#38bdf8",
-                            marginBottom: 3,
-                          }}
-                        >
-                          {preset.badge}
-                        </div>
-                        <div style={{ fontSize: 12, fontWeight: 700 }}>
-                          {preset.title}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+                  作業ジャンル:
+                </span>
+                {Object.keys(TASK_TEMPLATES_DATA).map((name) => {
+                  const active = taskType === name;
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => handleSelectTaskTemplate(name)}
+                      style={{
+                        padding: "4px 10px",
+                        borderRadius: 999,
+                        border: active
+                          ? "1px solid #38bdf8"
+                          : "1px solid #334155",
+                        background: active
+                          ? "rgba(56, 189, 248, 0.2)"
+                          : "#0f172a",
+                        color: active ? "#fff" : "#cbd5e1",
+                        fontSize: 11.5,
+                        fontWeight: active ? 700 : 500,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {name}
+                    </button>
+                  );
+                })}
               </div>
+            </div>
 
-              {/* Editor Header & Execute Button */}
+            {/* Code Editor Textarea */}
+            <div>
               <div
                 style={{
                   display: "flex",
-                  flexWrap: "wrap",
                   justifyContent: "space-between",
                   alignItems: "center",
-                  gap: 10,
-                  marginBottom: 10,
+                  marginBottom: 6,
                 }}
               >
-                <h2
+                <label
+                  htmlFor="codepitfall-editor"
                   style={{
-                    margin: 0,
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: 800,
                     color: "#38bdf8",
                   }}
                 >
-                  💻 2. 監査対象コード（作業カテゴリ: {taskType}）
-                </h2>
-                <button
-                  type="button"
-                  onClick={handleAudit}
-                  disabled={loading}
-                  style={{
-                    background: "linear-gradient(135deg, #4f46e5, #0284c7)",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: 10,
-                    padding: "10px 20px",
-                    fontSize: 13,
-                    fontWeight: 800,
-                    cursor: loading ? "not-allowed" : "pointer",
-                    boxShadow: "0 4px 16px rgba(79, 70, 229, 0.4)",
-                  }}
-                >
-                  {loading
-                    ? "⚡ パーソナルミスDNAと照合中..."
-                    : "⚡ パーソナルミス監査＆並列Diffパッチ生成"}
-                </button>
+                  💻 チェックしたいコード（{taskType}）
+                </label>
+                <span style={{ fontSize: 11.5, color: "#94a3b8" }}>
+                  {code.split("\n").length} 行
+                </span>
               </div>
-
               <textarea
+                id="codepitfall-editor"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                rows={9}
+                rows={13}
+                placeholder="ここに TypeScript / JavaScript / Python / SQL などのコードを貼り付けてください..."
                 style={{
                   width: "100%",
                   background: "#020617",
                   color: "#e2e8f0",
                   border: "1px solid #334155",
-                  borderRadius: 10,
-                  padding: 12,
+                  borderRadius: 12,
+                  padding: 14,
                   fontFamily:
                     "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-                  fontSize: 12.5,
-                  lineHeight: 1.55,
+                  fontSize: 13,
+                  lineHeight: 1.6,
                   boxSizing: "border-box",
                 }}
               />
-            </section>
+            </div>
 
-            {/* Section 3: Interactive Side-by-Side Diff Viewer */}
+            {/* ONE Prominent Primary Action Button */}
+            <button
+              type="button"
+              onClick={handleAudit}
+              disabled={loading}
+              style={{
+                width: "100%",
+                background:
+                  "linear-gradient(135deg, #4f46e5 0%, #0284c7 50%, #059669 100%)",
+                color: "#fff",
+                border: "1px solid rgba(165, 180, 252, 0.45)",
+                borderRadius: 12,
+                padding: "14px 20px",
+                fontSize: 15,
+                fontWeight: 800,
+                cursor: loading ? "not-allowed" : "pointer",
+                boxShadow: "0 8px 24px rgba(79, 70, 229, 0.45)",
+                letterSpacing: "0.01em",
+              }}
+            >
+              {loading
+                ? "🔍 あなたのクセと照合してチェック中..."
+                : "🔍 自分のクセでチェックする"}
+            </button>
+          </section>
+
+          {/* RIGHT COLUMN: ③ Risk Summary + Highlighted Code & Fixed Patch + Checkable Task Pitfalls Template */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 16,
+              minWidth: 0,
+            }}
+          >
             {result && (
-              <section
-                style={{
-                  background: "rgba(15, 23, 42, 0.9)",
-                  border: "1px solid #1e293b",
-                  borderRadius: 16,
-                  padding: 18,
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 10,
-                    marginBottom: 12,
-                  }}
-                >
-                  <div>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <h3
-                        style={{
-                          margin: 0,
-                          fontSize: 14,
-                          fontWeight: 800,
-                          color: "#34d399",
-                        }}
-                      >
-                        🔀 3. インタラクティブ Before / After Diff ビューア
-                      </h3>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: "#fda4af",
-                          background: "rgba(244,63,94,0.15)",
-                          padding: "2px 8px",
-                          borderRadius: 999,
-                        }}
-                      >
-                        -{diffStats.modified + diffStats.removed} 危険行
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: "#6ee7b7",
-                          background: "rgba(52,211,153,0.15)",
-                          padding: "2px 8px",
-                          borderRadius: 999,
-                        }}
-                      >
-                        +{diffStats.modified + diffStats.added} 修正行
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Diff Mode & 1-Click Copy Actions */}
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <div
-                      style={{
-                        display: "inline-flex",
-                        background: "#020617",
-                        border: "1px solid #334155",
-                        borderRadius: 8,
-                        overflow: "hidden",
-                      }}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setDiffMode("split")}
-                        style={{
-                          background:
-                            diffMode === "split" ? "#4f46e5" : "transparent",
-                          color: "#fff",
-                          border: "none",
-                          padding: "5px 10px",
-                          fontSize: 11.5,
-                          fontWeight: 600,
-                          cursor: "pointer",
-                        }}
-                      >
-                        並列 (Side-by-Side)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDiffMode("unified")}
-                        style={{
-                          background:
-                            diffMode === "unified" ? "#4f46e5" : "transparent",
-                          color: "#fff",
-                          border: "none",
-                          padding: "5px 10px",
-                          fontSize: 11.5,
-                          fontWeight: 600,
-                          cursor: "pointer",
-                        }}
-                      >
-                        統合 (Unified)
-                      </button>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleCopyFixedPatch}
-                      style={{
-                        background: copiedPatch
-                          ? "rgba(52, 211, 153, 0.25)"
-                          : "#1e293b",
-                        color: copiedPatch ? "#6ee7b7" : "#f8fafc",
-                        border: "1px solid #334155",
-                        borderRadius: 8,
-                        padding: "5px 12px",
-                        fontSize: 11.5,
-                        fontWeight: 700,
-                        cursor: "pointer",
-                      }}
-                    >
-                      {copiedPatch ? "✓ パッチをコピー済み" : "📋 修正パッチをコピー"}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleCopyPrMarkdown}
-                      style={{
-                        background: copiedPrMd
-                          ? "rgba(52, 211, 153, 0.25)"
-                          : "rgba(99, 102, 241, 0.2)",
-                        color: copiedPrMd ? "#6ee7b7" : "#c7d2fe",
-                        border: "1px solid rgba(99, 102, 241, 0.45)",
-                        borderRadius: 8,
-                        padding: "5px 12px",
-                        fontSize: 11.5,
-                        fontWeight: 700,
-                        cursor: "pointer",
-                      }}
-                    >
-                      {copiedPrMd
-                        ? "✓ PRレビューMDをコピー済み"
-                        : "📝 PRレビュー用 Markdown をコピー"}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleApplyFixToEditor}
-                      style={{
-                        background: "rgba(52, 211, 153, 0.16)",
-                        color: "#34d399",
-                        border: "1px solid rgba(52, 211, 153, 0.4)",
-                        borderRadius: 8,
-                        padding: "5px 12px",
-                        fontSize: 11.5,
-                        fontWeight: 700,
-                        cursor: "pointer",
-                      }}
-                    >
-                      ✨ 修正をエディタに適用
-                    </button>
-                  </div>
-                </div>
-
-                {diffMode === "split" ? (
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: 10,
-                      background: "#020617",
-                      border: "1px solid #1e293b",
-                      borderRadius: 12,
-                      padding: 12,
-                      fontFamily:
-                        "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-                      fontSize: 12,
-                      overflowX: "auto",
-                    }}
-                  >
-                    {/* Left: Before */}
-                    <div style={{ minWidth: 280 }}>
-                      <div
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: "#fda4af",
-                          paddingBottom: 6,
-                          marginBottom: 6,
-                          borderBottom: "1px solid #1e293b",
-                        }}
-                      >
-                        − 変更前 (Before: 元コード)
-                      </div>
-                      {diffRows.map((row, idx) => {
-                        const isRemovedOrMod =
-                          row.status === "modified" || row.status === "removed";
-                        return (
-                          <div
-                            key={`b-${idx}`}
-                            style={{
-                              display: "flex",
-                              gap: 8,
-                              padding: "2px 6px",
-                              background: isRemovedOrMod
-                                ? "rgba(244, 63, 94, 0.18)"
-                                : "transparent",
-                              borderLeft: isRemovedOrMod
-                                ? "3px solid #f43f5e"
-                                : "3px solid transparent",
-                              color: isRemovedOrMod ? "#fecdd3" : "#94a3b8",
-                              minHeight: 20,
-                            }}
-                          >
-                            <span
-                              style={{
-                                width: 22,
-                                textAlign: "right",
-                                color: "#64748b",
-                                userSelect: "none",
-                                flexShrink: 0,
-                              }}
-                            >
-                              {row.beforeLineNum ?? ""}
-                            </span>
-                            <span
-                              style={{
-                                width: 12,
-                                color: isRemovedOrMod ? "#fb7185" : "#475569",
-                                flexShrink: 0,
-                              }}
-                            >
-                              {isRemovedOrMod ? "−" : " "}
-                            </span>
-                            <span style={{ whiteSpace: "pre" }}>
-                              {row.beforeText}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Right: After */}
-                    <div
-                      style={{
-                        minWidth: 280,
-                        borderLeft: "1px solid #1e293b",
-                        paddingLeft: 10,
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          color: "#6ee7b7",
-                          paddingBottom: 6,
-                          marginBottom: 6,
-                          borderBottom: "1px solid #1e293b",
-                        }}
-                      >
-                        ＋ 変更後 (After: 修正済みパッチ)
-                      </div>
-                      {diffRows.map((row, idx) => {
-                        const isAddedOrMod =
-                          row.status === "modified" || row.status === "added";
-                        return (
-                          <div
-                            key={`a-${idx}`}
-                            style={{
-                              display: "flex",
-                              gap: 8,
-                              padding: "2px 6px",
-                              background: isAddedOrMod
-                                ? "rgba(16, 185, 129, 0.18)"
-                                : "transparent",
-                              borderLeft: isAddedOrMod
-                                ? "3px solid #10b981"
-                                : "3px solid transparent",
-                              color: isAddedOrMod ? "#bbf7d0" : "#cbd5e1",
-                              minHeight: 20,
-                            }}
-                          >
-                            <span
-                              style={{
-                                width: 22,
-                                textAlign: "right",
-                                color: "#64748b",
-                                userSelect: "none",
-                                flexShrink: 0,
-                              }}
-                            >
-                              {row.afterLineNum ?? ""}
-                            </span>
-                            <span
-                              style={{
-                                width: 12,
-                                color: isAddedOrMod ? "#34d399" : "#475569",
-                                flexShrink: 0,
-                              }}
-                            >
-                              {isAddedOrMod ? "+" : " "}
-                            </span>
-                            <span style={{ whiteSpace: "pre" }}>
-                              {row.afterText}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  /* Unified Diff Mode */
-                  <div
-                    style={{
-                      background: "#020617",
-                      border: "1px solid #1e293b",
-                      borderRadius: 12,
-                      padding: 12,
-                      fontFamily:
-                        "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-                      fontSize: 12,
-                      overflowX: "auto",
-                    }}
-                  >
-                    {diffRows.map((row, idx) => {
-                      if (row.status === "unchanged") {
-                        return (
-                          <div
-                            key={`u-${idx}`}
-                            style={{
-                              display: "flex",
-                              gap: 10,
-                              padding: "2px 6px",
-                              color: "#94a3b8",
-                            }}
-                          >
-                            <span style={{ width: 26, color: "#64748b" }}>
-                              {row.beforeLineNum}
-                            </span>
-                            <span>  {row.beforeText}</span>
-                          </div>
-                        );
-                      }
-                      return (
-                        <React.Fragment key={`u-${idx}`}>
-                          {row.beforeLineNum !== null && (
-                            <div
-                              style={{
-                                display: "flex",
-                                gap: 10,
-                                padding: "2px 6px",
-                                background: "rgba(244, 63, 94, 0.18)",
-                                borderLeft: "3px solid #f43f5e",
-                                color: "#fecdd3",
-                              }}
-                            >
-                              <span style={{ width: 26, color: "#fb7185" }}>
-                                -{row.beforeLineNum}
-                              </span>
-                              <span style={{ whiteSpace: "pre" }}>
-                                - {row.beforeText}
-                              </span>
-                            </div>
-                          )}
-                          {row.afterLineNum !== null && (
-                            <div
-                              style={{
-                                display: "flex",
-                                gap: 10,
-                                padding: "2px 6px",
-                                background: "rgba(16, 185, 129, 0.18)",
-                                borderLeft: "3px solid #10b981",
-                                color: "#bbf7d0",
-                              }}
-                            >
-                              <span style={{ width: 26, color: "#34d399" }}>
-                                +{row.afterLineNum}
-                              </span>
-                              <span style={{ whiteSpace: "pre" }}>
-                                + {row.afterText}
-                              </span>
-                            </div>
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-            )}
-
-            {/* Section 4 & 5: Line-by-Line Diagnostics (with 1-Click Learn) + Task Pitfalls Checklist (with Live Progress Bar) */}
-            {result && (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
-                  gap: 16,
-                }}
-              >
-                {/* Left card: Diagnostics + "+ 自分のDNAに記憶" */}
+              <>
+                {/* 1. Risk Summary & Red Lines Diagnostics */}
                 <section
                   style={{
-                    background: "rgba(15, 23, 42, 0.9)",
+                    background: "rgba(15, 23, 42, 0.92)",
                     border: "1px solid #1e293b",
                     borderRadius: 16,
                     padding: 18,
@@ -2640,21 +2418,55 @@ export default function CodePitfallMirror() {
                   <div
                     style={{
                       display: "flex",
+                      flexWrap: "wrap",
                       justifyContent: "space-between",
                       alignItems: "center",
-                      marginBottom: 8,
+                      gap: 10,
+                      marginBottom: 10,
                     }}
                   >
-                    <h3
+                    <div
                       style={{
-                        margin: 0,
-                        fontSize: 14,
-                        fontWeight: 800,
-                        color: "#fb7185",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        flexWrap: "wrap",
                       }}
                     >
-                      🚨 4. 検出された危険箇所（リスク {result.riskScore}/100）
-                    </h3>
+                      <h2
+                        style={{
+                          margin: 0,
+                          fontSize: 15,
+                          fontWeight: 800,
+                          color: "#fb7185",
+                        }}
+                      >
+                        🚨 見つかった注意点・赤い行（{result.diagnostics.length}件）
+                      </h2>
+                      <span
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 800,
+                          color:
+                            result.riskScore >= 60
+                              ? "#fda4af"
+                              : result.riskScore >= 30
+                                ? "#fde68a"
+                                : "#6ee7b7",
+                          background:
+                            result.riskScore >= 60
+                              ? "rgba(244,63,94,0.2)"
+                              : result.riskScore >= 30
+                                ? "rgba(245,158,11,0.2)"
+                                : "rgba(16,185,129,0.2)",
+                          padding: "3px 10px",
+                          borderRadius: 999,
+                        }}
+                      >
+                        危険度スコア: {result.riskScore} / 100
+                      </span>
+                    </div>
+
                     <span
                       style={{
                         fontSize: 11,
@@ -2672,13 +2484,30 @@ export default function CodePitfallMirror() {
                   <p
                     style={{
                       margin: "0 0 12px",
-                      fontSize: 12.5,
-                      color: "#cbd5e1",
-                      lineHeight: 1.5,
+                      fontSize: 13,
+                      color: "#e2e8f0",
+                      lineHeight: 1.55,
                     }}
                   >
                     {result.summary}
                   </p>
+
+                  {dnaStatusMsg && (
+                    <div
+                      style={{
+                        marginBottom: 10,
+                        padding: "7px 10px",
+                        borderRadius: 8,
+                        background: "rgba(52, 211, 153, 0.14)",
+                        border: "1px solid rgba(52, 211, 153, 0.4)",
+                        color: "#6ee7b7",
+                        fontSize: 12,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {dnaStatusMsg}
+                    </div>
+                  )}
 
                   <div
                     style={{
@@ -2739,7 +2568,8 @@ export default function CodePitfallMirror() {
                                     borderRadius: 6,
                                   }}
                                 >
-                                  Line {d.line} • {d.severity.toUpperCase()}
+                                  {d.line}行目 •{" "}
+                                  {d.severity === "high" ? "要注意" : "確認"}
                                 </span>
                                 <span
                                   style={{
@@ -2753,6 +2583,22 @@ export default function CodePitfallMirror() {
                                 >
                                   {d.category || "Logic"}
                                 </span>
+                                {d.matchedPersonalHabit && (
+                                  <span
+                                    style={{
+                                      fontSize: 10.5,
+                                      fontWeight: 700,
+                                      color: "#c4b5fd",
+                                      background: "rgba(139, 92, 246, 0.18)",
+                                      border:
+                                        "1px solid rgba(139, 92, 246, 0.35)",
+                                      padding: "2px 8px",
+                                      borderRadius: 999,
+                                    }}
+                                  >
+                                    ★ あなたのクセ一致: {d.matchedPersonalHabit}
+                                  </span>
+                                )}
                               </div>
                               <div
                                 style={{
@@ -2765,7 +2611,6 @@ export default function CodePitfallMirror() {
                               </div>
                             </div>
 
-                            {/* 1-Click Learn Button */}
                             <button
                               type="button"
                               onClick={() => handleLearnDiagnostic(d)}
@@ -2787,32 +2632,14 @@ export default function CodePitfallMirror() {
                               }}
                             >
                               {isLearned
-                                ? "✓ DNAに記憶済み (+1)"
+                                ? "✓ クセに記憶済み"
                                 : "＋ 自分のDNAに記憶"}
                             </button>
                           </div>
 
-                          {d.matchedPersonalHabit && (
-                            <div
-                              style={{
-                                display: "inline-block",
-                                marginTop: 6,
-                                fontSize: 11,
-                                fontWeight: 700,
-                                color: "#c4b5fd",
-                                background: "rgba(139, 92, 246, 0.18)",
-                                border: "1px solid rgba(139, 92, 246, 0.35)",
-                                padding: "2px 9px",
-                                borderRadius: 999,
-                              }}
-                            >
-                              ★ あなたの過去クセDNA一致: {d.matchedPersonalHabit}
-                            </div>
-                          )}
-
                           <p
                             style={{
-                              margin: "8px 0 6px",
+                              margin: "6px 0",
                               fontSize: 12,
                               color: "#cbd5e1",
                               lineHeight: 1.5,
@@ -2834,7 +2661,7 @@ export default function CodePitfallMirror() {
                               overflowX: "auto",
                             }}
                           >
-                            推奨修正: {d.fixSuggestion}
+                            直し方: {d.fixSuggestion}
                           </div>
                         </div>
                       );
@@ -2842,10 +2669,382 @@ export default function CodePitfallMirror() {
                   </div>
                 </section>
 
-                {/* Right card: Task-Specific Common Pitfalls Checklist with Live Progress Bar */}
+                {/* 2. Highlighted Code & Fixed Patch (Before / After Diff) */}
                 <section
                   style={{
-                    background: "rgba(15, 23, 42, 0.9)",
+                    background: "rgba(15, 23, 42, 0.92)",
+                    border: "1px solid #1e293b",
+                    borderRadius: 16,
+                    padding: 18,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 10,
+                      marginBottom: 12,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <h3
+                        style={{
+                          margin: 0,
+                          fontSize: 14.5,
+                          fontWeight: 800,
+                          color: "#34d399",
+                        }}
+                      >
+                        🔧 赤い行（修正前）と安全な修正コード（修正後）
+                      </h3>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: "#fda4af",
+                          background: "rgba(244,63,94,0.15)",
+                          padding: "2px 8px",
+                          borderRadius: 999,
+                        }}
+                      >
+                        -{diffStats.modified + diffStats.removed} 危険行
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: "#6ee7b7",
+                          background: "rgba(52,211,153,0.15)",
+                          padding: "2px 8px",
+                          borderRadius: 999,
+                        }}
+                      >
+                        +{diffStats.modified + diffStats.added} 修正行
+                      </span>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <div
+                        style={{
+                          display: "inline-flex",
+                          background: "#020617",
+                          border: "1px solid #334155",
+                          borderRadius: 8,
+                          overflow: "hidden",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setDiffMode("split")}
+                          style={{
+                            background:
+                              diffMode === "split" ? "#4f46e5" : "transparent",
+                            color: "#fff",
+                            border: "none",
+                            padding: "5px 10px",
+                            fontSize: 11,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                        >
+                          左右で比較
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDiffMode("unified")}
+                          style={{
+                            background:
+                              diffMode === "unified"
+                                ? "#4f46e5"
+                                : "transparent",
+                            color: "#fff",
+                            border: "none",
+                            padding: "5px 10px",
+                            fontSize: 11,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                        >
+                          上下で比較
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleApplyFixToEditor}
+                        style={{
+                          background: "rgba(52, 211, 153, 0.18)",
+                          color: "#34d399",
+                          border: "1px solid rgba(52, 211, 153, 0.45)",
+                          borderRadius: 8,
+                          padding: "5px 11px",
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                      >
+                        ✨ 修正案をエディタに反映
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleCopyFixedPatch}
+                        style={{
+                          background: copiedPatch
+                            ? "rgba(52, 211, 153, 0.25)"
+                            : "#1e293b",
+                          color: copiedPatch ? "#6ee7b7" : "#f8fafc",
+                          border: "1px solid #334155",
+                          borderRadius: 8,
+                          padding: "5px 11px",
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {copiedPatch ? "✓ コピー済み" : "📋 修正コードをコピー"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleCopyPrMarkdown}
+                        style={{
+                          background: copiedPrMd
+                            ? "rgba(52, 211, 153, 0.25)"
+                            : "rgba(99, 102, 241, 0.2)",
+                          color: copiedPrMd ? "#6ee7b7" : "#c7d2fe",
+                          border: "1px solid rgba(99, 102, 241, 0.45)",
+                          borderRadius: 8,
+                          padding: "5px 11px",
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {copiedPrMd ? "✓ MDコピー済" : "📝 レポートをコピー"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {diffMode === "split" ? (
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: 10,
+                        background: "#020617",
+                        border: "1px solid #1e293b",
+                        borderRadius: 12,
+                        padding: 12,
+                        fontFamily:
+                          "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                        fontSize: 12,
+                        overflowX: "auto",
+                      }}
+                    >
+                      <div style={{ minWidth: 240 }}>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: "#fda4af",
+                            paddingBottom: 6,
+                            marginBottom: 6,
+                            borderBottom: "1px solid #1e293b",
+                          }}
+                        >
+                          − 修正前（赤い行＝危険箇所）
+                        </div>
+                        {diffRows.map((row, idx) => {
+                          const isRemovedOrMod =
+                            row.status === "modified" ||
+                            row.status === "removed";
+                          return (
+                            <div
+                              key={`b-${idx}`}
+                              style={{
+                                display: "flex",
+                                gap: 8,
+                                padding: "2px 6px",
+                                background: isRemovedOrMod
+                                  ? "rgba(244, 63, 94, 0.18)"
+                                  : "transparent",
+                                borderLeft: isRemovedOrMod
+                                  ? "3px solid #f43f5e"
+                                  : "3px solid transparent",
+                                color: isRemovedOrMod ? "#fecdd3" : "#94a3b8",
+                                minHeight: 20,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  width: 20,
+                                  textAlign: "right",
+                                  color: "#64748b",
+                                  userSelect: "none",
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {row.beforeLineNum ?? ""}
+                              </span>
+                              <span style={{ whiteSpace: "pre" }}>
+                                {row.beforeText}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div
+                        style={{
+                          minWidth: 240,
+                          borderLeft: "1px solid #1e293b",
+                          paddingLeft: 10,
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: "#6ee7b7",
+                            paddingBottom: 6,
+                            marginBottom: 6,
+                            borderBottom: "1px solid #1e293b",
+                          }}
+                        >
+                          ＋ 修正後（緑の行＝安全なコード）
+                        </div>
+                        {diffRows.map((row, idx) => {
+                          const isAddedOrMod =
+                            row.status === "modified" || row.status === "added";
+                          return (
+                            <div
+                              key={`a-${idx}`}
+                              style={{
+                                display: "flex",
+                                gap: 8,
+                                padding: "2px 6px",
+                                background: isAddedOrMod
+                                  ? "rgba(16, 185, 129, 0.18)"
+                                  : "transparent",
+                                borderLeft: isAddedOrMod
+                                  ? "3px solid #10b981"
+                                  : "3px solid transparent",
+                                color: isAddedOrMod ? "#bbf7d0" : "#cbd5e1",
+                                minHeight: 20,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  width: 20,
+                                  textAlign: "right",
+                                  color: "#64748b",
+                                  userSelect: "none",
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {row.afterLineNum ?? ""}
+                              </span>
+                              <span style={{ whiteSpace: "pre" }}>
+                                {row.afterText}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        background: "#020617",
+                        border: "1px solid #1e293b",
+                        borderRadius: 12,
+                        padding: 12,
+                        fontFamily:
+                          "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                        fontSize: 12,
+                        overflowX: "auto",
+                      }}
+                    >
+                      {diffRows.map((row, idx) => {
+                        if (row.status === "unchanged") {
+                          return (
+                            <div
+                              key={`u-${idx}`}
+                              style={{
+                                display: "flex",
+                                gap: 10,
+                                padding: "2px 6px",
+                                color: "#94a3b8",
+                              }}
+                            >
+                              <span style={{ width: 26, color: "#64748b" }}>
+                                {row.beforeLineNum}
+                              </span>
+                              <span>  {row.beforeText}</span>
+                            </div>
+                          );
+                        }
+                        return (
+                          <React.Fragment key={`u-${idx}`}>
+                            {row.beforeLineNum !== null && (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: 10,
+                                  padding: "2px 6px",
+                                  background: "rgba(244, 63, 94, 0.18)",
+                                  borderLeft: "3px solid #f43f5e",
+                                  color: "#fecdd3",
+                                }}
+                              >
+                                <span style={{ width: 26, color: "#fb7185" }}>
+                                  -{row.beforeLineNum}
+                                </span>
+                                <span style={{ whiteSpace: "pre" }}>
+                                  - {row.beforeText}
+                                </span>
+                              </div>
+                            )}
+                            {row.afterLineNum !== null && (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: 10,
+                                  padding: "2px 6px",
+                                  background: "rgba(16, 185, 129, 0.18)",
+                                  borderLeft: "3px solid #10b981",
+                                  color: "#bbf7d0",
+                                }}
+                              >
+                                <span style={{ width: 26, color: "#34d399" }}>
+                                  +{row.afterLineNum}
+                                </span>
+                                <span style={{ whiteSpace: "pre" }}>
+                                  + {row.afterText}
+                                </span>
+                              </div>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+
+                {/* 3. Checkable Task Pitfalls Template */}
+                <section
+                  style={{
+                    background: "rgba(15, 23, 42, 0.92)",
                     border: "1px solid #1e293b",
                     borderRadius: 16,
                     padding: 18,
@@ -2863,12 +3062,12 @@ export default function CodePitfallMirror() {
                     <h3
                       style={{
                         margin: 0,
-                        fontSize: 14,
+                        fontSize: 14.5,
                         fontWeight: 800,
                         color: "#34d399",
                       }}
                     >
-                      ✅ 5. 作業別「よくある間違いテンプレート」（{taskType}）
+                      ✅ 作業テンプレ・最終確認チェックリスト（{taskType}）
                     </h3>
                     <div style={{ display: "flex", gap: 6 }}>
                       <button
@@ -2910,14 +3109,14 @@ export default function CodePitfallMirror() {
                     </div>
                   </div>
 
-                  {/* Live Completion Progress Bar */}
+                  {/* Progress bar */}
                   <div
                     style={{
                       background: "#020617",
                       border: "1px solid #1e293b",
                       borderRadius: 10,
-                      padding: "10px 12px",
-                      marginBottom: 12,
+                      padding: "9px 12px",
+                      marginBottom: 10,
                     }}
                   >
                     <div
@@ -2925,31 +3124,27 @@ export default function CodePitfallMirror() {
                         display: "flex",
                         justifyContent: "space-between",
                         alignItems: "center",
-                        marginBottom: 6,
+                        marginBottom: 5,
                         fontSize: 12,
                       }}
                     >
                       <span style={{ fontWeight: 700, color: "#e2e8f0" }}>
-                        PR提出前プリフライト達成率
+                        チェック完了度
                       </span>
                       <span
                         style={{
                           fontWeight: 800,
                           color:
-                            progressPercent === 100
-                              ? "#34d399"
-                              : progressPercent >= 50
-                                ? "#fbbf24"
-                                : "#fb7185",
+                            progressPercent === 100 ? "#34d399" : "#fbbf24",
                         }}
                       >
-                        {completedCount} / {activeChecklist.length} 項目完了 (
+                        {completedCount} / {activeChecklist.length} 完了 (
                         {progressPercent}%)
                       </span>
                     </div>
                     <div
                       style={{
-                        height: 10,
+                        height: 8,
                         width: "100%",
                         background: "#0f172a",
                         borderRadius: 999,
@@ -2968,18 +3163,6 @@ export default function CodePitfallMirror() {
                         }}
                       />
                     </div>
-                    {progressPercent === 100 && (
-                      <div
-                        style={{
-                          marginTop: 8,
-                          fontSize: 12,
-                          fontWeight: 700,
-                          color: "#34d399",
-                        }}
-                      >
-                        🚀 すべての落とし穴チェックをクリアしました！安全に PR 提出・デプロイ可能です。
-                      </div>
-                    )}
                   </div>
 
                   <div
@@ -3005,7 +3188,7 @@ export default function CodePitfallMirror() {
                               ? "1px solid rgba(99, 102, 241, 0.45)"
                               : "1px solid #1e293b",
                             borderRadius: 10,
-                            padding: 11,
+                            padding: 10,
                             cursor: "pointer",
                             opacity: checked ? 0.65 : 1,
                           }}
@@ -3053,7 +3236,7 @@ export default function CodePitfallMirror() {
                               style={{
                                 fontSize: 11.5,
                                 color: "#94a3b8",
-                                marginTop: 3,
+                                marginTop: 2,
                                 lineHeight: 1.45,
                               }}
                             >
@@ -3064,10 +3247,47 @@ export default function CodePitfallMirror() {
                       );
                     })}
                   </div>
+
+                  {/* Next-step seamless bridge to /gitbridge */}
+                  <div
+                    style={{
+                      marginTop: 14,
+                      paddingTop: 14,
+                      borderTop: "1px solid #1e293b",
+                      display: "flex",
+                      flexWrap: "wrap",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 10,
+                    }}
+                  >
+                    <span style={{ fontSize: 12, color: "#cbd5e1" }}>
+                      チェックが終わったら、安全な手順で GitHub にコミット・公開しましょう！
+                    </span>
+                    <Link
+                      href="/gitbridge"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        background:
+                          "linear-gradient(135deg, #059669 0%, #0284c7 100%)",
+                        color: "#fff",
+                        padding: "9px 16px",
+                        borderRadius: 10,
+                        fontSize: 12.5,
+                        fontWeight: 800,
+                        textDecoration: "none",
+                        boxShadow: "0 4px 14px rgba(5, 150, 105, 0.3)",
+                      }}
+                    >
+                      🚀 修正コードを GitHub へ送る手順を見る (/gitbridge)
+                    </Link>
+                  </div>
                 </section>
-              </div>
+              </>
             )}
-          </main>
+          </div>
         </div>
       </div>
     </div>

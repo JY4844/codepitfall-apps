@@ -133,6 +133,9 @@ export default function GitBridge() {
             <span className={styles.geminiBadge}>✦ Google Gemini 3.8 Flash + GitHub Learning</span>
           </div>
           <div className={styles.navLinks}>
+            <Link href="/codemistake" className={styles.navLink}>
+              🔍 CodePitfall Mirror
+            </Link>
             <Link href="/" className={styles.navLink}>
               GapTutor
             </Link>
@@ -147,7 +150,38 @@ export default function GitBridge() {
       </nav>
 
       <main className={styles.container}>
-        <span className={styles.categoryTag}>はたらく・まなぶ部門</span>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+            marginBottom: 8,
+          }}
+        >
+          <span className={styles.categoryTag} style={{ marginBottom: 0 }}>
+            はたらく・まなぶ部門
+          </span>
+          <Link
+            href="/codemistake"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              background: "#eff6ff",
+              color: "#1d4ed8",
+              border: "1px solid #bfdbfe",
+              padding: "6px 14px",
+              borderRadius: 999,
+              fontSize: "0.82rem",
+              fontWeight: 700,
+              textDecoration: "none",
+            }}
+          >
+            🔍 コミット前にやりがちミスをチェック（CodePitfall Mirror へ）
+          </Link>
+        </div>
         <h1 className={styles.title}>コード初心者の「GitHub で学ぶ・安全にアップする」AI ナビ</h1>
         <p className={styles.subtitle}>
           公開リポジトリの読む順番・用語・クイズを自動生成し、API キー漏れを防ぐ初めての GitHub 公開まで伴走します。
