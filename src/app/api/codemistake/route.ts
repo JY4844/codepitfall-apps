@@ -7,7 +7,9 @@ export type MistakeCategory =
   | "Config"
   | "Security"
   | "DB"
-  | "Env";
+  | "Env"
+  | "Hydration"
+  | "Git";
 
 export interface PersonalMistake {
   id: string;
@@ -34,7 +36,28 @@ export interface ChecklistItem {
   personalMatch: boolean;
 }
 
+export interface FixStep {
+  stepNumber: number;
+  where: string;
+  instruction: string;
+  codeOrCommand?: string;
+}
+
 export interface AuditResponse {
+  // ① 3秒で分かる原因＆あなたの過去クセ一致アラート
+  quickCause: string;
+  whyItHappened: string;
+  category: string;
+  severity: "high" | "medium" | "low";
+  matchedHabit: PersonalMistake | null;
+  suggestedHabitPattern: string;
+
+  // ② VS Code / ターミナルですぐ直す手順（1・2・3） + AI修正指示プロンプト + ターミナルコマンド
+  fixSteps: FixStep[];
+  aiFixPrompt: string;
+  terminalCommand: string | null;
+
+  // ③ 作業別チェックリスト & 補助フィールド
   riskScore: number;
   summary: string;
   diagnostics: DiagnosticIssue[];
@@ -42,44 +65,7 @@ export interface AuditResponse {
   preflightChecklist: ChecklistItem[];
   source: "gemini" | "local-analyzer";
   taskType: string;
-  taskDeclaration?: string;
-}
-
-function convertGitHubUrlToRaw(inputUrl: string): {
-  rawUrl: string;
-  fileName: string;
-  isValidGitHub: boolean;
-} {
-  const trimmed = inputUrl.trim();
-  try {
-    const parsed = new URL(trimmed);
-    if (parsed.hostname === "raw.githubusercontent.com") {
-      const parts = parsed.pathname.split("/").filter(Boolean);
-      const fileName = parts[parts.length - 1] || "remote-file.ts";
-      return { rawUrl: trimmed, fileName, isValidGitHub: true };
-    }
-    if (parsed.hostname === "github.com" || parsed.hostname === "www.github.com") {
-      // Expected: /{owner}/{repo}/blob/{branch}/{...path}
-      const parts = parsed.pathname.split("/").filter(Boolean);
-      if (parts.length >= 5 && (parts[2] === "blob" || parts[2] === "raw")) {
-        const owner = parts[0];
-        const repo = parts[1];
-        const branch = parts[3];
-        const filePath = parts.slice(4).join("/");
-        const fileName = parts[parts.length - 1] || "github-file.ts";
-        const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${filePath}`;
-        return { rawUrl, fileName, isValidGitHub: true };
-      }
-    }
-    if (parsed.hostname === "gist.githubusercontent.com") {
-      const parts = parsed.pathname.split("/").filter(Boolean);
-      const fileName = parts[parts.length - 1] || "gist-file.ts";
-      return { rawUrl: trimmed, fileName, isValidGitHub: true };
-    }
-  } catch {
-    // Invalid URL format
-  }
-  return { rawUrl: trimmed, fileName: "unknown", isValidGitHub: false };
+  errorLog: string;
 }
 
 const TASK_CHECKLIST_TEMPLATES: Record<
@@ -90,192 +76,156 @@ const TASK_CHECKLIST_TEMPLATES: Record<
     {
       id: "next-1",
       title: "fetch() と res.json() の両方に await を付けたか",
-      why: "Promise のまま参照して TypeError になる非同期実装で最多の事故を防ぎます。",
-      keywords: /await|fetch|非同期|Promise/i,
+      why: "Promise のまま参照して TypeError: res.json is not a function になる最多ミスを防ぎます。",
+      keywords: /await|fetch|非同期|Promise|json/i,
     },
     {
       id: "next-2",
-      title: "res.ok (HTTP 200-299) を確認してから .json() をパースしているか",
-      why: "4xx/5xx エラー時に HTML エラーページを JSON パースしてクラッシュする事故を防ぎます。",
+      title: "res.ok (HTTP 200-299) を確認してから .json() を呼んでいるか",
+      why: "404/500 エラー時に HTML が返って SyntaxError で落ちる事故を防ぎます。",
       keywords: /ok|json|HTTP|ステータス|エラー/i,
     },
     {
       id: "next-3",
-      title: "送信ボタンの二重クリック防止（disabled={loading} / AbortController）を入れたか",
-      why: "通信遅延時の連打による二重注文・DB重複レコード登録を防ぎます。",
+      title: "送信ボタンの二度押し防止（disabled={loading}）を入れたか",
+      why: "通信中の連打による二重登録・重複送信を防ぎます。",
       keywords: /二重|連打|disabled|loading/i,
     },
     {
       id: "next-4",
-      title: "NEXT_PUBLIC_ とサーバー専用環境変数（秘密鍵）を取り違えていないか",
-      why: "クライアントバンドルへの API シークレット漏洩と undefined 参照を防ぎます。",
-      keywords: /env|環境変数|NEXT_PUBLIC|secret/i,
-    },
-    {
-      id: "next-5",
-      title: "リクエスト Body のスキーマ検証（空文字・型不正ガード）を行ったか",
-      why: "不正ペイロードによる API Route の 500 クラッシュを防ぎます。",
-      keywords: /バリデーション|検証|null|undefined|境界/i,
+      title: "環境変数（process.env）のスペルと NEXT_PUBLIC_ の有無を確認したか",
+      why: "クライアント側で undefined になり通信先 URL が壊れるミスを防ぎます。",
+      keywords: /env|環境変数|NEXT_PUBLIC/i,
     },
   ],
-  "Python ML / データ処理": [
+  "React / Next.js 画面・Hydration": [
+    {
+      id: "hyd-1",
+      title: "useState / useEffect / onClick を使うファイルの先頭に 'use client' を書いたか",
+      why: "Next.js App Router で Server Component 扱いになりビルド・実行エラーになるのを防ぎます。",
+      keywords: /use client|useState|useEffect|Hydration|React/i,
+    },
+    {
+      id: "hyd-2",
+      title: "localStorage / window / Date.now() を初期レンダリング中に直接呼んでいないか",
+      why: "サーバー描画とブラウザ描画の結果がズレる Hydration failed エラーを防ぎます。",
+      keywords: /Hydration|localStorage|window|Date/i,
+    },
+    {
+      id: "hyd-3",
+      title: "リスト描画（.map）の直下要素に一意な key={item.id} を付けたか",
+      why: "表示順序ズレや React コンソール警告を防ぎます。",
+      keywords: /key|map|配列|React/i,
+    },
+    {
+      id: "hyd-4",
+      title: "<p> の中に <div> や <button> の中に <button> を入れ子にしていないか",
+      why: "HTML 仕様違反による Hydration mismatch クラッシュを防ぎます。",
+      keywords: /Hydration|タグ|HTML/i,
+    },
+  ],
+  "Node.js / パッケージ・環境設定": [
+    {
+      id: "env-1",
+      title: "import パスの大文字・小文字が実際のファイル名と完全一致しているか",
+      why: "Module not found: Can't resolve エラーやデプロイ先（Linux）でのビルド失敗を防ぎます。",
+      keywords: /パス|Module|import|Env|Windows|Linux/i,
+    },
+    {
+      id: "env-2",
+      title: "package.json 更新後に npm install を実行したか",
+      why: "Cannot find module エラーを防ぎます。",
+      keywords: /module|npm|install|パッケージ/i,
+    },
+    {
+      id: "env-3",
+      title: "EPERM ロックが出たら開発サーバー（npm run dev）を一度止めて再起動したか",
+      why: "Windows で .next フォルダがロックされてビルドが止まる現象を即解消できます。",
+      keywords: /EPERM|ロック|Windows|\.next/i,
+    },
+    {
+      id: "env-4",
+      title: ".env.local を編集したあと開発サーバーを再起動したか",
+      why: "環境変数の変更が反映されず undefined のまま悩む時間をゼロにします。",
+      keywords: /env|環境変数|Config/i,
+    },
+  ],
+  "Git / GitHub Push・PR作成": [
+    {
+      id: "git-1",
+      title: "作業開始前・push 前に git pull（最新取得）を実行したか",
+      why: "non-fast-forward / push rejected エラーや大きなコンフリクトを防ぎます。",
+      keywords: /git|pull|push|rejected|コンフリクト/i,
+    },
+    {
+      id: "git-2",
+      title: ".env や API キー・シークレットが git status に混ざっていないか",
+      why: "GitHub への秘密鍵誤公開インシデントを未然に防ぎます。",
+      keywords: /secret|env|セキュリティ|GitHub|漏洩/i,
+    },
+    {
+      id: "git-3",
+      title: "コンフリクト解消後に <<<<<<< HEAD マーカーが残っていないか",
+      why: "マーカー残存による構文エラー（SyntaxError）を防ぎます。",
+      keywords: /コンフリクト|CONFLICT|Git/i,
+    },
+    {
+      id: "git-4",
+      title: "コミット前に npx tsc --noEmit で型エラーがないか確認したか",
+      why: "GitHub Actions / Vercel デプロイでのビルド失敗を防ぎます。",
+      keywords: /tsc|型|ビルド/i,
+    },
+  ],
+  "Python / データ処理・スクリプト": [
     {
       id: "py-1",
-      title: "train / test 分割前に全体へ fit_transform（データリーク）していないか",
-      why: "検証スコアだけ異常に高く、本番推論で精度が崩壊する典型ミスを防ぎます。",
-      keywords: /リーク|leak|fit_transform|split|ML/i,
+      title: "open() でファイルを読み書きするとき encoding='utf-8' を明示したか",
+      why: "Windows (cp932) 環境での UnicodeDecodeError 文字化けクラッシュを防ぎます。",
+      keywords: /UTF|encoding|Windows|Python|open/i,
     },
     {
       id: "py-2",
-      title: "Windows / Linux パス区切り（pathlib.Path）と encoding='utf-8' を明示したか",
-      why: "OS移行時の FileNotFoundError や cp932 UnicodeDecodeError を防ぎます。",
-      keywords: /パス|Windows|Linux|UTF|encoding/i,
+      title: "JavaScript の JSON.parse と Python の json.loads を混同していないか",
+      why: "言語切り替え直後の NameError / AttributeError を防ぎます。",
+      keywords: /JSON|Python|構文/i,
     },
     {
       id: "py-3",
-      title: "空リスト・欠損値（NaN/None）混入時のゼロ除算ガードを入れたか",
-      why: "バッチ推論や集計パイプラインの途中停止（ZeroDivisionError）を防ぎます。",
-      keywords: /ゼロ除算|空|NaN|None|length|境界/i,
+      title: "割り算や平均計算の前に空リスト（len == 0）ガードを入れたか",
+      why: "バッチ処理途中の ZeroDivisionError 停止を防ぎます。",
+      keywords: /ゼロ除算|len|境界|空/i,
     },
     {
       id: "py-4",
-      title: "JavaScript の構文（JSON.parse / .length）と Python（json.loads / len()）を混同していないか",
-      why: "フルスタック開発者が言語切り替え直後に起こす AttributeError を防ぎます。",
-      keywords: /JSON\.parse|json\.loads|構文|言語/i,
-    },
-    {
-      id: "py-5",
-      title: "乱数シード（random_state / seed）と推論時の eval() モード固定を確認したか",
-      why: "実験の再現性欠如や Dropout 有効のまま本番推論する事故を防ぎます。",
-      keywords: /seed|再現性|eval/i,
+      title: "仮想環境（venv）を有効化してから pip install / 実行しているか",
+      why: "ModuleNotFoundError: No module named ... を防ぎます。",
+      keywords: /ModuleNotFound|pip|パッケージ/i,
     },
   ],
-  "DB マイグレーション": [
-    {
-      id: "db-1",
-      title: "既存データがあるテーブルに DEFAULT なしの NOT NULL カラムを追加していないか",
-      why: "本番デプロイ時のマイグレーション即死・テーブルロック事故を防ぎます。",
-      keywords: /NOT NULL|DEFAULT|マイグレーション|カラム/i,
-    },
-    {
-      id: "db-2",
-      title: "SQL 文字列結合ではなくプレースホルダ（パラメータバインド）を使っているか",
-      why: "SQL インジェクション脆弱性と特殊文字による構文エラーを根絶します。",
-      keywords: /SQL|インジェクション|プレースホルダ|結合/i,
-    },
-    {
-      id: "db-3",
-      title: "複数テーブル更新をトランザクション（BEGIN / COMMIT / ROLLBACK）で囲んだか",
-      why: "途中失敗時のデータ不整合（片方だけ更新される事故）を防ぎます。",
-      keywords: /トランザクション|ロールバック|transaction|整合/i,
-    },
-    {
-      id: "db-4",
-      title: "WHERE 句や JOIN で頻繁に使う外部キー・日時カラムに INDEX を貼ったか",
-      why: "レコード増加後のフルテーブルスキャンと DB CPU 100% 張り付きを防ぎます。",
-      keywords: /INDEX|インデックス|スロークエリ|パフォーマンス/i,
-    },
-    {
-      id: "db-5",
-      title: "ロールバック用 Down スクリプトと事前スナップショット取得を確認したか",
-      why: "万一の스키マ障害時に数分以内で安全に切り戻せます。",
-      keywords: /バックアップ|ロールバック|復旧/i,
-    },
-  ],
-  "認証・セキュリティ実装": [
-    {
-      id: "sec-1",
-      title: "API キー・JWT シークレットをハードコードせず環境変数から読み込んでいるか",
-      why: "GitHub 公開リポジトリへのクレデンシャル漏洩事故を防ぎます。",
-      keywords: /secret|APIキー|ハードコード|env|トークン/i,
-    },
-    {
-      id: "sec-2",
-      title: "認証トークンやパスワード平文を console.log に出力していないか",
-      why: "サーバーログ監視ツールからの個人情報・セッションハイジャック漏洩を防ぎます。",
-      keywords: /ログ|console\.log|password|token|漏洩/i,
-    },
-    {
-      id: "sec-3",
-      title: "セッション Cookie に HttpOnly / Secure / SameSite 属性を設定したか",
-      why: "XSS によるトークン窃取や CSRF 攻撃を防ぎます。",
-      keywords: /Cookie|HttpOnly|XSS|CSRF|認証/i,
-    },
-    {
-      id: "sec-4",
-      title: "認可チェック（ログインユーザー自身のデータか）を API 側で検証しているか",
-      why: "ID を書き換えるだけで他人のデータを閲覧・更新できる IDOR 脆弱性を防ぎます。",
-      keywords: /認可|IDOR|権限|userId|認証/i,
-    },
-    {
-      id: "sec-5",
-      title: "タイミング攻撃を防ぐ定数時間比較（crypto.timingSafeEqual）やレート制限を入れたか",
-      why: "ブルートフォース攻撃や署名検証の推測攻撃を防ぎます。",
-      keywords: /timingSafeEqual|比較|ブルートフォース|署名/i,
-    },
-  ],
-  "決済・外部Webhook": [
-    {
-      id: "pay-1",
-      title: "Webhook 受信時に署名ヘッダー（stripe-signature 等）を生ボディで検証しているか",
-      why: "第三者からの偽装決済完了リクエストによるタダ乗り被害を防ぎます。",
-      keywords: /署名|Webhook|signature|検証|セキュリティ/i,
-    },
-    {
-      id: "pay-2",
-      title: "べき等キー（Idempotency Key / イベントID重複チェック）を実装したか",
-      why: "Webhook の再送（リトライ）による二重課金・二重ポイント付与を防ぎます。",
-      keywords: /べき等|idempotency|二重|リトライ/i,
-    },
-    {
-      id: "pay-3",
-      title: "金額計算で浮動小数点誤差（amount * 1.1）を放置せず整数（Math.round）で扱っているか",
-      why: "1円単位の端数ズレや決済 API の整数バリデーションエラーを防ぎます。",
-      keywords: /金額|小数|float|Math\.round|誤差|境界/i,
-    },
-    {
-      id: "pay-4",
-      title: "外部決済 API 呼び出しにタイムアウトとエラー時のステータス記録を入れたか",
-      why: "通信切断時に決済成功・DB未反映となる宙吊り状態を防ぎます。",
-      keywords: /タイムアウト|await|エラー|トランザクション/i,
-    },
-    {
-      id: "pay-5",
-      title: "テスト用キー（sk_test_）と本番キー（sk_live_）の環境分離を確認したか",
-      why: "ステージング環境で実カード決済が走る重大インシデントを防ぎます。",
-      keywords: /env|環境変数|本番|テスト/i,
-    },
-  ],
-  "本番リリース前チェック": [
+  "DB / 認証・本番リリース前チェック": [
     {
       id: "rel-1",
-      title: "デバッグ用の console.log / debugger / TODO コメントが残っていないか",
-      why: "本番コンソールへの内部状態露出やブレークポイント停止を防ぎます。",
-      keywords: /console\.log|debugger|TODO|ログ/i,
+      title: "デバッグ用の console.log（特に token / secret）を削除したか",
+      why: "本番ログへの認証情報・個人情報の露出を防ぎます。",
+      keywords: /console|token|secret|Security|ログ/i,
     },
     {
       id: "rel-2",
-      title: "本番環境の必須環境変数（process.env）がすべてデプロイ先に登録済みか",
-      why: "リリース直後の画面真っ白・500 Internal Server Error を防ぎます。",
-      keywords: /env|環境変数|Config|未設定/i,
+      title: "配列ループの境界条件が <= .length ではなく < .length になっているか",
+      why: "最後の要素で undefined 参照（off-by-one）になるバグを防ぎます。",
+      keywords: /length|<=|境界|off-by-one/i,
     },
     {
       id: "rel-3",
-      title: "非同期エラー（try/catch 漏れ・Error Boundary 未設置）で画面全体が落ちないか",
-      why: "一部の API 失敗でアプリ全体が操作不能になるのを防ぎます。",
-      keywords: /try|catch|例外|await|非同期/i,
+      title: "既存テーブルへのカラム追加で DEFAULT なしの NOT NULL にしていないか",
+      why: "本番 DB マイグレーションの即死エラーを防ぎます。",
+      keywords: /DB|NOT NULL|マイグレーション|SQL/i,
     },
     {
       id: "rel-4",
-      title: "外部 API レート制限・タイムアウト時のフォールバック表示が機能するか",
-      why: "アクセス集中時でもユーザーに適切な案内を表示できます。",
-      keywords: /フォールバック|タイムアウト|API|ok/i,
-    },
-    {
-      id: "rel-5",
-      title: "型チェック（tsc --noEmit）と本番ビルド検証をクリアしたか",
-      why: "型不整合や未定義参照によるランタイム障害をゼロにします。",
-      keywords: /型|TypeScript|ビルド|境界/i,
+      title: "本番デプロイ先に必要な環境変数がすべて登録されているか",
+      why: "リリース直後の 500 エラーや真っ白画面を防ぎます。",
+      keywords: /env|環境変数|本番|Config/i,
     },
   ],
 };
@@ -299,447 +249,568 @@ function buildChecklistForTask(
   }));
 }
 
-function runDeterministicAudit(
+function findMatchingHabit(
+  habits: PersonalMistake[],
+  regex: RegExp,
+  categoryHint?: string
+): PersonalMistake | null {
+  return (
+    habits.find((h) => regex.test(h.pattern)) ??
+    (categoryHint
+      ? habits.find(
+          (h) => h.category.toLowerCase() === categoryHint.toLowerCase()
+        ) ?? null
+      : null)
+  );
+}
+
+function buildAiFixPrompt(params: {
+  errorLog: string;
+  code?: string;
+  quickCause: string;
+  fixSummary: string;
+}): string {
+  const lines: string[] = [
+    "VS Code で以下のエラーが発生しました。原因を踏まえて修正コードと具体的な修正箇所を教えてください。",
+    "",
+    "【発生しているエラー】",
+    params.errorLog.trim() || "(エラーログ未入力)",
+  ];
+  if (params.code && params.code.trim()) {
+    lines.push("", "【該当コード】", params.code.trim());
+  }
+  lines.push(
+    "",
+    `【診断された原因】${params.quickCause}`,
+    `【修正方針】${params.fixSummary}（型安全性とエラーハンドリングも合わせて確認してください）`
+  );
+  return lines.join("\n");
+}
+
+function runDeterministicErrorDiagnosis(
+  errorLog: string,
   code: string,
   taskType: string,
-  habits: PersonalMistake[],
-  taskDeclaration?: string
+  habits: PersonalMistake[]
 ): AuditResponse {
-  const lines = code.split("\n");
-  const diagnostics: DiagnosticIssue[] = [];
-  const fixedLines = [...lines];
+  const combined = `${errorLog}\n${code}`.trim();
 
-  lines.forEach((raw, idx) => {
-    const lineNum = idx + 1;
-    const trimmed = raw.trim();
-    const indent = raw.match(/^\s*/)?.[0] ?? "";
+  // Case 1: TypeError / res.json is not a function / await forgotten / Promise
+  if (
+    /is not a function|res\.json|Promise|await|Cannot read properties of undefined/i.test(
+      combined
+    ) &&
+    !/Hydration|use client/i.test(errorLog)
+  ) {
+    const matchedHabit = findMatchingHabit(
+      habits,
+      /await|fetch|非同期|Promise|json/i,
+      "Async"
+    );
+    const quickCause =
+      "fetch() または非同期処理の前に「await」を付け忘れているため、完了前の Promise や undefined に対してメソッドを呼んでいます。";
+    const whyItHappened =
+      "JavaScript / TypeScript の fetch() や res.json() は非同期（Promise）です。await を書かないとデータ本体ではなく「通信待ちの箱（Promise）」が入るため、res.json is not a function や undefined 参照エラーが発生します。";
+    const fixSteps: FixStep[] = [
+      {
+        stepNumber: 1,
+        where: "VS Code エディタ",
+        instruction:
+          "エラー行（fetch や API 呼び出しをしている箇所）を開き、関数の先頭に async が付いているか確認します。",
+      },
+      {
+        stepNumber: 2,
+        where: "VS Code エディタ",
+        instruction:
+          "fetch() と res.json() の両方の前に await を追加し、res.ok チェックを1行挟みます。",
+        codeOrCommand: `const res = await fetch(url, options);\nif (!res.ok) throw new Error(\`HTTP Error: \${res.status}\`);\nconst data = await res.json();`,
+      },
+      {
+        stepNumber: 3,
+        where: "VS Code ターミナル",
+        instruction:
+          "保存後、型チェックを実行して他の await 漏れがないか確認します。",
+        codeOrCommand: "npx tsc --noEmit",
+      },
+    ];
 
-    // 1. fetch() without await
-    if (/=\s*fetch\s*\(/.test(raw) && !/await\s+fetch/.test(raw)) {
-      const fixed = raw.replace(/=\s*fetch\s*\(/, "= await fetch(");
-      diagnostics.push({
-        line: lineNum,
-        severity: "high",
-        category: "Async",
-        title: "fetch() に await が抜けています（Promise のまま参照）",
-        reason:
-          "非同期の fetch() に await を付け忘れると Response ではなく Promise オブジェクトが返り、後続のステータス確認や .json() で実行時エラーが発生します。",
-        matchedPersonalHabit:
-          habits.find((h) => /await|非同期|fetch/i.test(h.pattern))?.pattern ??
-          "fetch / 非同期処理の await 忘れ",
-        fixSuggestion: fixed.trim(),
-      });
-      fixedLines[idx] = fixed;
-    }
-
-    // 2. .json() without await or res.ok check
-    if (/\.json\s*\(\s*\)/.test(raw) && !/await\s+.*\.json/.test(raw)) {
-      const varMatch = raw.match(/=\s*(\w+)\.json\s*\(/);
-      const resVar = varMatch?.[1] ?? "res";
-      const awaitedLine = raw.replace(
-        /=\s*(\w+)\.json\s*\(/,
-        "= await $1.json("
-      );
-      const fixedBlock = `${indent}if (!${resVar}.ok) throw new Error(\`HTTP Error \${${resVar}.status}\`);\n${awaitedLine}`;
-      diagnostics.push({
-        line: lineNum,
-        severity: "high",
-        category: "API",
-        title: `${resVar}.json() の await 抜け＆ ${resVar}.ok ステータス未検証`,
-        reason:
-          "res.json() は Promise を返します。さらに HTTP 4xx/5xx 時に res.ok を確認せず .json() を呼ぶと、エラー応答でアプリがクラッシュします。",
-        matchedPersonalHabit:
-          habits.find((h) => /ok|json|エラー/i.test(h.pattern))?.pattern ??
-          "response.ok を確認せずに .json() してしまう",
-        fixSuggestion: fixedBlock.trim(),
-      });
-      fixedLines[idx] = fixedBlock;
-    }
-
-    // 3. Off-by-one <= .length
-    if (/for\s*\(.*<=\s*[\w.]+\.length/.test(raw)) {
-      const fixed = raw.replace("<=", "<");
-      diagnostics.push({
-        line: lineNum,
-        severity: "high",
-        category: "Logic",
-        title: "配列ループの境界値ミス（<= .length による範囲外アクセス）",
-        reason:
-          "0 始まり配列で <= .length まで反復すると、末尾の次の要素（undefined）を参照して TypeError または NaN 計算バグを引き起こします。",
-        matchedPersonalHabit:
-          habits.find((h) => /境界|length|<=|off-by-one/i.test(h.pattern))
-            ?.pattern ?? "配列境界の <= .length（off-by-one）ミス",
-        fixSuggestion: fixed.trim(),
-      });
-      fixedLines[idx] = fixed;
-    }
-
-    // 4. process.env without fallback or validation
-    if (
-      /process\.env\.([A-Z0-9_]+)/.test(raw) &&
-      !/\?\?|\|\||if\s*\(|!process\.env/.test(raw)
-    ) {
-      const envMatch = raw.match(/process\.env\.([A-Z0-9_]+)/);
-      const envName = envMatch?.[1] ?? "ENV_KEY";
-      const fixed = `${raw}\n${indent}if (!process.env.${envName}) throw new Error("Missing required env: ${envName}");`;
-      diagnostics.push({
-        line: lineNum,
-        severity: "medium",
-        category: "Config",
-        title: `環境変数 process.env.${envName} の未設定ガードがありません`,
-        reason:
-          "本番環境や別開発者のマシンで環境変数が未設定のとき undefined が静かに連結され、原因特定が困難な通信障害を起こします。",
-        matchedPersonalHabit:
-          habits.find((h) => /env|環境変数/i.test(h.pattern))?.pattern ??
-          "環境変数 (process.env) の未設定チェック漏れ",
-        fixSuggestion: fixed.trim(),
-      });
-      fixedLines[idx] = fixed;
-    }
-
-    // 5. Python / JS confusion: JSON.parse in Python or unprotected JSON.parse in JS
-    if (/JSON\.parse\s*\(/.test(raw)) {
-      if (/def\s+|import\s+json/.test(code)) {
-        const fixed = raw.replace(/JSON\.parse\s*\(/, "json.loads(");
-        diagnostics.push({
-          line: lineNum,
+    return {
+      quickCause,
+      whyItHappened,
+      category: "Async",
+      severity: "high",
+      matchedHabit,
+      suggestedHabitPattern: "fetch / 非同期処理の await 忘れ",
+      fixSteps,
+      aiFixPrompt: buildAiFixPrompt({
+        errorLog,
+        code,
+        quickCause,
+        fixSummary:
+          "fetch() と res.json() に await を追加し、res.ok のステータス確認と undefined ガードを入れて修正してください",
+      }),
+      terminalCommand: "npx tsc --noEmit",
+      riskScore: 84,
+      summary: quickCause,
+      diagnostics: [
+        {
+          line: 1,
           severity: "high",
-          category: "Logic",
-          title: "Python コード内で JavaScript の JSON.parse() が使われています",
-          reason:
-            "Python の標準 json モジュールでは json.loads() を使用します。JSON.parse() は NameError で即クラッシュします。",
+          category: "Async",
+          title: "非同期処理の await 抜け（Promise のまま参照）",
+          reason: whyItHappened,
           matchedPersonalHabit:
-            habits.find((h) => /JSON|Python|構文/i.test(h.pattern))?.pattern ??
-            null,
-          fixSuggestion: fixed.trim(),
-        });
-        fixedLines[idx] = fixed;
-      } else if (!/try\s*\{/.test(code)) {
-        const fixed = `${indent}  // try/catch で不正JSONを保護\n${raw}`;
-        diagnostics.push({
-          line: lineNum,
-          severity: "medium",
-          category: "API",
-          title: "JSON.parse() が try/catch で保護されていません",
-          reason:
-            "破損した JSON 文字列や空文字を受け取った瞬間に SyntaxError で処理全体が停止します。",
-          matchedPersonalHabit:
-            habits.find((h) => /try|catch|parse|例外/i.test(h.pattern))
-              ?.pattern ?? null,
-          fixSuggestion: "try { JSON.parse(...) } catch { ... }",
-        });
-        fixedLines[idx] = fixed;
-      }
-    }
-
-    // 6. Python division by len() without empty check
-    if (/\/\s*len\s*\(\s*(\w+)\s*\)/.test(raw) && !/if\s+len|if\s+not/.test(raw)) {
-      const listVar = raw.match(/\/\s*len\s*\(\s*(\w+)\s*\)/)?.[1] ?? "items";
-      const fixed = raw.replace(
-        /\/\s*len\s*\(\s*(\w+)\s*\)/,
-        `/ max(len(${listVar}), 1)`
-      );
-      diagnostics.push({
-        line: lineNum,
-        severity: "high",
-        category: "Logic",
-        title: `len(${listVar}) が 0 のときに ZeroDivisionError が発生します`,
-        reason:
-          "空リストが渡された場合にゼロ除算でバッチ処理がクラッシュします。空配列ガードまたは max(len(...), 1) が必要です。",
-        matchedPersonalHabit:
-          habits.find((h) => /境界|ゼロ|空|length/i.test(h.pattern))?.pattern ??
-          null,
-        fixSuggestion: fixed.trim(),
-      });
-      fixedLines[idx] = fixed;
-    }
-
-    // 7. Python open() without encoding="utf-8" or hardcoded backslash path
-    if (/open\s*\([^)]+\)/.test(raw) && !/encoding\s*=/.test(raw)) {
-      const fixed = raw.replace(/\)\s*:/, ', encoding="utf-8"):').replace(/\)$/, ', encoding="utf-8")');
-      diagnostics.push({
-        line: lineNum,
-        severity: "medium",
-        category: "Env",
-        title: "open() に encoding=\"utf-8\" が指定されていません",
-        reason:
-          "Windows 環境では既定エンコーディングが cp932 になるため、日本語や絵文字を含むファイル読み込みで UnicodeDecodeError が発生します。",
-        matchedPersonalHabit:
-          habits.find((h) => /Windows|Linux|UTF|エンコード|パス/i.test(h.pattern))
-            ?.pattern ?? "Windows / Linux パス区切り・UTF-8 エンコード漏れ",
-        fixSuggestion: fixed.trim(),
-      });
-      fixedLines[idx] = fixed;
-    }
-
-    // 8. SQL Injection / Raw string interpolation in SQL or NOT NULL without DEFAULT
-    if (
-      /(SELECT|INSERT|UPDATE|DELETE|ALTER\s+TABLE).*\$\{/i.test(raw) ||
-      /(SELECT|INSERT|UPDATE|DELETE).*['"]\s*\+\s*\w+/i.test(raw)
-    ) {
-      const fixed = `${indent}// [修正] プレースホルダ ($1) を使用して SQL インジェクションを防止\n${raw.replace(/\$\{([^}]+)\}/g, "$1_PARAM")}`;
-      diagnostics.push({
-        line: lineNum,
-        severity: "high",
-        category: "DB",
-        title: "SQL クエリへの直接文字列展開（SQL インジェクション脆弱性）",
-        reason:
-          "ユーザー入力を SQL 文字列に直接結合すると、任意の DB 操作やデータ漏洩を許す重大な脆弱性になります。必ずプリペアドステートメントを使用してください。",
-        matchedPersonalHabit:
-          habits.find((h) => /SQL|DB|インジェクション|セキュリティ/i.test(h.pattern))
-            ?.pattern ?? null,
-        fixSuggestion: "db.query('SELECT * FROM users WHERE id = $1', [userId])",
-      });
-      fixedLines[idx] = fixed;
-    }
-
-    if (/ADD\s+COLUMN.*NOT\s+NULL/i.test(raw) && !/DEFAULT/i.test(raw)) {
-      const fixed = raw.replace(/NOT\s+NULL/i, "NOT NULL DEFAULT ''");
-      diagnostics.push({
-        line: lineNum,
-        severity: "high",
-        category: "DB",
-        title: "既存テーブルへの DEFAULT なし NOT NULL カラム追加",
-        reason:
-          "本番テーブルに既存レコードが 1 件でもある場合、DEFAULT 値なしの NOT NULL カラム追加はマイグレーションエラーで失敗します。",
-        matchedPersonalHabit:
-          habits.find((h) => /DB|マイグレーション|NOT NULL/i.test(h.pattern))
-            ?.pattern ?? null,
-        fixSuggestion: fixed.trim(),
-      });
-      fixedLines[idx] = fixed;
-    }
-
-    // 9. Hardcoded secret / API key or insecure token comparison
-    if (
-      /(secret|apiKey|api_key|password|jwtSecret)\s*[:=]\s*["'][A-Za-z0-9_\-]{8,}["']/i.test(
-        raw
-      )
-    ) {
-      const fixed = raw.replace(
-        /[:=]\s*["'][A-Za-z0-9_\-]{8,}["']/,
-        "= process.env.APP_SECRET_KEY ?? ''"
-      );
-      diagnostics.push({
-        line: lineNum,
-        severity: "high",
-        category: "Security",
-        title: "シークレットキーまたは認証情報のハードコード検出",
-        reason:
-          "ソースコード内に秘密鍵やトークンを直接記述すると、Git 履歴から永久に漏洩します。環境変数へ移動してください。",
-        matchedPersonalHabit:
-          habits.find((h) => /env|環境変数|secret|セキュリティ/i.test(h.pattern))
-            ?.pattern ?? "環境変数 (process.env) の未設定チェック漏れ",
-        fixSuggestion: fixed.trim(),
-      });
-      fixedLines[idx] = fixed;
-    }
-
-    // 10. Floating point currency calculation without Math.round
-    if (/\*\s*(1\.08|1\.1|1\.10|0\.1)\b/.test(raw) && !/Math\.round|Math\.floor/.test(raw)) {
-      const fixed = raw.replace(
-        /(\w+\s*\*\s*(?:1\.08|1\.1|1\.10|0\.1))/,
-        "Math.round($1)"
-      );
-      diagnostics.push({
-        line: lineNum,
-        severity: "medium",
-        category: "Logic",
-        title: "金額・税率計算での浮動小数点端数誤差（Math.round 未適用）",
-        reason:
-          "JavaScript の浮動小数点演算（例: 100 * 1.1 = 110.00000000000001）をそのまま決済 API に渡すと整数型エラーや 1 円ズレの原因になります。",
-        matchedPersonalHabit:
-          habits.find((h) => /金額|小数|境界|Logic/i.test(h.pattern))?.pattern ??
-          null,
-        fixSuggestion: fixed.trim(),
-      });
-      fixedLines[idx] = fixed;
-    }
-
-    // 11. Sensitive console.log in production
-    if (/console\.log\s*\(.*(?:password|token|secret|card|key)/i.test(raw)) {
-      const fixed = `${indent}// [セキュリティ修正] 機密情報のログ出力を削除`;
-      diagnostics.push({
-        line: lineNum,
-        severity: "high",
-        category: "Security",
-        title: "機密情報（token / password / secret）の console.log 出力",
-        reason:
-          "本番ログ収集基盤に平文の認証トークンやパスワードが記録され、内部漏洩やコンプライアンス違反につながります。",
-        matchedPersonalHabit:
-          habits.find((h) => /ログ|console|セキュリティ/i.test(h.pattern))
-            ?.pattern ?? null,
-        fixSuggestion: fixed.trim(),
-      });
-      fixedLines[idx] = fixed;
-    }
-  });
-
-  if (diagnostics.length === 0) {
-    diagnostics.push({
-      line: 1,
-      severity: "low",
-      category: "Config",
-      title: "重大な静的バグは未検出（あなたの過去クセ DNA と照合済み）",
-      reason: `「${taskType}」の作業前に、右側の落とし穴チェックリストで境界値・エラー処理・環境変数を最終確認してください。`,
-      matchedPersonalHabit: habits[0]?.pattern ?? null,
-      fixSuggestion: "異常系（ネットワーク切断・空データ）のテストを 1 件追加すると万全です。",
-    });
+            matchedHabit?.pattern ?? "fetch / 非同期処理の await 忘れ",
+          fixSuggestion:
+            "const res = await fetch(...); const data = await res.json();",
+        },
+      ],
+      fixedCode: code
+        ? code
+            .replace(/=\s*fetch\s*\(/g, "= await fetch(")
+            .replace(/=\s*(\w+)\.json\s*\(/g, "= await $1.json(")
+        : "",
+      preflightChecklist: buildChecklistForTask(taskType, habits),
+      source: "local-analyzer",
+      taskType,
+      errorLog,
+    };
   }
 
-  const highCount = diagnostics.filter((d) => d.severity === "high").length;
-  const medCount = diagnostics.filter((d) => d.severity === "medium").length;
-  const riskScore = Math.min(98, Math.max(12, highCount * 32 + medCount * 16 + 14));
+  // Case 2: EPERM / Module not found / Can't resolve / ENOENT
+  if (
+    /EPERM|ENOENT|Module not found|Can't resolve|Cannot find module|FileNotFoundError|No module named/i.test(
+      combined
+    )
+  ) {
+    const matchedHabit = findMatchingHabit(
+      habits,
+      /パス|Module|import|EPERM|Windows|Env/i,
+      "Env"
+    );
+    const isEperm = /EPERM|operation not permitted/i.test(combined);
+    const quickCause = isEperm
+      ? "Windows で開発サーバーが .next やファイルを掴んでロックしている（EPERM）か、import パスの大文字・小文字ズレが起きています。"
+      : "import 先のファイルパス（大文字・小文字・階層）が違っているか、パッケージがまだ npm install されていません。";
+    const whyItHappened =
+      "VS Code でファイル名を変更した直後やパッケージ追加直後によく起きます。また Windows 環境では複数の npm run dev が同時に動いていると .next フォルダへの書き込みが EPERM で拒否されることがあります。";
+    const terminalCmd = isEperm
+      ? "Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue; npm run dev"
+      : "npm install && npx tsc --noEmit";
 
-  const declNote = taskDeclaration
-    ? `（作業宣言:「${taskDeclaration}」）`
-    : "";
+    const fixSteps: FixStep[] = [
+      {
+        stepNumber: 1,
+        where: "VS Code エディタ",
+        instruction:
+          "エラーに出ている import 文を Ctrl + クリックし、ファイル名の大文字・小文字（例: OrderCard と ordercard）が実際のファイルと完全一致しているか確認します。",
+      },
+      {
+        stepNumber: 2,
+        where: "VS Code ターミナル",
+        instruction: isEperm
+          ? "実行中のターミナルで Ctrl + C を押してサーバーを止め、.next キャッシュをクリアして再起動します。"
+          : "不足しているパッケージをインストールし、型チェックでパス解決を確認します。",
+        codeOrCommand: terminalCmd,
+      },
+      {
+        stepNumber: 3,
+        where: "VS Code コマンドパレット",
+        instruction:
+          "赤波線が消えない場合は Ctrl+Shift+P →「TypeScript: Restart TS Server」を実行します。",
+      },
+    ];
+
+    return {
+      quickCause,
+      whyItHappened,
+      category: "Env",
+      severity: "high",
+      matchedHabit,
+      suggestedHabitPattern:
+        "import パス大文字小文字ミス・パッケージ未導入・EPERMロック",
+      fixSteps,
+      aiFixPrompt: buildAiFixPrompt({
+        errorLog,
+        code,
+        quickCause,
+        fixSummary:
+          "import パスの大文字・小文字・エイリアス（@/）のズレを修正し、必要なパッケージまたは EPERM 回避手順を提示してください",
+      }),
+      terminalCommand: terminalCmd,
+      riskScore: 76,
+      summary: quickCause,
+      diagnostics: [
+        {
+          line: 1,
+          severity: "high",
+          category: "Env",
+          title: "モジュール未検出 / EPERM ファイルロック",
+          reason: whyItHappened,
+          matchedPersonalHabit: matchedHabit?.pattern ?? null,
+          fixSuggestion: terminalCmd,
+        },
+      ],
+      fixedCode: code,
+      preflightChecklist: buildChecklistForTask(taskType, habits),
+      source: "local-analyzer",
+      taskType,
+      errorLog,
+    };
+  }
+
+  // Case 3: Next.js Hydration / "use client" error
+  if (
+    /Hydration failed|server rendered HTML|use client|Client Component|useState|useEffect|window is not defined|localStorage is not defined/i.test(
+      combined
+    )
+  ) {
+    const matchedHabit = findMatchingHabit(
+      habits,
+      /use client|Hydration|Next|React|localStorage|window/i,
+      "Hydration"
+    );
+    const quickCause =
+      "ファイルの1行目に `\"use client\";` を書き忘れているか、サーバー描画とブラウザ描画で異なる値（Date.now / localStorage / 乱数）を直接表示しています。";
+    const whyItHappened =
+      "Next.js (App Router) ではすべてのコンポーネントが標準でサーバー側で実行されます。useState / useEffect / onClick を使う場合は先頭に \"use client\" が必要で、ブラウザ専用の値はマウント後（useEffect内）で読み込む必要があります。";
+
+    const fixSteps: FixStep[] = [
+      {
+        stepNumber: 1,
+        where: "VS Code エディタ",
+        instruction:
+          "エラーが発生しているコンポーネントの1行目（すべての import より上）に \"use client\"; を追加します。",
+        codeOrCommand: `"use client";\n\nimport React, { useState, useEffect } from "react";`,
+      },
+      {
+        stepNumber: 2,
+        where: "VS Code エディタ",
+        instruction:
+          "Date.now()、Math.random()、localStorage、window を JSX 内で直接使っている箇所があれば、useEffect の中で state にセットするよう移動します。",
+      },
+      {
+        stepNumber: 3,
+        where: "ブラウザ / VS Code",
+        instruction:
+          "ファイルを保存（Ctrl + S）し、ブラウザをリロードして赤画面（Hydration Error）が消えることを確認します。",
+      },
+    ];
+
+    return {
+      quickCause,
+      whyItHappened,
+      category: "Hydration",
+      severity: "high",
+      matchedHabit,
+      suggestedHabitPattern:
+        "Next.js の 'use client' 宣言忘れ＆初期描画 Hydration ズレ",
+      fixSteps,
+      aiFixPrompt: buildAiFixPrompt({
+        errorLog,
+        code,
+        quickCause,
+        fixSummary:
+          "ファイル先頭への \"use client\" 追加と、Hydration mismatch の原因になっている動的値（Date/localStorage/ネストタグ）を useEffect または安全な構造に修正してください",
+      }),
+      terminalCommand: "npx tsc --noEmit",
+      riskScore: 78,
+      summary: quickCause,
+      diagnostics: [
+        {
+          line: 1,
+          severity: "high",
+          category: "Hydration",
+          title: "Next.js Client Component 宣言または Hydration 不一致",
+          reason: whyItHappened,
+          matchedPersonalHabit: matchedHabit?.pattern ?? null,
+          fixSuggestion: 'ファイル最上部に "use client"; を追加',
+        },
+      ],
+      fixedCode: code ? `"use client";\n${code}` : "",
+      preflightChecklist: buildChecklistForTask(
+        "React / Next.js 画面・Hydration",
+        habits
+      ),
+      source: "local-analyzer",
+      taskType,
+      errorLog,
+    };
+  }
+
+  // Case 4: Git / GitHub push rejected / Merge conflict
+  if (
+    /rejected|non-fast-forward|failed to push|fetch first|CONFLICT|Merge conflict|<<<<<<<|divergent branches/i.test(
+      combined
+    )
+  ) {
+    const matchedHabit = findMatchingHabit(
+      habits,
+      /git|pull|push|rejected|コンフリクト/i,
+      "Git"
+    );
+    const quickCause =
+      "GitHub（リモート）側にまだ手元の PC に取り込んでいない最新コミットがあるため、上書き防止として git push がブロックされています。";
+    const whyItHappened =
+      "他のメンバー（または別環境・GitHub Web画面）で追加された変更がリモートにあります。先に git pull で手元に合流させてから再度 push すれば安全に解決します。";
+    const terminalCmd = "git pull --rebase origin main";
+
+    const fixSteps: FixStep[] = [
+      {
+        stepNumber: 1,
+        where: "VS Code ターミナル",
+        instruction:
+          "まず GitHub 側の最新変更を手元のブランチに取り込みます（下のコマンドをコピーして実行）。",
+        codeOrCommand: terminalCmd,
+      },
+      {
+        stepNumber: 2,
+        where: "VS Code ソース管理（コンフリクト時のみ）",
+        instruction:
+          "もし CONFLICT と表示されたら、VS Code で該当ファイルを開き「現在の変更を取り込む」または「両方の変更を取り込む」をクリックして保存します。",
+      },
+      {
+        stepNumber: 3,
+        where: "VS Code ターミナル",
+        instruction:
+          "取り込み完了後、もう一度 GitHub へ push します。",
+        codeOrCommand: "git push origin main",
+      },
+    ];
+
+    return {
+      quickCause,
+      whyItHappened,
+      category: "Git",
+      severity: "medium",
+      matchedHabit,
+      suggestedHabitPattern:
+        "作業前・push前の git pull 忘れによる push rejected",
+      fixSteps,
+      aiFixPrompt: buildAiFixPrompt({
+        errorLog,
+        code,
+        quickCause,
+        fixSummary:
+          "現在の Git エラーを安全に解消し、作業中の変更を失わずに GitHub に push するまでの正確なコマンド手順を案内してください",
+      }),
+      terminalCommand: terminalCmd,
+      riskScore: 68,
+      summary: quickCause,
+      diagnostics: [
+        {
+          line: 1,
+          severity: "medium",
+          category: "Git",
+          title: "GitHub リモート差分による push rejected / 競合",
+          reason: whyItHappened,
+          matchedPersonalHabit: matchedHabit?.pattern ?? null,
+          fixSuggestion: terminalCmd,
+        },
+      ],
+      fixedCode: code,
+      preflightChecklist: buildChecklistForTask(
+        "Git / GitHub Push・PR作成",
+        habits
+      ),
+      source: "local-analyzer",
+      taskType,
+      errorLog,
+    };
+  }
+
+  // Case 5: SyntaxError / Unexpected token '<' (HTML returned instead of JSON)
+  if (
+    /SyntaxError|Unexpected token|Unexpected end of JSON|<!DOCTYPE|JSON\.parse/i.test(
+      combined
+    )
+  ) {
+    const matchedHabit = findMatchingHabit(
+      habits,
+      /ok|json|SyntaxError|API|エラー/i,
+      "API"
+    );
+    const quickCause =
+      "API から JSON ではなくエラー画面（HTML の <!DOCTYPE...）や空データが返っているのに、res.ok を確認せず .json() でパースしています。";
+    const whyItHappened =
+      "API の URL パス違い（404 Not Found）やサーバー側クラッシュ（500）のとき、ブラウザは HTML エラーページを受け取ります。それを JSON として読もうとすると 1文字目の `<` で SyntaxError になります。";
+
+    const fixSteps: FixStep[] = [
+      {
+        stepNumber: 1,
+        where: "VS Code エディタ",
+        instruction:
+          "res.json() の直前に if (!res.ok) チェックを追加し、エラー時のステータスと中身を確認できるようにします。",
+        codeOrCommand: `if (!res.ok) {\n  const errText = await res.text();\n  throw new Error(\`API Error (\${res.status}): \${errText.slice(0, 120)}\`);\n}`,
+      },
+      {
+        stepNumber: 2,
+        where: "VS Code エディタ",
+        instruction:
+          "fetch('/api/...') の URL スペルと、対象の route.ts ファイルの場所・メソッド名（export async function POST など）が一致しているか確認します。",
+      },
+      {
+        stepNumber: 3,
+        where: "ブラウザ DevTools",
+        instruction:
+          "F12 → Network タブで赤いリクエストをクリックし、実際の HTTP ステータス（404 / 500）を確認します。",
+      },
+    ];
+
+    return {
+      quickCause,
+      whyItHappened,
+      category: "API",
+      severity: "high",
+      matchedHabit,
+      suggestedHabitPattern: "response.ok を確認せずに .json() してしまう",
+      fixSteps,
+      aiFixPrompt: buildAiFixPrompt({
+        errorLog,
+        code,
+        quickCause,
+        fixSummary:
+          "res.ok の事前チェックと try/catch を追加し、HTML エラー応答や空レスポンスでもクラッシュしないように修正してください",
+      }),
+      terminalCommand: "npx tsc --noEmit",
+      riskScore: 80,
+      summary: quickCause,
+      diagnostics: [
+        {
+          line: 1,
+          severity: "high",
+          category: "API",
+          title: "HTTP エラー応答時の JSON パース失敗（res.ok 未確認）",
+          reason: whyItHappened,
+          matchedPersonalHabit:
+            matchedHabit?.pattern ??
+            "response.ok を確認せずに .json() してしまう",
+          fixSuggestion: "if (!res.ok) throw new Error(...)",
+        },
+      ],
+      fixedCode: code,
+      preflightChecklist: buildChecklistForTask(taskType, habits),
+      source: "local-analyzer",
+      taskType,
+      errorLog,
+    };
+  }
+
+  // Case 6: Default / General Error or TypeScript / Env / Logic issue
+  const matchedHabit =
+    findMatchingHabit(
+      habits,
+      /env|境界|length|型|undefined|null|Logic|Config/i
+    ) ??
+    habits[0] ??
+    null;
+
+  const quickCause = errorLog.trim()
+    ? `エラーログ「${errorLog.trim().split("\n")[0].slice(0, 70)}」は、未定義値（undefined）参照・型不一致・または環境設定の抜けが原因です。`
+    : "作業前の落とし穴チェック完了：あなたの過去クセDNAと照合し、注意すべきポイントを整理しました。";
+
+  const whyItHappened =
+    "VS Code 上で期待しているデータの型や環境変数（process.env）、または配列の境界条件が実行時の値と食い違っている可能性があります。以下の3ステップで安全に切り分けられます。";
+
+  const fixSteps: FixStep[] = [
+    {
+      stepNumber: 1,
+      where: "VS Code エディタ",
+      instruction:
+        "エラーメッセージ末尾の「ファイル名:行番号」を Ctrl + クリックして該当行へジャンプし、変数が undefined になるケースに ?. と ??（初期値）を付けます。",
+    },
+    {
+      stepNumber: 2,
+      where: "VS Code ターミナル",
+      instruction:
+        "TypeScript の一括型チェックを実行して、関連する型ズレ箇所を洗い出します。",
+      codeOrCommand: "npx tsc --noEmit",
+    },
+    {
+      stepNumber: 3,
+      where: "VS Code / AI チャット",
+      instruction:
+        "下の「🤖 VS Code / AI にそのまま貼る修正指示をコピー」ボタンを押して、VS Code の AI チャットに貼り付けると即座に修正コードが得られます。",
+    },
+  ];
 
   return {
-    riskScore,
-    summary: `あなたの過去ミスDNA（${habits.length}件）と「${taskType}」${declNote}を照合し、${diagnostics.length}件の危険箇所と修正パッチを生成しました。`,
-    diagnostics,
-    fixedCode: fixedLines.join("\n"),
+    quickCause,
+    whyItHappened,
+    category: "Logic",
+    severity: "medium",
+    matchedHabit,
+    suggestedHabitPattern:
+      errorLog.trim().split("\n")[0].slice(0, 48) ||
+      "undefined ガード（?. / ??）と型チェック漏れ",
+    fixSteps,
+    aiFixPrompt: buildAiFixPrompt({
+      errorLog,
+      code,
+      quickCause,
+      fixSummary:
+        "エラーの原因箇所を特定し、undefined/null ガードと型整合性を保った修正コードを提示してください",
+    }),
+    terminalCommand: "npx tsc --noEmit",
+    riskScore: 62,
+    summary: quickCause,
+    diagnostics: [
+      {
+        line: 1,
+        severity: "medium",
+        category: "Logic",
+        title: "エラーログ＆過去クセDNA照合診断",
+        reason: whyItHappened,
+        matchedPersonalHabit: matchedHabit?.pattern ?? null,
+        fixSuggestion: "npx tsc --noEmit で型と未定義参照を確認",
+      },
+    ],
+    fixedCode: code,
     preflightChecklist: buildChecklistForTask(taskType, habits),
     source: "local-analyzer",
     taskType,
-    taskDeclaration,
+    errorLog,
   };
-}
-
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const githubUrl = searchParams.get("githubUrl");
-  if (!githubUrl) {
-    return NextResponse.json(
-      { error: "githubUrl パラメータを指定してください。" },
-      { status: 400 }
-    );
-  }
-  const converted = convertGitHubUrlToRaw(githubUrl);
-  if (!converted.isValidGitHub) {
-    return NextResponse.json(
-      {
-        error:
-          "有効な GitHub ファイル URL（https://github.com/owner/repo/blob/... または raw.githubusercontent.com/...）を入力してください。",
-      },
-      { status: 400 }
-    );
-  }
-
-  try {
-    const resp = await fetch(converted.rawUrl, {
-      headers: { Accept: "text/plain" },
-      signal: AbortSignal.timeout(7000),
-    });
-    if (!resp.ok) {
-      return NextResponse.json(
-        {
-          error: `GitHub Raw ファイルの取得に失敗しました (HTTP ${resp.status})。公開リポジトリのファイル URL か確認してください。`,
-          rawUrl: converted.rawUrl,
-        },
-        { status: resp.status }
-      );
-    }
-    const text = await resp.text();
-    const truncated = text.split("\n").slice(0, 160).join("\n");
-    return NextResponse.json({
-      code: truncated,
-      rawUrl: converted.rawUrl,
-      fileName: converted.fileName,
-      lineCount: truncated.split("\n").length,
-    });
-  } catch {
-    return NextResponse.json(
-      {
-        error:
-          "GitHub への通信に失敗しました（オフラインまたはネットワーク制限）。内蔵プリセットまたは直接コード貼り付けをご利用ください。",
-        rawUrl: converted.rawUrl,
-      },
-      { status: 502 }
-    );
-  }
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-
-    // Handle GitHub Raw URL fetch action if requested via POST
-    if (body.action === "fetch-github" && typeof body.githubUrl === "string") {
-      const converted = convertGitHubUrlToRaw(body.githubUrl);
-      if (!converted.isValidGitHub) {
-        return NextResponse.json(
-          {
-            error:
-              "有効な GitHub ファイル URL（github.com/.../blob/... または raw.githubusercontent.com/...）を入力してください。",
-          },
-          { status: 400 }
-        );
-      }
-      try {
-        const resp = await fetch(converted.rawUrl, {
-          headers: { Accept: "text/plain" },
-          signal: AbortSignal.timeout(7000),
-        });
-        if (!resp.ok) {
-          return NextResponse.json(
-            {
-              error: `GitHub ファイルを取得できませんでした (HTTP ${resp.status})`,
-              rawUrl: converted.rawUrl,
-            },
-            { status: resp.status }
-          );
-        }
-        const text = await resp.text();
-        const truncated = text.split("\n").slice(0, 160).join("\n");
-        return NextResponse.json({
-          code: truncated,
-          rawUrl: converted.rawUrl,
-          fileName: converted.fileName,
-          lineCount: truncated.split("\n").length,
-        });
-      } catch {
-        return NextResponse.json(
-          {
-            error:
-              "ネットワーク制限により GitHub Raw URL へ接続できませんでした。プリセットまたは直接入力をご利用ください。",
-            rawUrl: converted.rawUrl,
-          },
-          { status: 502 }
-        );
-      }
-    }
-
+    const errorLog = String(body.errorLog ?? "");
     const code = String(body.code ?? "");
     const taskType = String(body.taskType ?? "Next.js API / フォーム送信");
-    const taskDeclaration = body.taskDeclaration
-      ? String(body.taskDeclaration)
-      : undefined;
     const habits: PersonalMistake[] = Array.isArray(body.habits)
       ? body.habits
       : [];
 
+    const fallback = runDeterministicErrorDiagnosis(
+      errorLog,
+      code,
+      taskType,
+      habits
+    );
+
     const apiKey = process.env.GEMINI_API_KEY;
-    if (apiKey && code.trim().length > 0) {
+    if (apiKey && (errorLog.trim().length > 0 || code.trim().length > 0)) {
       try {
         const prompt = [
-          "あなたは開発者の過去のミスクセDNAを記憶してバグを未然に防ぐパーソナライズド・コード監査AIです。",
-          `選択された作業カテゴリ: ${taskType}`,
-          taskDeclaration ? `開発者の作業宣言: ${taskDeclaration}` : "",
-          `この開発者の過去のやりがちミスDNA一覧: ${JSON.stringify(
-            habits.map((h) => ({ pattern: h.pattern, category: h.category }))
+          "あなたはVS CodeやGitHubで開発中のユーザーを助ける「エラー即解決サイドキックAI」です。",
+          "ユーザーが貼り付けたエラーログ（および任意のコード断片）と、ユーザーの過去のミスクセDNAを照合し、初心者にも3秒で分かる原因とVS Code/ターミナルでの具体的な直し方をJSONで返してください。",
+          `現在の作業種類: ${taskType}`,
+          `ユーザーの過去クセDNA一覧: ${JSON.stringify(
+            habits.map((h) => ({
+              id: h.id,
+              pattern: h.pattern,
+              category: h.category,
+              hits: h.hits,
+            }))
           )}`,
-          "以下のコードを行番号付きで解析し、必ず有効なJSONのみを返してください。",
-          'スキーマ: {"riskScore":0-100,"summary":"要約","diagnostics":[{"line":1,"severity":"high|medium|low","category":"Async|API|Logic|Config|Security|DB|Env","title":"短いタイトル","reason":"理由","matchedPersonalHabit":"該当する過去クセまたはnull","fixSuggestion":"修正案"}],"fixedCode":"修正後のコード全体","preflightChecklist":[{"id":"c1","title":"作業前チェック項目","why":"理由","personalMatch":true}]}',
-          "対象コード:",
-          code
-            .split("\n")
-            .map((l, i) => `${i + 1}: ${l}`)
-            .join("\n"),
+          `貼り付けられたエラーログ:\n${errorLog || "(なし)"}`,
+          code.trim() ? `添えられた該当コード:\n${code}` : "",
+          '必ず以下のJSONスキーマのみを返してください: {"quickCause":"1文で3秒で分かる原因の結論","whyItHappened":"初心者にも優しい理由説明","category":"Async|API|Logic|Config|Security|DB|Env|Hydration|Git","severity":"high|medium|low","matchedHabitPattern":"一致した過去クセのpattern文字列またはnull","suggestedHabitPattern":"今後再発防止としてクセDNAに記憶すべき短い名前","fixSteps":[{"stepNumber":1,"where":"VS Code エディタ または VS Code ターミナル","instruction":"具体的な手順","codeOrCommand":"修正コードやコマンド（任意）"}],"aiFixPrompt":"VS CodeのAI（Copilot等）にそのまま貼れる丁寧な修正指示プロンプト","terminalCommand":"ターミナルで実行すべきコマンド1行またはnull"}',
         ]
           .filter(Boolean)
-          .join("\n");
+          .join("\n\n");
 
         const resp = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
@@ -762,38 +833,53 @@ export async function POST(request: Request) {
           if (text) {
             const parsed = JSON.parse(text);
             if (
-              Array.isArray(parsed.diagnostics) &&
-              typeof parsed.fixedCode === "string"
+              typeof parsed.quickCause === "string" &&
+              Array.isArray(parsed.fixSteps)
             ) {
+              const matchedHabit =
+                (parsed.matchedHabitPattern &&
+                  habits.find(
+                    (h) =>
+                      h.pattern.toLowerCase() ===
+                      String(parsed.matchedHabitPattern).toLowerCase()
+                  )) ||
+                fallback.matchedHabit;
+
               return NextResponse.json({
-                ...parsed,
-                diagnostics: parsed.diagnostics.map((d: DiagnosticIssue) => ({
-                  ...d,
-                  category: d.category || "Logic",
-                })),
-                preflightChecklist:
-                  Array.isArray(parsed.preflightChecklist) &&
-                  parsed.preflightChecklist.length > 0
-                    ? parsed.preflightChecklist
-                    : buildChecklistForTask(taskType, habits),
+                ...fallback,
+                quickCause: parsed.quickCause,
+                whyItHappened:
+                  parsed.whyItHappened || fallback.whyItHappened,
+                category: parsed.category || fallback.category,
+                severity: parsed.severity || fallback.severity,
+                matchedHabit,
+                suggestedHabitPattern:
+                  parsed.suggestedHabitPattern ||
+                  fallback.suggestedHabitPattern,
+                fixSteps:
+                  parsed.fixSteps.length > 0
+                    ? parsed.fixSteps
+                    : fallback.fixSteps,
+                aiFixPrompt: parsed.aiFixPrompt || fallback.aiFixPrompt,
+                terminalCommand:
+                  parsed.terminalCommand !== undefined
+                    ? parsed.terminalCommand
+                    : fallback.terminalCommand,
+                summary: parsed.quickCause,
                 source: "gemini",
-                taskType,
-                taskDeclaration,
-              });
+              } satisfies AuditResponse);
             }
           }
         }
       } catch {
-        // Fall back to deterministic analyzer
+        // Fall back to deterministic error analyzer
       }
     }
 
-    return NextResponse.json(
-      runDeterministicAudit(code, taskType, habits, taskDeclaration)
-    );
+    return NextResponse.json(fallback);
   } catch {
     return NextResponse.json(
-      { error: "コード解析リクエストの処理に失敗しました。" },
+      { error: "エラー診断リクエストの処理に失敗しました。" },
       { status: 400 }
     );
   }

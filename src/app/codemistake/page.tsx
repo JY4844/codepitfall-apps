@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import CodePitfallMirror from "@/components/CodePitfallMirror";
 
 export const metadata: Metadata = {
-  title: "CodePitfall Mirror Ultra — パーソナル・コードミスDNA＆作業落とし穴チェッカー",
+  title: "CodePitfall Mirror — VS Code / GitHub エラー即解決＆過去クセDNA補助ツール",
   description:
-    "開発者個人のやりがちミスDNAを記憶・可視化し、GitHub URL直接監査・並列Diffビューア・音声作業宣言・6種の作業別落とし穴テンプレートで事故を未然に防ぐ次世代AI IDEチェッカー",
+    "VS Code や GitHub でエラーが出た瞬間に貼り付けるだけ。3秒で分かる原因・過去クセDNA一致アラート・VS Code/AI用ワンクリック修正指示コピーを備えた開発サイドキック",
 };
 
 export default function CodeMistakePage() {
