@@ -45,7 +45,12 @@ export type ShowcaseAppId =
   | "denki"
   | "gift"
   | "shaken"
-  | "kakeibo";
+  | "kakeibo"
+  | "sleep"
+  | "bento"
+  | "studyplan"
+  | "renrakucho"
+  | "water";
 
 export interface ShowcaseAppConfig {
   id: ShowcaseAppId;
@@ -1143,5 +1148,125 @@ export const SHOWCASE_APPS: Record<ShowcaseAppId, ShowcaseAppConfig> = {
     gasPrefix: "[固定費AI]",
     systemInstruction:
       "あなたは日々の節約疲れを防ぎ、インパクトの大きい固定費からスマートに見直す家計アドバイザーです。入力された固定費メモから、alert_level (high/medium/low)、alert_title（今すぐ見直すと最も効果が大きい固定費）、alert_message（生活満足度を下げずに年間数万円浮かすコツ）、items（通信費・ジム/サブスク・プラン見直しの優先順位3点）、checklist（解約締日・MNP/メールアドレス引き継ぎ・データ移行チェック）、copyable_draft（今月中にやる固定費見直しアクション宣言メモ）、suggested_tasks（更新日前の解約・プラン変更カレンダー登録タスク）を日本語で構造化してください。",
+  },
+  sleep: {
+    id: "sleep",
+    name: "睡眠リズム・寝不足リカバリーコーチ AI",
+    category: "暮らし・家族部門",
+    tagline: "スマホ見すぎや夜更かしで崩れた睡眠リズムを、翌日の予定に合わせて3日で無理なく立て直す",
+    subtitle:
+      "「また寝不足で日中ボーッとする…」を解消。Gemini 3.8 Flash が仮眠タイミング・カフェイン制限・今夜の就寝ルーティンを設計します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 睡眠リカバリー",
+    accentColor: "#4f46e5",
+    accentSoft: "#eef2ff",
+    inputLabel: "昨夜の睡眠時間・起床時刻・今日の予定・眠気の悩み",
+    inputPlaceholder: "例: 深夜2時半までスマホを見てしまい睡眠4時間。14時から大事な会議がある...",
+    sampleText:
+      "昨夜は深夜2時まで動画を見てしまい4時間半しか寝られなかった。今朝は7時起床で、13時半から2時間のオンライン研修がある。今日を乗り切るコツと、今夜23時半までに自然に眠るための段取りを知りたい。",
+    sampleLocation: "朝の支度〜今夜の就寝前",
+    showLocationInput: true,
+    submitLabel: "今日を乗り切る＆今夜整える睡眠プランを生成",
+    section1Title: "1. 今日の眠気対策＆今夜の入眠3ステップ",
+    section2Title: "2. 夕方〜就寝前のスマホ・光・カフェインチェック",
+    section3Title: "3. 枕元に貼れる今夜のナイトルーティンメモ",
+    gasPrefix: "[睡眠AI]",
+    systemInstruction:
+      "あなたは無理な根性論を避け、生体リズムに沿って睡眠不足を立て直す睡眠リカバリーコーチです（慢性的な不眠や強い日中の眠気がある場合は医療機関へ相談するよう案内してください）。入力内容から、alert_level (high/medium/low)、alert_title（今日の眠気ピークと要注意時間帯）、alert_message（今夜の深睡眠を取り戻すコツ）、items（朝の光・15分パワーナップ・夜のスマホ断ち3点）、checklist（カフェイン終了時刻・入浴タイミング・アラーム設定チェック）、copyable_draft（今夜そのまま実行できる3行ナイトルーティンメモ）、suggested_tasks（昼休み仮眠・就寝1時間前アラームタスク）を日本語で構造化してください。",
+  },
+  bento: {
+    id: "bento",
+    name: "15分時短お弁当＆作り置き段取り AI",
+    category: "暮らし・家族部門",
+    tagline: "冷蔵庫の残り物と朝の持ち時間から「同時進行15分タイムライン」でお弁当3品を完成",
+    subtitle:
+      "「朝のお弁当作りが毎日戦争…」を解決。Gemini 3.8 Flash がフライパン1つ＋レンジ併用の最短段取りと傷み防止チェックを作成します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 朝15分キッチン段取り",
+    accentColor: "#f97316",
+    accentSoft: "#fff7ed",
+    inputLabel: "使える食材・冷凍食品・朝の調理時間・食べる人の好み",
+    inputPlaceholder: "例: 鶏むね肉、卵2個、ブロッコリー、ミニトマト。朝15分以内で2人分作りたい...",
+    sampleText:
+      "冷蔵庫にある物：豚こま肉、卵3個、冷凍ブロッコリー、ちくわ、ミニトマト。朝15分以内で高校生1人分のお弁当を彩りよく作りたい。洗い物は最小限にしたい。",
+    sampleLocation: "平日朝6:30のキッチン",
+    showLocationInput: true,
+    submitLabel: "同時進行15分お弁当レシピ＆段取りを生成",
+    section1Title: "1. 0分〜15分の同時進行タイムライン3品",
+    section2Title: "2. 食中毒・汁漏れ防止＆冷まし方チェック",
+    section3Title: "3. 冷蔵庫に貼れる今日のメニュー＆買い足しメモ",
+    gasPrefix: "[お弁当AI]",
+    systemInstruction:
+      "あなたは忙しい朝に15分以内でお弁当を仕上げる時短料理段取りコーチです。食材と制限時間から、alert_level (high/medium/low)、alert_title（食中毒防止・冷まし時間の注意点）、alert_message（洗い物を増やさず彩りを上げるコツ）、items（主菜・副菜・すき間おかずの同時進行手順3点）、checklist（中心加熱・汁気切り・保冷剤チェック）、copyable_draft（買い物リスト兼お弁当献立メモ）、suggested_tasks（前夜解凍・保冷剤冷凍リマインドタスク）を日本語で構造化してください。",
+  },
+  studyplan: {
+    id: "studyplan",
+    name: "テスト・資格逆算スキマ学習ナビ AI",
+    category: "シゴト・学び部門",
+    tagline: "試験日と残り範囲・1日のスキマ時間から「今日解くページ数」まで落とし込む逆算学習プラン",
+    subtitle:
+      "「計画倒れで直前に焦る」を防ぐ学習伴走コーチ。Gemini 3.8 Flash が通勤・通学15分単位で回る現実的なスケジュールを作ります。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 逆算スキマ学習",
+    accentColor: "#0284c7",
+    accentSoft: "#f0f9ff",
+    inputLabel: "目指す試験・試験日・残り教材量・1日に取れるスキマ時間",
+    inputPlaceholder: "例: 3週間後にTOEIC。公式問題集がまだ半分残っている。平日は通勤往復40分のみ...",
+    sampleText:
+      "あと21日で基本情報技術者試験。過去問道場とテキストがまだ4割残っている。平日は通勤の片道20分×2と夜30分、土日は各3時間勉強できる。計画倒れしない配分を作ってほしい。",
+    sampleLocation: "通勤電車＆自宅デスク",
+    showLocationInput: true,
+    submitLabel: "現実的な逆算学習ロードマップを生成",
+    section1Title: "1. 残り日数から逆算した週間マイルストーン3段階",
+    section2Title: "2. 毎日15分スキマ時間で回すルーティンチェック",
+    section3Title: "3. 学習ログ・SNS宣言に貼れる今週の目標メモ",
+    gasPrefix: "[学習計画AI]",
+    systemInstruction:
+      "あなたは挫折しやすい資格・試験勉強を現実的なスキマ時間単位へ分解する学習プランナーです。試験日・残り教材・確保時間から、alert_level (high/medium/low)、alert_title（現在の残り時間に対する切迫度と最優先分野）、alert_message（計画倒れを防ぐバッファ設計のコツ）、items（第1週〜直前期の3段階配分）、checklist（毎日通勤・就寝前の15分定着チェック）、copyable_draft（そのままノートやSNSに貼れる今週のコミット宣言）、suggested_tasks（週次模試・弱点復習のカレンダー登録タスク）を日本語で構造化してください。",
+  },
+  renrakucho: {
+    id: "renrakucho",
+    name: "園・学校連絡帳＆欠席連絡クッション AI",
+    category: "暮らし・家族部門",
+    tagline: "忙しい朝に焦って書く保育園・小学校の連絡帳や欠席・早退連絡を、丁寧で伝わりやすい文章へ即変換",
+    subtitle:
+      "「熱が出た！先生にどう書けばいい？」を10秒で解決。Gemini 3.8 Flash が体調・引き渡し・配慮依頼を過不足なく文章化します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 保護者連絡サポート",
+    accentColor: "#ec4899",
+    accentSoft: "#fdf2f8",
+    inputLabel: "子どもの状況（発熱・ケガ・早退・アレルギー配慮など）と伝えたい要件",
+    inputPlaceholder: "例: 昨夜38度出たが今朝は36.8度。念のためお休みして小児科へ行く...",
+    sampleText:
+      "年中の子どもが昨夜から鼻水と咳があり、今朝は37.6℃の微熱。本日は大事をとってお休みし、午前中に小児科を受診予定。明日の登園可否は受診後にアプリで改めて連絡する旨を丁寧に伝えたい。",
+    sampleLocation: "朝の保育園・小学校連絡アプリ",
+    showLocationInput: true,
+    submitLabel: "丁寧で抜け漏れのない連絡文＆確認リストを作成",
+    section1Title: "1. 先生へ確実に伝えるべき重要情報3点",
+    section2Title: "2. 連絡送信前・受診前の確認チェックリスト",
+    section3Title: "3. 連絡アプリ・連絡帳にそのまま貼れる完成文",
+    gasPrefix: "[連絡帳AI]",
+    systemInstruction:
+      "あなたは多忙な保護者に代わり、保育園・幼稚園・小学校の先生へ正確かつ温かみのある連絡文を作成するコミュニケーションアシスタントです。入力内容から、alert_level (high/medium/low)、alert_title（感染症・登園基準など確認すべきポイント）、alert_message（先生が助かる伝達事項のコツ）、items（症状経過・受診予定・次回連絡の整理3点）、checklist（登園許可証要否・給食キャンセル・お迎え変更チェック）、copyable_draft（連絡アプリや連絡帳にそのままコピペできる丁寧な連絡文）、suggested_tasks（受診後フォロー連絡・登園準備タスク）を日本語で構造化してください。",
+  },
+  water: {
+    id: "water",
+    name: "断水・停電・水害ローカル備蓄チェッカー AI",
+    category: "まちと地球の未来部門",
+    tagline: "世帯人数・階数・ペット有無から「本当に必要な水・簡易トイレ・電源」の過不足を即診断",
+    subtitle:
+      "「防災グッズ何を買えばいいか分からない」を解消。Gemini 3.8 Flash がマンション高層階や乳幼児に合わせた実践的備蓄計画を作ります。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 地域防災レジリエンス",
+    accentColor: "#0d9488",
+    accentSoft: "#f0fdfa",
+    inputLabel: "世帯構成・住居タイプ（マンション階数など）・現在の備蓄状況",
+    inputPlaceholder: "例: マンション8階、夫婦＋幼児1人、水2Lが6本しかない。オール電化で停電が心配...",
+    sampleText:
+      "マンション9階在住、大人2人＋小学生1人＋小型犬1匹。現在の備蓄は2Lペットボトル6本とモバイルバッテリー1個のみ。断水時のトイレ対策と停電時の食事・暑さ寒さ対策を優先度順に知りたい。",
+    sampleLocation: "自宅マンションの防災備蓄棚",
+    showLocationInput: true,
+    submitLabel: "世帯別・不足備蓄診断＆買い足しリストを生成",
+    section1Title: "1. 今すぐ優先して補うべき防災備蓄トップ3",
+    section2Title: "2. 断水・停電発生直後の初動チェックリスト",
+    section3Title: "3. 家族で共有できる買い物メモ＆避難確認ルール",
+    gasPrefix: "[備蓄AI]",
+    systemInstruction:
+      "あなたはマンション高層階や子ども・ペット連れ家庭の実情に寄り添う地域防災アドバイザーです。世帯構成と現在の備蓄から、alert_level (high/medium/low)、alert_title（最も致命的な備蓄不足項目）、alert_message（ローリングストックで無理なく備えるコツ）、items（水・簡易トイレ・電源/食料の具体的な必要量と不足分3点）、checklist（ハザードマップ・家具固定・連絡手段・ペット避難品チェック）、copyable_draft（今週末の買い物にそのまま使える防災買い足しメモ）、suggested_tasks（半年ごとの賞味期限ローリング点検タスク）を日本語で構造化してください。",
   },
 };
