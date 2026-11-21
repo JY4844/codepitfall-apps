@@ -90,6 +90,61 @@ const STORAGE_KEY = "machieye_live_community_pins_v3";
 const ACCEPTED_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_IMAGE_DIM = 1600;
+const GOOGLE_MAPS_API_KEY = (
+  process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""
+).trim();
+
+interface GoogleLatLngLiteral {
+  lat: number;
+  lng: number;
+}
+
+interface GoogleMapMouseEvent {
+  latLng?: {
+    lat: () => number;
+    lng: () => number;
+  } | null;
+}
+
+interface GoogleMapInstance {
+  setCenter: (latlng: GoogleLatLngLiteral) => void;
+  panTo: (latlng: GoogleLatLngLiteral) => void;
+  setZoom: (zoom: number) => void;
+  addListener: (
+    eventName: string,
+    handler: (e: GoogleMapMouseEvent) => void
+  ) => { remove: () => void };
+}
+
+interface GoogleMarkerInstance {
+  setMap: (map: GoogleMapInstance | null) => void;
+  setPosition: (latlng: GoogleLatLngLiteral) => void;
+  addListener: (eventName: string, handler: () => void) => void;
+}
+
+interface GoogleInfoWindowInstance {
+  setContent: (content: string) => void;
+  open: (map: GoogleMapInstance, marker: GoogleMarkerInstance) => void;
+}
+
+interface GoogleMapsNamespace {
+  Map: new (
+    el: HTMLElement,
+    opts: Record<string, unknown>
+  ) => GoogleMapInstance;
+  Marker: new (opts: Record<string, unknown>) => GoogleMarkerInstance;
+  InfoWindow: new (opts?: Record<string, unknown>) => GoogleInfoWindowInstance;
+  SymbolPath: {
+    CIRCLE: number;
+  };
+}
+
+interface WindowWithGoogleMaps {
+  google?: {
+    maps?: GoogleMapsNamespace;
+  };
+  gm_authFailure?: () => void;
+}
 
 const CATEGORY_LIST: MachiEyeCategory[] = [
   "バリアフリー",
@@ -1022,6 +1077,28 @@ export default function MachiEyeLive() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const inspectionCardRef = useRef<HTMLDivElement | null>(null);
+  const gmapCanvasRef = useRef<HTMLDivElement | null>(null);
+  const gmapInstanceRef = useRef<GoogleMapInstance | null>(null);
+  const gmapMarkersRef = useRef<GoogleMarkerInstance[]>([]);
+  const gmapDraftMarkerRef = useRef<GoogleMarkerInstance | null>(null);
+  const gmapInfoWindowRef = useRef<GoogleInfoWindowInstance | null>(null);
+
+  // Progressive Disclosure state: Step 1 = null ("まずはやりたいことを選ぶ"), Step 2 = focused tool/map, Step 3 = inspection results
+  const [selectedGoal, setSelectedGoal] = useState<
+    null | "hazard" | "disaster" | "map"
+  >(null);
+  const [hasCompletedInspection, setHasCompletedInspection] =
+    useState<boolean>(false);
+
+  // Map View Switcher: default to "gmaps" (🗺️ Google マップ)
+  const [mapViewMode, setMapViewMode] = useState<"gmaps" | "radar">("gmaps");
+  const [gmapsCenterOverride, setGmapsCenterOverride] = useState<{
+    lat: string;
+    lng: string;
+    label: string;
+  } | null>(null);
+  const [gmapsSdkReady, setGmapsSdkReady] = useState<boolean>(false);
+  const [gmapsSdkFailed, setGmapsSdkFailed] = useState<boolean>(false);
 
   // Community pins state (localStorage persisted)
   const [pins, setPins] = useState<CommunitySafetyPin[]>(() =>
@@ -1155,6 +1232,240 @@ export default function MachiEyeLive() {
     });
   }, [pins, filterCategory, filterSeverity]);
 
+  const activeGoogleMapCenter = useMemo(() => {
+    if (gmapsCenterOverride) {
+      return gmapsCenterOverride;
+    }
+    if (selectedPin) {
+      return {
+        lat: selectedPin.latitude || "35.681420",
+        lng: selectedPin.longitude || "139.766850",
+        label: selectedPin.locationText || selectedPin.analysis.title,
+      };
+    }
+    return {
+      lat: latitude || "35.681420",
+      lng: longitude || "139.766850",
+      label: locationText || "中央駅南口周辺",
+    };
+  }, [gmapsCenterOverride, selectedPin, latitude, longitude, locationText]);
+
+  // Dynamically load Google Maps JS API when NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is configured
+  useEffect(() => {
+    if (!GOOGLE_MAPS_API_KEY || typeof window === "undefined") {
+      return;
+    }
+    const win = window as unknown as WindowWithGoogleMaps;
+    if (win.google?.maps) {
+      setGmapsSdkReady(true);
+      return;
+    }
+
+    win.gm_authFailure = () => {
+      setGmapsSdkFailed(true);
+    };
+
+    const existingScript = document.getElementById(
+      "machieye-google-maps-sdk"
+    ) as HTMLScriptElement | null;
+    if (existingScript) {
+      const onExistingLoad = () => setGmapsSdkReady(true);
+      const onExistingErr = () => setGmapsSdkFailed(true);
+      existingScript.addEventListener("load", onExistingLoad);
+      existingScript.addEventListener("error", onExistingErr);
+      return () => {
+        existingScript.removeEventListener("load", onExistingLoad);
+        existingScript.removeEventListener("error", onExistingErr);
+      };
+    }
+
+    const script = document.createElement("script");
+    script.id = "machieye-google-maps-sdk";
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
+      GOOGLE_MAPS_API_KEY
+    )}&language=ja`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => setGmapsSdkReady(true);
+    script.onerror = () => setGmapsSdkFailed(true);
+    document.head.appendChild(script);
+  }, []);
+
+  // Initialize or update interactive Google Map + color-coded markers when JS API is active
+  useEffect(() => {
+    if (selectedGoal !== "map" || mapViewMode !== "gmaps") {
+      gmapInstanceRef.current = null;
+      gmapDraftMarkerRef.current = null;
+      gmapMarkersRef.current = [];
+      return;
+    }
+    if (
+      !GOOGLE_MAPS_API_KEY ||
+      !gmapsSdkReady ||
+      gmapsSdkFailed ||
+      !gmapCanvasRef.current ||
+      typeof window === "undefined"
+    ) {
+      return;
+    }
+
+    const gmaps = (window as unknown as WindowWithGoogleMaps).google?.maps;
+    if (!gmaps) return;
+
+    const centerLat = parseFloat(activeGoogleMapCenter.lat) || 35.68142;
+    const centerLng = parseFloat(activeGoogleMapCenter.lng) || 139.76685;
+
+    if (!gmapInstanceRef.current) {
+      gmapInstanceRef.current = new gmaps.Map(gmapCanvasRef.current, {
+        center: { lat: centerLat, lng: centerLng },
+        zoom: 16,
+        mapTypeControl: false,
+        streetViewControl: true,
+        fullscreenControl: true,
+      });
+
+      gmapInfoWindowRef.current = new gmaps.InfoWindow();
+
+      gmapInstanceRef.current.addListener("click", (ev: GoogleMapMouseEvent) => {
+        if (!ev.latLng) return;
+        const clickedLat = ev.latLng.lat();
+        const clickedLng = ev.latLng.lng();
+        const latStr = clickedLat.toFixed(6);
+        const lngStr = clickedLng.toFixed(6);
+        setLatitude(latStr);
+        setLongitude(lngStr);
+
+        // Also update radar relative position so both views stay synchronized
+        const relY = Math.min(
+          92,
+          Math.max(8, Math.round(((35.6855 - clickedLat) / 0.008) * 100))
+        );
+        const relX = Math.min(
+          94,
+          Math.max(6, Math.round(((clickedLng - 139.762) / 0.009) * 100))
+        );
+        setDraftMapX(relX);
+        setDraftMapY(relY);
+
+        if (gmapDraftMarkerRef.current && gmapInstanceRef.current) {
+          gmapDraftMarkerRef.current.setPosition({
+            lat: clickedLat,
+            lng: clickedLng,
+          });
+          gmapDraftMarkerRef.current.setMap(gmapInstanceRef.current);
+        } else if (gmapInstanceRef.current) {
+          gmapDraftMarkerRef.current = new gmaps.Marker({
+            position: { lat: clickedLat, lng: clickedLng },
+            map: gmapInstanceRef.current,
+            title: `新規通報予定地点 (${latStr}, ${lngStr})`,
+            icon: {
+              path: gmaps.SymbolPath.CIRCLE,
+              scale: 9,
+              fillColor: "#06b6d4",
+              fillOpacity: 0.95,
+              strokeColor: "#ffffff",
+              strokeWeight: 2.5,
+            },
+          });
+        }
+
+        setStatusBanner(
+          `🎯 Google マップ上のクリック地点（北緯 ${latStr}, 東経 ${lngStr}）を新規通報のGPS座標にセットしました。`
+        );
+      });
+    } else {
+      gmapInstanceRef.current.panTo({ lat: centerLat, lng: centerLng });
+    }
+
+    const map = gmapInstanceRef.current;
+
+    // Clear previous community markers
+    gmapMarkersRef.current.forEach((m) => m.setMap(null));
+    gmapMarkersRef.current = [];
+
+    filteredPins.forEach((pin) => {
+      const pLat = parseFloat(pin.latitude);
+      const pLng = parseFloat(pin.longitude);
+      if (Number.isNaN(pLat) || Number.isNaN(pLng)) return;
+
+      const sev = severityColor(pin.analysis.severity_level);
+      const cat = categoryMeta(pin.analysis.category);
+      const isSelected = selectedPin?.id === pin.id;
+
+      const marker = new gmaps.Marker({
+        position: { lat: pLat, lng: pLng },
+        map,
+        title: `[${pin.analysis.severity_level}] ${pin.analysis.title}`,
+        label: {
+          text: cat.icon,
+          fontSize: isSelected ? "13px" : "11px",
+        },
+        icon: {
+          path: gmaps.SymbolPath.CIRCLE,
+          scale: isSelected ? 15 : 12,
+          fillColor: sev.dot,
+          fillOpacity: isSelected ? 0.98 : 0.88,
+          strokeColor: isSelected ? "#ffffff" : "#0f172a",
+          strokeWeight: isSelected ? 3 : 2,
+        },
+      });
+
+      marker.addListener("click", () => {
+        setGmapsCenterOverride(null);
+        setSelectedPinId(pin.id);
+        if (gmapInfoWindowRef.current) {
+          gmapInfoWindowRef.current.setContent(
+            `<div style="color:#0f172a;font-family:sans-serif;padding:4px 6px;max-width:240px;">
+              <div style="font-size:11px;font-weight:700;color:${sev.dot};">${pin.analysis.severity_level} · ${cat.icon} ${pin.analysis.category} (Score ${pin.analysis.hazard_score})</div>
+              <div style="font-size:13px;font-weight:800;margin-top:2px;">${pin.analysis.title}</div>
+              <div style="font-size:11px;color:#475569;margin-top:3px;">📍 ${pin.locationText}</div>
+            </div>`
+          );
+          gmapInfoWindowRef.current.open(map, marker);
+        }
+        inspectionCardRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        });
+      });
+
+      gmapMarkersRef.current.push(marker);
+    });
+  }, [
+    selectedGoal,
+    gmapsSdkReady,
+    gmapsSdkFailed,
+    mapViewMode,
+    filteredPins,
+    selectedPin,
+    activeGoogleMapCenter.lat,
+    activeGoogleMapCenter.lng,
+  ]);
+
+  const handlePickGoal = (goal: "hazard" | "disaster" | "map") => {
+    setSelectedGoal(goal);
+    setHasCompletedInspection(false);
+    setErrorMsg("");
+    setStatusBanner("");
+    setGasMessage("");
+    setGasError("");
+    if (goal === "hazard") {
+      setScenarioModeFilter("hazard");
+      const firstHazard =
+        BUILTIN_SCENARIOS.find((sc) => sc.mode === "hazard") ||
+        BUILTIN_SCENARIOS[0];
+      void handleSelectScenario(firstHazard, false);
+    } else if (goal === "disaster") {
+      setScenarioModeFilter("disaster");
+      const firstDisaster =
+        BUILTIN_SCENARIOS.find((sc) => sc.mode === "disaster") ||
+        BUILTIN_SCENARIOS[1];
+      void handleSelectScenario(firstDisaster, false);
+    } else {
+      setMapViewMode("gmaps");
+    }
+  };
+
   // Select a built-in scenario and optionally auto-run inspection
   const handleSelectScenario = async (
     scenario: ScenarioPreset,
@@ -1167,6 +1478,7 @@ export default function MachiEyeLive() {
     setDraftMapX(scenario.mapX);
     setDraftMapY(scenario.mapY);
     setSourceText(scenario.sourceText);
+    setGmapsCenterOverride(null);
     setErrorMsg("");
     setGasMessage("");
     setGasError("");
@@ -1244,13 +1556,23 @@ export default function MachiEyeLive() {
     setErrorMsg("");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setLatitude(pos.coords.latitude.toFixed(6));
-        setLongitude(pos.coords.longitude.toFixed(6));
+        const latStr = pos.coords.latitude.toFixed(6);
+        const lngStr = pos.coords.longitude.toFixed(6);
+        setLatitude(latStr);
+        setLongitude(lngStr);
         if (!locationText.trim()) {
           setLocationText("現在地（GPS自動取得地点）");
         }
+        setGmapsCenterOverride({
+          lat: latStr,
+          lng: lngStr,
+          label: "現在地（GPS自動取得地点）",
+        });
+        setMapViewMode("gmaps");
         setGpsLoading(false);
-        setStatusBanner("📍 現在地のGPS座標を取得しました。");
+        setStatusBanner(
+          `📍 現在地のGPS座標（北緯 ${latStr}, 東経 ${lngStr}）を取得し、Google マップを現在地へジャンプしました！`
+        );
       },
       () => {
         setErrorMsg(
@@ -1353,12 +1675,20 @@ export default function MachiEyeLive() {
 
       const nextPins = [newPin, ...pins];
       savePins(nextPins);
+      setGmapsCenterOverride(null);
       setSelectedPinId(newPin.id);
       setFilterCategory("すべて");
       setFilterSeverity("すべて");
+      setHasCompletedInspection(true);
       setStatusBanner(
         `✅ AI ハザード＆バリアフリー点検が完了し、コミュニティ安全マップに新規ピン「${data.result.title}」をプロットしました！`
       );
+      setTimeout(() => {
+        inspectionCardRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        });
+      }, 80);
     } catch (err) {
       setErrorMsg(
         err instanceof Error ? err.message : "解析中にエラーが発生しました。"
@@ -1415,6 +1745,7 @@ export default function MachiEyeLive() {
   const handleResetSeedPins = () => {
     const defaults = createDefaultSeedPins();
     savePins(defaults);
+    setGmapsCenterOverride(null);
     setSelectedPinId(defaults[0].id);
     setFilterCategory("すべて");
     setFilterSeverity("すべて");
@@ -1718,15 +2049,15 @@ export default function MachiEyeLive() {
           </span>
         </nav>
 
-        {/* Hero Banner */}
+        {/* Calm, Airy Hero Header */}
         <header
           style={{
             borderRadius: 20,
-            padding: "24px 26px",
+            padding: "22px 26px",
             background:
               "linear-gradient(135deg, rgba(15, 23, 42, 0.92) 0%, rgba(12, 34, 52, 0.9) 100%)",
-            border: "1px solid rgba(56, 189, 248, 0.3)",
-            boxShadow: "0 18px 40px -15px rgba(0, 0, 0, 0.6)",
+            border: "1px solid rgba(56, 189, 248, 0.28)",
+            boxShadow: "0 18px 40px -15px rgba(0, 0, 0, 0.55)",
             marginBottom: 22,
           }}
         >
@@ -1737,7 +2068,6 @@ export default function MachiEyeLive() {
               alignItems: "center",
               justifyContent: "space-between",
               gap: 12,
-              marginBottom: 12,
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -1762,7 +2092,7 @@ export default function MachiEyeLive() {
                   <h1
                     style={{
                       margin: 0,
-                      fontSize: "1.65rem",
+                      fontSize: "1.6rem",
                       fontWeight: 800,
                       letterSpacing: "-0.02em",
                       color: "#f8fafc",
@@ -1781,289 +2111,331 @@ export default function MachiEyeLive() {
                       border: "1px solid rgba(56, 189, 248, 0.38)",
                     }}
                   >
-                    CIVIC RADAR & BARRIER-FREE AI
+                    街のあんしん＆防災AIナビ
                   </span>
                 </div>
                 <p
                   style={{
                     margin: "4px 0 0",
-                    fontSize: "0.92rem",
-                    color: "#94a3b8",
+                    fontSize: "0.9rem",
+                    color: "#cbd5e1",
                   }}
                 >
-                  日常の「街の危険・バリアフリー課題」から「防災・停電断水・ペット同行避難・猛暑対策」まで写真1枚でAI診断。迂回アドバイス＆4言語注意カード＆自治体通報書を1クリック生成
+                  街の危険チェック・防災診断・Google マップ安全マップから、やりたいことを選んでスタートできます。
                 </p>
               </div>
             </div>
 
-            {/* Live KPI Metrics */}
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 10,
-              }}
-            >
-              <div
-                style={{
-                  padding: "8px 14px",
-                  borderRadius: 12,
-                  background: "rgba(15, 23, 42, 0.75)",
-                  border: "1px solid rgba(148, 163, 184, 0.2)",
-                  textAlign: "center",
+            {selectedGoal !== null && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedGoal(null);
+                  setHasCompletedInspection(false);
+                  setStatusBanner("");
+                  setErrorMsg("");
                 }}
-              >
-                <div style={{ fontSize: "0.72rem", color: "#94a3b8" }}>
-                  地域マップ登録ピン
-                </div>
-                <div
-                  style={{
-                    fontSize: "1.15rem",
-                    fontWeight: 800,
-                    color: "#38bdf8",
-                  }}
-                >
-                  {summaryStats.total} 地点
-                </div>
-              </div>
-              <div
                 style={{
-                  padding: "8px 14px",
-                  borderRadius: 12,
-                  background: "rgba(15, 23, 42, 0.75)",
-                  border: "1px solid rgba(239, 68, 68, 0.3)",
-                  textAlign: "center",
-                }}
-              >
-                <div style={{ fontSize: "0.72rem", color: "#fca5a5" }}>
-                  緊急トリアージ
-                </div>
-                <div
-                  style={{
-                    fontSize: "1.15rem",
-                    fontWeight: 800,
-                    color: "#ef4444",
-                  }}
-                >
-                  {summaryStats.urgentCount} 件
-                </div>
-              </div>
-              <div
-                style={{
-                  padding: "8px 14px",
-                  borderRadius: 12,
-                  background: "rgba(15, 23, 42, 0.75)",
-                  border: "1px solid rgba(16, 185, 129, 0.3)",
-                  textAlign: "center",
-                }}
-              >
-                <div style={{ fontSize: "0.72rem", color: "#6ee7b7" }}>
-                  自治体連携・対応済
-                </div>
-                <div
-                  style={{
-                    fontSize: "1.15rem",
-                    fontWeight: 800,
-                    color: "#10b981",
-                  }}
-                >
-                  {summaryStats.resolvedCount} 件
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* 4 Realistic Built-in Scenarios Quick Bar */}
-          <div
-            style={{
-              marginTop: 14,
-              paddingTop: 14,
-              borderTop: "1px solid rgba(148, 163, 184, 0.16)",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                flexWrap: "wrap",
-                gap: 8,
-                marginBottom: 10,
-              }}
-            >
-              <span
-                style={{
+                  padding: "8px 16px",
+                  borderRadius: 999,
+                  border: "1.5px solid rgba(56, 189, 248, 0.55)",
+                  background: "rgba(14, 165, 233, 0.18)",
+                  color: "#f0f9ff",
                   fontSize: "0.82rem",
-                  fontWeight: 700,
-                  color: "#cbd5e1",
+                  fontWeight: 800,
+                  cursor: "pointer",
                 }}
               >
-                ⚡ 1クリック実証シナリオ切替（日常の危険チェック ＆ 防災・災害対策診断）:
-              </span>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {(
-                  [
-                    { id: "all", label: "🌐 すべて表示 (6)" },
-                    { id: "hazard", label: "🚧 街の危険チェック（日常バリアフリー・夜道）" },
-                    { id: "disaster", label: "🛟 防災・災害対策診断（豪雨・停電断水・ペット避難）" },
-                  ] as const
-                ).map((m) => {
-                  const active = scenarioModeFilter === m.id;
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => setScenarioModeFilter(m.id)}
-                      style={{
-                        padding: "5px 11px",
-                        borderRadius: 999,
-                        border: active
-                          ? "1.5px solid #38bdf8"
-                          : "1px solid rgba(148, 163, 184, 0.3)",
-                        background: active
-                          ? "rgba(14, 165, 233, 0.25)"
-                          : "rgba(15, 23, 42, 0.7)",
-                        color: active ? "#7dd3fc" : "#cbd5e1",
-                        fontSize: "0.75rem",
-                        fontWeight: 800,
-                        cursor: "pointer",
-                      }}
-                    >
-                      {m.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(245px, 1fr))",
-                gap: 10,
-              }}
-            >
-              {BUILTIN_SCENARIOS.filter(
-                (sc) =>
-                  scenarioModeFilter === "all" || sc.mode === scenarioModeFilter
-              ).map((sc) => {
-                const isSelected = activeScenarioId === sc.id;
-                const sevStyle = severityColor(sc.severityLevel);
-                return (
-                  <div
-                    key={sc.id}
-                    style={{
-                      borderRadius: 12,
-                      padding: "11px 13px",
-                      background: isSelected
-                        ? "rgba(14, 165, 233, 0.16)"
-                        : "rgba(15, 23, 42, 0.65)",
-                      border: isSelected
-                        ? "1.5px solid #38bdf8"
-                        : "1px solid rgba(148, 163, 184, 0.22)",
-                      display: "flex",
-                      flexDirection: "column",
-                      justifyContent: "space-between",
-                      gap: 8,
-                    }}
-                  >
-                    <div>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: 6,
-                          marginBottom: 4,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: "0.74rem",
-                            fontWeight: 700,
-                            color: "#38bdf8",
-                          }}
-                        >
-                          {sc.badge} · {sc.category}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: "0.7rem",
-                            fontWeight: 700,
-                            padding: "2px 8px",
-                            borderRadius: 999,
-                            background: sevStyle.bg,
-                            border: `1px solid ${sevStyle.border}`,
-                            color: sevStyle.text,
-                          }}
-                        >
-                          {sc.severityLevel}
-                        </span>
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "0.9rem",
-                          fontWeight: 700,
-                          color: "#f8fafc",
-                        }}
-                      >
-                        {sc.shortTitle}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "0.76rem",
-                          color: "#94a3b8",
-                          marginTop: 2,
-                        }}
-                      >
-                        {sc.subtitle}
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button
-                        type="button"
-                        onClick={() => void handleSelectScenario(sc, false)}
-                        style={{
-                          flex: 1,
-                          padding: "6px 8px",
-                          borderRadius: 8,
-                          border: "1px solid rgba(148, 163, 184, 0.3)",
-                          background: "rgba(30, 41, 59, 0.85)",
-                          color: "#e2e8f0",
-                          fontSize: "0.75rem",
-                          fontWeight: 600,
-                          cursor: "pointer",
-                        }}
-                      >
-                        📥 フォーム読込
-                      </button>
-                      <button
-                        type="button"
-                        disabled={analyzing}
-                        onClick={() => void handleSelectScenario(sc, true)}
-                        style={{
-                          flex: 1.2,
-                          padding: "6px 8px",
-                          borderRadius: 8,
-                          border: "1px solid rgba(56, 189, 248, 0.45)",
-                          background:
-                            "linear-gradient(135deg, #0284c7 0%, #0d9488 100%)",
-                          color: "#ffffff",
-                          fontSize: "0.75rem",
-                          fontWeight: 700,
-                          cursor: analyzing ? "wait" : "pointer",
-                        }}
-                      >
-                        🔍 1クリックAI検診
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                ← やりたいことを選び直す
+              </button>
+            )}
           </div>
         </header>
 
-        {statusBanner && (
+        {/* STEP 1 (Progressive Disclosure): Show ONLY 3 big, calm, welcoming "まずはやりたいことを選ぶ" cards */}
+        {selectedGoal === null && (
+          <section
+            aria-label="まずはやりたいことを選ぶ"
+            style={{
+              maxWidth: 1040,
+              margin: "12px auto 32px",
+              padding: "28px 24px",
+              borderRadius: 22,
+              background: "rgba(15, 23, 42, 0.78)",
+              border: "1px solid rgba(56, 189, 248, 0.25)",
+              boxShadow: "0 20px 45px -18px rgba(0, 0, 0, 0.6)",
+            }}
+          >
+            <div style={{ textAlign: "center", marginBottom: 24 }}>
+              <span
+                style={{
+                  display: "inline-block",
+                  fontSize: "0.76rem",
+                  fontWeight: 800,
+                  color: "#34d399",
+                  background: "rgba(16, 185, 129, 0.14)",
+                  border: "1px solid rgba(16, 185, 129, 0.38)",
+                  padding: "4px 14px",
+                  borderRadius: 999,
+                  marginBottom: 10,
+                }}
+              >
+                STEP 1 // まずはやりたいことを選ぶ
+              </span>
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: "1.42rem",
+                  fontWeight: 800,
+                  color: "#f8fafc",
+                }}
+              >
+                今日はどんな安全チェックをしますか？
+              </h2>
+              <p
+                style={{
+                  margin: "6px 0 0",
+                  fontSize: "0.88rem",
+                  color: "#94a3b8",
+                }}
+              >
+                下の3つのカードから1つ選ぶと、必要な機能だけがすっきり表示されます。
+              </p>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                gap: 18,
+              }}
+            >
+              {/* Card 1: 🚧 街の危険・段差を写真でチェックする */}
+              <button
+                type="button"
+                onClick={() => handlePickGoal("hazard")}
+                style={{
+                  textAlign: "left",
+                  padding: "24px 22px",
+                  borderRadius: 18,
+                  border: "1.5px solid rgba(56, 189, 248, 0.38)",
+                  background:
+                    "linear-gradient(160deg, rgba(15, 23, 42, 0.95) 0%, rgba(14, 116, 144, 0.22) 100%)",
+                  color: "#f8fafc",
+                  cursor: "pointer",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  gap: 16,
+                  boxShadow: "0 12px 28px -12px rgba(14, 165, 233, 0.35)",
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "4px 11px",
+                      borderRadius: 999,
+                      background: "rgba(56, 189, 248, 0.18)",
+                      color: "#7dd3fc",
+                      fontSize: "0.75rem",
+                      fontWeight: 800,
+                      marginBottom: 12,
+                    }}
+                  >
+                    日常バリアフリー・通学路点検
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "1.18rem",
+                      fontWeight: 800,
+                      lineHeight: 1.4,
+                      color: "#f8fafc",
+                      marginBottom: 8,
+                    }}
+                  >
+                    🚧 街の危険・段差を写真でチェックする
+                  </div>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: "0.85rem",
+                      color: "#cbd5e1",
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    点字ブロックの破損・ベビーカーや車椅子の段差・夜道の死角などを写真（またはサンプル）でAI点検し、安全な迂回ルートを提案します。
+                  </p>
+                </div>
+                <div
+                  style={{
+                    fontSize: "0.84rem",
+                    fontWeight: 800,
+                    color: "#38bdf8",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <span>写真・サンプルでチェックする</span>
+                  <span>→</span>
+                </div>
+              </button>
+
+              {/* Card 2: 🛟 防災・災害対策（豪雨・停電・避難）を診断する */}
+              <button
+                type="button"
+                onClick={() => handlePickGoal("disaster")}
+                style={{
+                  textAlign: "left",
+                  padding: "24px 22px",
+                  borderRadius: 18,
+                  border: "1.5px solid rgba(52, 211, 153, 0.38)",
+                  background:
+                    "linear-gradient(160deg, rgba(15, 23, 42, 0.95) 0%, rgba(16, 185, 129, 0.2) 100%)",
+                  color: "#f8fafc",
+                  cursor: "pointer",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  gap: 16,
+                  boxShadow: "0 12px 28px -12px rgba(16, 185, 129, 0.35)",
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "4px 11px",
+                      borderRadius: 999,
+                      background: "rgba(16, 185, 129, 0.18)",
+                      color: "#6ee7b7",
+                      fontSize: "0.75rem",
+                      fontWeight: 800,
+                      marginBottom: 12,
+                    }}
+                  >
+                    豪雨冠水・地震台風・ペット同行避難
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "1.18rem",
+                      fontWeight: 800,
+                      lineHeight: 1.4,
+                      color: "#f8fafc",
+                      marginBottom: 8,
+                    }}
+                  >
+                    🛟 防災・災害対策（豪雨・停電・避難）を診断する
+                  </div>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: "0.85rem",
+                      color: "#cbd5e1",
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    側溝の詰まりによる冠水リスク・地震や台風時の危険ブロック塀回避・猛暑の日陰やペット同行避難ルートをAI診断します。
+                  </p>
+                </div>
+                <div
+                  style={{
+                    fontSize: "0.84rem",
+                    fontWeight: 800,
+                    color: "#34d399",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <span>防災・避難ルートを診断する</span>
+                  <span>→</span>
+                </div>
+              </button>
+
+              {/* Card 3: 🗺️ みんなの安全マップ（Google マップ）を見る */}
+              <button
+                type="button"
+                onClick={() => handlePickGoal("map")}
+                style={{
+                  textAlign: "left",
+                  padding: "24px 22px",
+                  borderRadius: 18,
+                  border: "1.5px solid rgba(192, 132, 252, 0.42)",
+                  background:
+                    "linear-gradient(160deg, rgba(15, 23, 42, 0.95) 0%, rgba(147, 51, 234, 0.22) 100%)",
+                  color: "#f8fafc",
+                  cursor: "pointer",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  gap: 16,
+                  boxShadow: "0 12px 28px -12px rgba(168, 85, 247, 0.35)",
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "4px 11px",
+                      borderRadius: 999,
+                      background: "rgba(168, 85, 247, 0.2)",
+                      color: "#e9d5ff",
+                      fontSize: "0.75rem",
+                      fontWeight: 800,
+                      marginBottom: 12,
+                    }}
+                  >
+                    Google マップ・現在地GPS・ストリートビュー
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "1.18rem",
+                      fontWeight: 800,
+                      lineHeight: 1.4,
+                      color: "#f8fafc",
+                      marginBottom: 8,
+                    }}
+                  >
+                    🗺️ みんなの安全マップ（Google マップ）を見る
+                  </div>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: "0.85rem",
+                      color: "#cbd5e1",
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    地域で共有された危険ピン（現在 {summaryStats.total} 地点）を Google マップ上で確認し、現在地GPS移動・歩行者安全ルート・ストリートビューを開けます。
+                  </p>
+                </div>
+                <div
+                  style={{
+                    fontSize: "0.84rem",
+                    fontWeight: 800,
+                    color: "#d8b4fe",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <span>Google マップを開く（{summaryStats.total}地点）</span>
+                  <span>→</span>
+                </div>
+              </button>
+            </div>
+          </section>
+        )}
+
+        {selectedGoal !== null && statusBanner && (
           <div
             role="status"
             style={{
@@ -2081,7 +2453,7 @@ export default function MachiEyeLive() {
           </div>
         )}
 
-        {errorMsg && (
+        {selectedGoal !== null && errorMsg && (
           <div
             role="alert"
             style={{
@@ -2099,27 +2471,257 @@ export default function MachiEyeLive() {
           </div>
         )}
 
-        {/* Top Main 2-Column Layout: Left = Multimodal Inspector, Right = Interactive Neighborhood Radar Map */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(480px, 1fr))",
-            gap: 22,
-            marginBottom: 24,
-          }}
-        >
-          {/* PANEL 1: Multimodal Photo/Camera Hazard & Barrier-Free Inspector */}
-          <section
+        {/* STEP 2: Focused Input Box (for hazard/disaster) OR Focused Google Map (for map) */}
+        {selectedGoal !== null && (
+          <div
             style={{
-              borderRadius: 18,
-              padding: "20px 22px",
-              background: "rgba(15, 23, 42, 0.82)",
-              border: "1px solid rgba(148, 163, 184, 0.22)",
               display: "flex",
               flexDirection: "column",
-              gap: 16,
+              gap: 20,
+              marginBottom: 24,
             }}
           >
+            {/* Step 2 Navigation Bar: Back to Goal Picker + Direct Goal Switcher */}
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 10,
+                padding: "10px 14px",
+                borderRadius: 14,
+                background: "rgba(15, 23, 42, 0.85)",
+                border: "1px solid rgba(148, 163, 184, 0.22)",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedGoal(null);
+                  setHasCompletedInspection(false);
+                  setStatusBanner("");
+                  setErrorMsg("");
+                }}
+                style={{
+                  padding: "6px 13px",
+                  borderRadius: 8,
+                  border: "1px solid rgba(148, 163, 184, 0.35)",
+                  background: "rgba(30, 41, 59, 0.85)",
+                  color: "#e2e8f0",
+                  fontSize: "0.78rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                ← やりたいことを選び直す
+              </button>
+
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {(
+                  [
+                    {
+                      id: "hazard",
+                      label: "🚧 街の危険・段差をチェック",
+                    },
+                    {
+                      id: "disaster",
+                      label: "🛟 防災・災害対策を診断",
+                    },
+                    {
+                      id: "map",
+                      label: "🗺️ みんなの安全マップ（Google マップ）",
+                    },
+                  ] as const
+                ).map((g) => {
+                  const active = selectedGoal === g.id;
+                  return (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => handlePickGoal(g.id)}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: 999,
+                        border: active
+                          ? "1.5px solid #38bdf8"
+                          : "1px solid rgba(148, 163, 184, 0.28)",
+                        background: active
+                          ? "rgba(14, 165, 233, 0.24)"
+                          : "rgba(15, 23, 42, 0.7)",
+                        color: active ? "#ffffff" : "#94a3b8",
+                        fontSize: "0.76rem",
+                        fontWeight: 800,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {g.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Focused Sample Presets Strip for Hazard / Disaster mode */}
+            {(selectedGoal === "hazard" || selectedGoal === "disaster") && (
+              <div
+                style={{
+                  borderRadius: 16,
+                  padding: "14px 18px",
+                  background: "rgba(15, 23, 42, 0.78)",
+                  border: "1px solid rgba(56, 189, 248, 0.24)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "0.8rem",
+                    fontWeight: 700,
+                    color: "#cbd5e1",
+                    marginBottom: 10,
+                  }}
+                >
+                  💡 手元に写真がない場合も、下のサンプル事例から1クリックでAI診断を試せます：
+                </div>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                    gap: 10,
+                  }}
+                >
+                  {BUILTIN_SCENARIOS.filter(
+                    (sc) => sc.mode === selectedGoal
+                  ).map((sc) => {
+                    const isSelected = activeScenarioId === sc.id;
+                    const sevStyle = severityColor(sc.severityLevel);
+                    return (
+                      <div
+                        key={sc.id}
+                        style={{
+                          borderRadius: 12,
+                          padding: "11px 13px",
+                          background: isSelected
+                            ? "rgba(14, 165, 233, 0.16)"
+                            : "rgba(15, 23, 42, 0.65)",
+                          border: isSelected
+                            ? "1.5px solid #38bdf8"
+                            : "1px solid rgba(148, 163, 184, 0.22)",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "space-between",
+                          gap: 8,
+                        }}
+                      >
+                        <div>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: 6,
+                              marginBottom: 4,
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize: "0.74rem",
+                                fontWeight: 700,
+                                color: "#38bdf8",
+                              }}
+                            >
+                              {sc.badge} · {sc.category}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: "0.7rem",
+                                fontWeight: 700,
+                                padding: "2px 8px",
+                                borderRadius: 999,
+                                background: sevStyle.bg,
+                                border: `1px solid ${sevStyle.border}`,
+                                color: sevStyle.text,
+                              }}
+                            >
+                              {sc.severityLevel}
+                            </span>
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "0.9rem",
+                              fontWeight: 700,
+                              color: "#f8fafc",
+                            }}
+                          >
+                            {sc.shortTitle}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "0.76rem",
+                              color: "#94a3b8",
+                              marginTop: 2,
+                            }}
+                          >
+                            {sc.subtitle}
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button
+                            type="button"
+                            onClick={() => void handleSelectScenario(sc, false)}
+                            style={{
+                              flex: 1,
+                              padding: "6px 8px",
+                              borderRadius: 8,
+                              border: "1px solid rgba(148, 163, 184, 0.3)",
+                              background: "rgba(30, 41, 59, 0.85)",
+                              color: "#e2e8f0",
+                              fontSize: "0.75rem",
+                              fontWeight: 600,
+                              cursor: "pointer",
+                            }}
+                          >
+                            📥 フォーム読込
+                          </button>
+                          <button
+                            type="button"
+                            disabled={analyzing}
+                            onClick={() => void handleSelectScenario(sc, true)}
+                            style={{
+                              flex: 1.2,
+                              padding: "6px 8px",
+                              borderRadius: 8,
+                              border: "1px solid rgba(56, 189, 248, 0.45)",
+                              background:
+                                "linear-gradient(135deg, #0284c7 0%, #0d9488 100%)",
+                              color: "#ffffff",
+                              fontSize: "0.75rem",
+                              fontWeight: 700,
+                              cursor: analyzing ? "wait" : "pointer",
+                            }}
+                          >
+                            🔍 1クリックAI診断
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* PANEL 1: Multimodal Photo/Camera Hazard & Barrier-Free Inspector (Only shown for hazard/disaster goals) */}
+            {(selectedGoal === "hazard" || selectedGoal === "disaster") && (
+              <section
+                style={{
+                  borderRadius: 18,
+                  padding: "20px 22px",
+                  background: "rgba(15, 23, 42, 0.82)",
+                  border: "1px solid rgba(148, 163, 184, 0.22)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 16,
+                }}
+              >
             <div
               style={{
                 display: "flex",
@@ -2441,7 +3043,7 @@ export default function MachiEyeLive() {
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {gpsLoading ? "取得中..." : "📍 GPS取得"}
+                  {gpsLoading ? "取得中..." : "📍 現在地を取得 (GPS)"}
                 </button>
               </div>
 
@@ -2554,20 +3156,22 @@ export default function MachiEyeLive() {
                 </button>
               </div>
             </form>
-          </section>
+              </section>
+            )}
 
-          {/* PANEL 2: Interactive Community Safety Pin Map (SVG Neighborhood Radar Map) */}
-          <section
-            style={{
-              borderRadius: 18,
-              padding: "20px 22px",
-              background: "rgba(15, 23, 42, 0.82)",
-              border: "1px solid rgba(56, 189, 248, 0.28)",
-              display: "flex",
-              flexDirection: "column",
-              gap: 14,
-            }}
-          >
+            {/* PANEL 2: Interactive Community Safety Pin Map (Google Maps + Neighborhood Radar Map) — Only shown when selectedGoal === "map" */}
+            {selectedGoal === "map" && (
+              <section
+                style={{
+                  borderRadius: 18,
+                  padding: "20px 22px",
+                  background: "rgba(15, 23, 42, 0.82)",
+                  border: "1px solid rgba(56, 189, 248, 0.28)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 14,
+                }}
+              >
             <div
               style={{
                 display: "flex",
@@ -2586,7 +3190,7 @@ export default function MachiEyeLive() {
                     letterSpacing: "0.06em",
                   }}
                 >
-                  MODULE 02 // NEIGHBORHOOD SAFETY RADAR MAP
+                  MODULE 02 // GOOGLE MAPS & NEIGHBORHOOD SAFETY RADAR
                 </span>
                 <h2
                   style={{
@@ -2599,21 +3203,93 @@ export default function MachiEyeLive() {
                   🗺️ 地域コミュニティ安全ピンマップ（{filteredPins.length}件表示）
                 </h2>
               </div>
-              <button
-                type="button"
-                onClick={handleResetSeedPins}
-                style={{
-                  padding: "5px 10px",
-                  borderRadius: 8,
-                  border: "1px solid rgba(148, 163, 184, 0.28)",
-                  background: "rgba(30, 41, 59, 0.7)",
-                  color: "#cbd5e1",
-                  fontSize: "0.73rem",
-                  cursor: "pointer",
-                }}
-              >
-                🔄 初期ピン復元
-              </button>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                {/* Map View Switcher: 🗺️ Google マップ / 📡 レーダーマップ */}
+                <div
+                  role="group"
+                  aria-label="マップ表示モード切替"
+                  style={{
+                    display: "inline-flex",
+                    borderRadius: 9,
+                    padding: 2,
+                    background: "rgba(2, 6, 23, 0.78)",
+                    border: "1px solid rgba(56, 189, 248, 0.35)",
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setMapViewMode("gmaps")}
+                    style={{
+                      padding: "5px 11px",
+                      borderRadius: 7,
+                      border: "none",
+                      background:
+                        mapViewMode === "gmaps"
+                          ? "linear-gradient(135deg, #0284c7 0%, #10b981 100%)"
+                          : "transparent",
+                      color: mapViewMode === "gmaps" ? "#ffffff" : "#94a3b8",
+                      fontSize: "0.75rem",
+                      fontWeight: 800,
+                      cursor: "pointer",
+                    }}
+                  >
+                    🗺️ Google マップ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMapViewMode("radar")}
+                    style={{
+                      padding: "5px 11px",
+                      borderRadius: 7,
+                      border: "none",
+                      background:
+                        mapViewMode === "radar"
+                          ? "linear-gradient(135deg, #0284c7 0%, #10b981 100%)"
+                          : "transparent",
+                      color: mapViewMode === "radar" ? "#ffffff" : "#94a3b8",
+                      fontSize: "0.75rem",
+                      fontWeight: 800,
+                      cursor: "pointer",
+                    }}
+                  >
+                    📡 レーダーマップ
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGetGps}
+                  disabled={gpsLoading}
+                  style={{
+                    padding: "5px 10px",
+                    borderRadius: 8,
+                    border: "1px solid rgba(52, 211, 153, 0.45)",
+                    background: "rgba(16, 185, 129, 0.16)",
+                    color: "#6ee7b7",
+                    fontSize: "0.73rem",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  {gpsLoading ? "取得中..." : "📍 現在地を取得 (GPS)"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleResetSeedPins}
+                  style={{
+                    padding: "5px 10px",
+                    borderRadius: 8,
+                    border: "1px solid rgba(148, 163, 184, 0.28)",
+                    background: "rgba(30, 41, 59, 0.7)",
+                    color: "#cbd5e1",
+                    fontSize: "0.73rem",
+                    cursor: "pointer",
+                  }}
+                >
+                  🔄 初期ピン復元
+                </button>
+              </div>
             </div>
 
             {/* Category & Severity Filters */}
@@ -2729,312 +3405,607 @@ export default function MachiEyeLive() {
               </div>
             </div>
 
-            {/* Interactive SVG Neighborhood Radar Map */}
-            <div
-              style={{
-                position: "relative",
-                borderRadius: 14,
-                overflow: "hidden",
-                border: "1px solid rgba(56, 189, 248, 0.35)",
-                background: "#06101e",
-              }}
-            >
-              <svg
-                viewBox="0 0 600 340"
-                onClick={handleRadarSvgClick}
-                style={{
-                  width: "100%",
-                  height: 295,
-                  display: "block",
-                  cursor: "crosshair",
-                }}
-                aria-label="地域安全レーダーマップ（ピンをクリックして詳細を表示）"
-              >
-                <defs>
-                  <radialGradient id="radarGlow" cx="50%" cy="50%" r="50%">
-                    <stop offset="0%" stopColor="rgba(16, 185, 129, 0.16)" />
-                    <stop offset="65%" stopColor="rgba(14, 165, 233, 0.06)" />
-                    <stop offset="100%" stopColor="rgba(6, 16, 30, 0)" />
-                  </radialGradient>
-                </defs>
-
-                {/* Radar Background & Grid */}
-                <rect width="600" height="340" fill="#071222" />
-                <circle cx="300" cy="170" r="160" fill="url(#radarGlow)" />
-                {[60, 120, 180, 240].map((r) => (
-                  <circle
-                    key={r}
-                    cx="300"
-                    cy="170"
-                    r={r}
-                    fill="none"
-                    stroke="rgba(56, 189, 248, 0.12)"
-                    strokeDasharray="4 4"
-                  />
-                ))}
-                {[100, 200, 300, 400, 500].map((x) => (
-                  <line
-                    key={`gx-${x}`}
-                    x1={x}
-                    y1={0}
-                    x2={x}
-                    y2={340}
-                    stroke="rgba(56, 189, 248, 0.08)"
-                  />
-                ))}
-                {[68, 136, 204, 272].map((y) => (
-                  <line
-                    key={`gy-${y}`}
-                    x1={0}
-                    y1={y}
-                    x2={600}
-                    y2={y}
-                    stroke="rgba(56, 189, 248, 0.08)"
-                  />
-                ))}
-
-                {/* Neighborhood River & Main Roads */}
-                <path
-                  d="M 0 45 Q 240 65, 420 25 T 600 40"
-                  fill="none"
-                  stroke="rgba(14, 165, 233, 0.28)"
-                  strokeWidth="14"
-                />
-                <path
-                  d="M 40 340 L 210 155 L 570 155"
-                  fill="none"
-                  stroke="rgba(148, 163, 184, 0.25)"
-                  strokeWidth="10"
-                />
-                <path
-                  d="M 165 0 L 165 340"
-                  fill="none"
-                  stroke="rgba(148, 163, 184, 0.22)"
-                  strokeWidth="8"
-                />
-                <path
-                  d="M 410 0 L 380 340"
-                  fill="none"
-                  stroke="rgba(148, 163, 184, 0.18)"
-                  strokeWidth="6"
-                />
-
-                {/* School Zone & Civic Landmarks */}
-                <rect
-                  x="355"
-                  y="58"
-                  width="95"
-                  height="42"
-                  rx="6"
-                  fill="rgba(16, 185, 129, 0.12)"
-                  stroke="rgba(16, 185, 129, 0.35)"
-                />
-                <text
-                  x="402"
-                  y="83"
-                  textAnchor="middle"
-                  fill="#6ee7b7"
-                  fontSize="11"
-                  fontWeight="700"
-                >
-                  🏫 第一小学校
-                </text>
-
-                <rect
-                  x="118"
-                  y="128"
-                  width="92"
-                  height="40"
-                  rx="6"
-                  fill="rgba(56, 189, 248, 0.14)"
-                  stroke="rgba(56, 189, 248, 0.4)"
-                />
-                <text
-                  x="164"
-                  y="152"
-                  textAnchor="middle"
-                  fill="#7dd3fc"
-                  fontSize="11"
-                  fontWeight="700"
-                >
-                  🚉 中央駅南口
-                </text>
-
-                <rect
-                  x="208"
-                  y="235"
-                  width="116"
-                  height="40"
-                  rx="6"
-                  fill="rgba(168, 85, 247, 0.13)"
-                  stroke="rgba(168, 85, 247, 0.38)"
-                />
-                <text
-                  x="266"
-                  y="259"
-                  textAnchor="middle"
-                  fill="#d8b4fe"
-                  fontSize="10.5"
-                  fontWeight="700"
-                >
-                  🏛️ 図書館・子育て支援
-                </text>
-
-                <text
-                  x="88"
-                  y="56"
-                  fill="#94a3b8"
-                  fontSize="10"
-                  fontWeight="600"
-                >
-                  🌲 緑が丘通学路ゾーン
-                </text>
-                <text
-                  x="485"
-                  y="245"
-                  fill="#94a3b8"
-                  fontSize="10"
-                  fontWeight="600"
-                >
-                  🛍️ さくら通り商店街
-                </text>
-
-                {/* Draft Target Crosshair (where a new report will be plotted) */}
-                <g
-                  transform={`translate(${(draftMapX / 100) * 600}, ${
-                    (draftMapY / 100) * 340
-                  })`}
-                >
-                  <circle
-                    r="14"
-                    fill="none"
-                    stroke="#38bdf8"
-                    strokeWidth="1.5"
-                    strokeDasharray="3 3"
-                  />
-                  <line
-                    x1="-18"
-                    y1="0"
-                    x2="18"
-                    y2="0"
-                    stroke="#38bdf8"
-                    strokeWidth="1"
-                  />
-                  <line
-                    x1="0"
-                    y1="-18"
-                    x2="0"
-                    y2="18"
-                    stroke="#38bdf8"
-                    strokeWidth="1"
-                  />
-                </g>
-
-                {/* Plotted Community Safety Pins */}
-                {filteredPins.map((pin) => {
-                  const cx = (pin.mapX / 100) * 600;
-                  const cy = (pin.mapY / 100) * 340;
-                  const isActive = selectedPin?.id === pin.id;
-                  const sev = severityColor(pin.analysis.severity_level);
-                  const cat = categoryMeta(pin.analysis.category);
-
-                  return (
-                    <g
-                      key={pin.id}
-                      transform={`translate(${cx}, ${cy})`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedPinId(pin.id);
-                        inspectionCardRef.current?.scrollIntoView({
-                          behavior: "smooth",
-                          block: "nearest",
-                        });
-                      }}
-                      style={{ cursor: "pointer" }}
-                    >
-                      {isActive && (
-                        <circle
-                          r="24"
-                          fill="none"
-                          stroke={sev.dot}
-                          strokeWidth="2.5"
-                          opacity="0.85"
-                        />
-                      )}
-                      <circle
-                        r={isActive ? "16" : "13"}
-                        fill={sev.dot}
-                        fillOpacity={isActive ? "0.95" : "0.82"}
-                        stroke="#0f172a"
-                        strokeWidth="2.5"
-                      />
-                      <text
-                        x="0"
-                        y="4"
-                        textAnchor="middle"
-                        fontSize={isActive ? "12" : "10.5"}
-                      >
-                        {cat.icon}
-                      </text>
-                      <rect
-                        x="-58"
-                        y={isActive ? "-36" : "-32"}
-                        width="116"
-                        height="17"
-                        rx="4"
-                        fill={
-                          isActive
-                            ? "rgba(15, 23, 42, 0.96)"
-                            : "rgba(15, 23, 42, 0.82)"
-                        }
-                        stroke={sev.dot}
-                        strokeWidth={isActive ? "1.4" : "0.8"}
-                      />
-                      <text
-                        x="0"
-                        y={isActive ? "-24" : "-20"}
-                        textAnchor="middle"
-                        fill="#f8fafc"
-                        fontSize="9.2"
-                        fontWeight="700"
-                      >
-                        {pin.analysis.severity_level} ·{" "}
-                        {pin.analysis.title.slice(0, 8)}…
-                      </text>
-                    </g>
-                  );
-                })}
-              </svg>
-
-              {/* Radar Legend Footer */}
+            {/* Map Viewport: 🗺️ Google マップ (Default) or 📡 レーダーマップ */}
+            {mapViewMode === "gmaps" ? (
               <div
                 style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 8,
-                  padding: "8px 12px",
-                  background: "rgba(15, 23, 42, 0.92)",
-                  borderTop: "1px solid rgba(56, 189, 248, 0.2)",
-                  fontSize: "0.74rem",
-                  color: "#94a3b8",
+                  position: "relative",
+                  borderRadius: 14,
+                  overflow: "hidden",
+                  border: "1px solid rgba(56, 189, 248, 0.35)",
+                  background: "#06101e",
                 }}
               >
-                <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                  <span>
-                    <span style={{ color: "#ef4444" }}>●</span> 緊急
-                  </span>
-                  <span>
-                    <span style={{ color: "#f59e0b" }}>●</span> 注意
-                  </span>
-                  <span>
-                    <span style={{ color: "#38bdf8" }}>●</span> 改善提案
-                  </span>
-                  <span>🎯 青十字: 新規ピン予定位置（マップクリックで移動）</span>
+                {/* Live Google Map Header Status Bar */}
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    padding: "7px 12px",
+                    background: "rgba(15, 23, 42, 0.94)",
+                    borderBottom: "1px solid rgba(56, 189, 248, 0.22)",
+                    fontSize: "0.74rem",
+                    color: "#cbd5e1",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      minWidth: 0,
+                    }}
+                  >
+                    <span
+                      style={{
+                        padding: "2px 8px",
+                        borderRadius: 999,
+                        background:
+                          GOOGLE_MAPS_API_KEY && gmapsSdkReady && !gmapsSdkFailed
+                            ? "rgba(16, 185, 129, 0.2)"
+                            : "rgba(14, 165, 233, 0.2)",
+                        border:
+                          GOOGLE_MAPS_API_KEY && gmapsSdkReady && !gmapsSdkFailed
+                            ? "1px solid rgba(16, 185, 129, 0.45)"
+                            : "1px solid rgba(56, 189, 248, 0.45)",
+                        color:
+                          GOOGLE_MAPS_API_KEY && gmapsSdkReady && !gmapsSdkFailed
+                            ? "#6ee7b7"
+                            : "#7dd3fc",
+                        fontWeight: 800,
+                        fontSize: "0.7rem",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {GOOGLE_MAPS_API_KEY && gmapsSdkReady && !gmapsSdkFailed
+                        ? "🗺️ Google Maps JS API (全ピン連動)"
+                        : "🗺️ Google Maps Live Embed (設定不要・即時連動)"}
+                    </span>
+                    <span
+                      style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        color: "#e2e8f0",
+                        fontWeight: 600,
+                      }}
+                    >
+                      📍 {activeGoogleMapCenter.label}（{activeGoogleMapCenter.lat},{" "}
+                      {activeGoogleMapCenter.lng}）
+                    </span>
+                  </div>
+                  {gmapsCenterOverride && (
+                    <button
+                      type="button"
+                      onClick={() => setGmapsCenterOverride(null)}
+                      style={{
+                        padding: "2px 8px",
+                        borderRadius: 6,
+                        border: "1px solid rgba(56, 189, 248, 0.4)",
+                        background: "rgba(14, 165, 233, 0.18)",
+                        color: "#7dd3fc",
+                        fontSize: "0.7rem",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      選択中のピンに戻る
+                    </button>
+                  )}
                 </div>
-                <span>ピンをクリックすると検査カード＆通報レポートを展開</span>
+
+                {/* Google Maps JS API Container OR Zero-Config Google Maps Embed Fallback */}
+                {GOOGLE_MAPS_API_KEY && gmapsSdkReady && !gmapsSdkFailed ? (
+                  <div
+                    ref={gmapCanvasRef}
+                    style={{
+                      width: "100%",
+                      height: 295,
+                      background: "#071222",
+                    }}
+                    aria-label="Google マップ（地域コミュニティ安全ピン）"
+                  />
+                ) : (
+                  <iframe
+                    key={`gmap-embed-${activeGoogleMapCenter.lat}-${activeGoogleMapCenter.lng}`}
+                    title={`Google マップ - ${activeGoogleMapCenter.label}`}
+                    src={`https://maps.google.com/maps?q=${encodeURIComponent(
+                      `${activeGoogleMapCenter.lat},${activeGoogleMapCenter.lng}`
+                    )}&z=16&hl=ja&output=embed`}
+                    style={{
+                      width: "100%",
+                      height: 295,
+                      border: 0,
+                      display: "block",
+                      background: "#071222",
+                    }}
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                  />
+                )}
+
+                {/* Pin Selector Strip directly beneath Google Map (1-click fly-to coordinate) */}
+                <div
+                  style={{
+                    padding: "9px 12px",
+                    background: "rgba(15, 23, 42, 0.95)",
+                    borderTop: "1px solid rgba(56, 189, 248, 0.22)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 6,
+                      fontSize: "0.72rem",
+                      color: "#94a3b8",
+                    }}
+                  >
+                    <span style={{ fontWeight: 700, color: "#cbd5e1" }}>
+                      🎯 ピン選択ストリップ（クリックでGoogleマップがその座標へ即座に移動）:
+                    </span>
+                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      <span>
+                        <span style={{ color: "#ef4444" }}>●</span> 緊急
+                      </span>
+                      <span>
+                        <span style={{ color: "#f59e0b" }}>●</span> 注意
+                      </span>
+                      <span>
+                        <span style={{ color: "#38bdf8" }}>●</span> 改善提案
+                      </span>
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 6,
+                      overflowX: "auto",
+                      paddingBottom: 3,
+                    }}
+                  >
+                    {filteredPins.map((pin) => {
+                      const isSelected =
+                        !gmapsCenterOverride && selectedPin?.id === pin.id;
+                      const sev = severityColor(pin.analysis.severity_level);
+                      const cat = categoryMeta(pin.analysis.category);
+                      return (
+                        <button
+                          key={`strip-${pin.id}`}
+                          type="button"
+                          onClick={() => {
+                            setGmapsCenterOverride(null);
+                            setSelectedPinId(pin.id);
+                          }}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                            padding: "5px 10px",
+                            borderRadius: 999,
+                            border: isSelected
+                              ? `1.5px solid ${sev.dot}`
+                              : "1px solid rgba(148, 163, 184, 0.28)",
+                            background: isSelected
+                              ? sev.bg
+                              : "rgba(2, 6, 23, 0.72)",
+                            color: isSelected ? "#ffffff" : "#cbd5e1",
+                            fontSize: "0.73rem",
+                            fontWeight: isSelected ? 800 : 600,
+                            cursor: "pointer",
+                            whiteSpace: "nowrap",
+                            flexShrink: 0,
+                          }}
+                        >
+                          <span style={{ color: sev.dot, fontSize: "0.8rem" }}>
+                            ●
+                          </span>
+                          <span>{cat.icon}</span>
+                          <span>
+                            {pin.analysis.title.length > 14
+                              ? `${pin.analysis.title.slice(0, 14)}…`
+                              : pin.analysis.title}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
+            ) : (
+              /* Interactive SVG Neighborhood Radar Map */
+              <div
+                style={{
+                  position: "relative",
+                  borderRadius: 14,
+                  overflow: "hidden",
+                  border: "1px solid rgba(56, 189, 248, 0.35)",
+                  background: "#06101e",
+                }}
+              >
+                <svg
+                  viewBox="0 0 600 340"
+                  onClick={handleRadarSvgClick}
+                  style={{
+                    width: "100%",
+                    height: 295,
+                    display: "block",
+                    cursor: "crosshair",
+                  }}
+                  aria-label="地域安全レーダーマップ（ピンをクリックして詳細を表示）"
+                >
+                  <defs>
+                    <radialGradient id="radarGlow" cx="50%" cy="50%" r="50%">
+                      <stop offset="0%" stopColor="rgba(16, 185, 129, 0.16)" />
+                      <stop offset="65%" stopColor="rgba(14, 165, 233, 0.06)" />
+                      <stop offset="100%" stopColor="rgba(6, 16, 30, 0)" />
+                    </radialGradient>
+                  </defs>
+
+                  {/* Radar Background & Grid */}
+                  <rect width="600" height="340" fill="#071222" />
+                  <circle cx="300" cy="170" r="160" fill="url(#radarGlow)" />
+                  {[60, 120, 180, 240].map((r) => (
+                    <circle
+                      key={r}
+                      cx="300"
+                      cy="170"
+                      r={r}
+                      fill="none"
+                      stroke="rgba(56, 189, 248, 0.12)"
+                      strokeDasharray="4 4"
+                    />
+                  ))}
+                  {[100, 200, 300, 400, 500].map((x) => (
+                    <line
+                      key={`gx-${x}`}
+                      x1={x}
+                      y1={0}
+                      x2={x}
+                      y2={340}
+                      stroke="rgba(56, 189, 248, 0.08)"
+                    />
+                  ))}
+                  {[68, 136, 204, 272].map((y) => (
+                    <line
+                      key={`gy-${y}`}
+                      x1={0}
+                      y1={y}
+                      x2={600}
+                      y2={y}
+                      stroke="rgba(56, 189, 248, 0.08)"
+                    />
+                  ))}
+
+                  {/* Neighborhood River & Main Roads */}
+                  <path
+                    d="M 0 45 Q 240 65, 420 25 T 600 40"
+                    fill="none"
+                    stroke="rgba(14, 165, 233, 0.28)"
+                    strokeWidth="14"
+                  />
+                  <path
+                    d="M 40 340 L 210 155 L 570 155"
+                    fill="none"
+                    stroke="rgba(148, 163, 184, 0.25)"
+                    strokeWidth="10"
+                  />
+                  <path
+                    d="M 165 0 L 165 340"
+                    fill="none"
+                    stroke="rgba(148, 163, 184, 0.22)"
+                    strokeWidth="8"
+                  />
+                  <path
+                    d="M 410 0 L 380 340"
+                    fill="none"
+                    stroke="rgba(148, 163, 184, 0.18)"
+                    strokeWidth="6"
+                  />
+
+                  {/* School Zone & Civic Landmarks */}
+                  <rect
+                    x="355"
+                    y="58"
+                    width="95"
+                    height="42"
+                    rx="6"
+                    fill="rgba(16, 185, 129, 0.12)"
+                    stroke="rgba(16, 185, 129, 0.35)"
+                  />
+                  <text
+                    x="402"
+                    y="83"
+                    textAnchor="middle"
+                    fill="#6ee7b7"
+                    fontSize="11"
+                    fontWeight="700"
+                  >
+                    🏫 第一小学校
+                  </text>
+
+                  <rect
+                    x="118"
+                    y="128"
+                    width="92"
+                    height="40"
+                    rx="6"
+                    fill="rgba(56, 189, 248, 0.14)"
+                    stroke="rgba(56, 189, 248, 0.4)"
+                  />
+                  <text
+                    x="164"
+                    y="152"
+                    textAnchor="middle"
+                    fill="#7dd3fc"
+                    fontSize="11"
+                    fontWeight="700"
+                  >
+                    🚉 中央駅南口
+                  </text>
+
+                  <rect
+                    x="208"
+                    y="235"
+                    width="116"
+                    height="40"
+                    rx="6"
+                    fill="rgba(168, 85, 247, 0.13)"
+                    stroke="rgba(168, 85, 247, 0.38)"
+                  />
+                  <text
+                    x="266"
+                    y="259"
+                    textAnchor="middle"
+                    fill="#d8b4fe"
+                    fontSize="10.5"
+                    fontWeight="700"
+                  >
+                    🏛️ 図書館・子育て支援
+                  </text>
+
+                  <text
+                    x="88"
+                    y="56"
+                    fill="#94a3b8"
+                    fontSize="10"
+                    fontWeight="600"
+                  >
+                    🌲 緑が丘通学路ゾーン
+                  </text>
+                  <text
+                    x="485"
+                    y="245"
+                    fill="#94a3b8"
+                    fontSize="10"
+                    fontWeight="600"
+                  >
+                    🛍️ さくら通り商店街
+                  </text>
+
+                  {/* Draft Target Crosshair (where a new report will be plotted) */}
+                  <g
+                    transform={`translate(${(draftMapX / 100) * 600}, ${
+                      (draftMapY / 100) * 340
+                    })`}
+                  >
+                    <circle
+                      r="14"
+                      fill="none"
+                      stroke="#38bdf8"
+                      strokeWidth="1.5"
+                      strokeDasharray="3 3"
+                    />
+                    <line
+                      x1="-18"
+                      y1="0"
+                      x2="18"
+                      y2="0"
+                      stroke="#38bdf8"
+                      strokeWidth="1"
+                    />
+                    <line
+                      x1="0"
+                      y1="-18"
+                      x2="0"
+                      y2="18"
+                      stroke="#38bdf8"
+                      strokeWidth="1"
+                    />
+                  </g>
+
+                  {/* Plotted Community Safety Pins */}
+                  {filteredPins.map((pin) => {
+                    const cx = (pin.mapX / 100) * 600;
+                    const cy = (pin.mapY / 100) * 340;
+                    const isActive = selectedPin?.id === pin.id;
+                    const sev = severityColor(pin.analysis.severity_level);
+                    const cat = categoryMeta(pin.analysis.category);
+
+                    return (
+                      <g
+                        key={pin.id}
+                        transform={`translate(${cx}, ${cy})`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setGmapsCenterOverride(null);
+                          setSelectedPinId(pin.id);
+                          inspectionCardRef.current?.scrollIntoView({
+                            behavior: "smooth",
+                            block: "nearest",
+                          });
+                        }}
+                        style={{ cursor: "pointer" }}
+                      >
+                        {isActive && (
+                          <circle
+                            r="24"
+                            fill="none"
+                            stroke={sev.dot}
+                            strokeWidth="2.5"
+                            opacity="0.85"
+                          />
+                        )}
+                        <circle
+                          r={isActive ? "16" : "13"}
+                          fill={sev.dot}
+                          fillOpacity={isActive ? "0.95" : "0.82"}
+                          stroke="#0f172a"
+                          strokeWidth="2.5"
+                        />
+                        <text
+                          x="0"
+                          y="4"
+                          textAnchor="middle"
+                          fontSize={isActive ? "12" : "10.5"}
+                        >
+                          {cat.icon}
+                        </text>
+                        <rect
+                          x="-58"
+                          y={isActive ? "-36" : "-32"}
+                          width="116"
+                          height="17"
+                          rx="4"
+                          fill={
+                            isActive
+                              ? "rgba(15, 23, 42, 0.96)"
+                              : "rgba(15, 23, 42, 0.82)"
+                          }
+                          stroke={sev.dot}
+                          strokeWidth={isActive ? "1.4" : "0.8"}
+                        />
+                        <text
+                          x="0"
+                          y={isActive ? "-24" : "-20"}
+                          textAnchor="middle"
+                          fill="#f8fafc"
+                          fontSize="9.2"
+                          fontWeight="700"
+                        >
+                          {pin.analysis.severity_level} ·{" "}
+                          {pin.analysis.title.slice(0, 8)}…
+                        </text>
+                      </g>
+                    );
+                  })}
+                </svg>
+
+                {/* Radar Legend Footer */}
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    padding: "8px 12px",
+                    background: "rgba(15, 23, 42, 0.92)",
+                    borderTop: "1px solid rgba(56, 189, 248, 0.2)",
+                    fontSize: "0.74rem",
+                    color: "#94a3b8",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                    <span>
+                      <span style={{ color: "#ef4444" }}>●</span> 緊急
+                    </span>
+                    <span>
+                      <span style={{ color: "#f59e0b" }}>●</span> 注意
+                    </span>
+                    <span>
+                      <span style={{ color: "#38bdf8" }}>●</span> 改善提案
+                    </span>
+                    <span>🎯 青十字: 新規ピン予定位置（マップクリックで移動）</span>
+                  </div>
+                  <span>ピンをクリックすると検査カード＆通報レポートを展開</span>
+                </div>
+              </div>
+            )}
+
+            {/* 1-Click Google Maps Action Bar (Open in Google Maps, Safe Walking Route, Street View) */}
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 8,
+                alignItems: "center",
+              }}
+            >
+              <a
+                href={`https://www.google.com/maps?q=${encodeURIComponent(
+                  `${activeGoogleMapCenter.lat},${activeGoogleMapCenter.lng}`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  flex: 1,
+                  minWidth: 145,
+                  textAlign: "center",
+                  padding: "7px 10px",
+                  borderRadius: 9,
+                  border: "1px solid rgba(56, 189, 248, 0.45)",
+                  background: "rgba(14, 165, 233, 0.16)",
+                  color: "#7dd3fc",
+                  fontSize: "0.76rem",
+                  fontWeight: 800,
+                  textDecoration: "none",
+                }}
+              >
+                🗺️ Google マップで開く ↗
+              </a>
+              <a
+                href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+                  `${activeGoogleMapCenter.lat},${activeGoogleMapCenter.lng}`
+                )}&travelmode=walking`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  flex: 1,
+                  minWidth: 145,
+                  textAlign: "center",
+                  padding: "7px 10px",
+                  borderRadius: 9,
+                  border: "1px solid rgba(52, 211, 153, 0.45)",
+                  background: "rgba(16, 185, 129, 0.16)",
+                  color: "#6ee7b7",
+                  fontSize: "0.76rem",
+                  fontWeight: 800,
+                  textDecoration: "none",
+                }}
+              >
+                🚶 安全ルートを検索 ↗
+              </a>
+              <a
+                href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${encodeURIComponent(
+                  `${activeGoogleMapCenter.lat},${activeGoogleMapCenter.lng}`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  flex: 1,
+                  minWidth: 155,
+                  textAlign: "center",
+                  padding: "7px 10px",
+                  borderRadius: 9,
+                  border: "1px solid rgba(192, 132, 252, 0.45)",
+                  background: "rgba(168, 85, 247, 0.16)",
+                  color: "#e9d5ff",
+                  fontSize: "0.76rem",
+                  fontWeight: 800,
+                  textDecoration: "none",
+                }}
+              >
+                👁️ ストリートビューで確認 ↗
+              </a>
             </div>
 
             {/* Compact Scrollable Pin List under the Map */}
@@ -3055,7 +4026,10 @@ export default function MachiEyeLive() {
                 return (
                   <div
                     key={pin.id}
-                    onClick={() => setSelectedPinId(pin.id)}
+                    onClick={() => {
+                      setGmapsCenterOverride(null);
+                      setSelectedPinId(pin.id);
+                    }}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -3159,399 +4133,239 @@ export default function MachiEyeLive() {
                 );
               })}
             </div>
-          </section>
-        </div>
+              </section>
+            )}
+          </div>
+        )}
 
-        {/* BOTTOM SECTION: Full Inspection Card + 1-Click Municipality Report Generator */}
-        {selectedPin && (
-          <div
-            ref={inspectionCardRef}
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(480px, 1fr))",
-              gap: 22,
-            }}
-          >
-            {/* FULL INSPECTION CARD */}
-            <section
-              aria-live="polite"
+        {/* STEP 3 (Progressive Disclosure): Inspection Result + Collapsible <details> for Multilingual Notice & Municipality Report / Save */}
+        {(selectedGoal === "map" ||
+          (selectedGoal !== null && hasCompletedInspection)) &&
+          selectedPin && (
+            <div
+              ref={inspectionCardRef}
               style={{
-                borderRadius: 18,
-                padding: "22px 24px",
-                background: "rgba(15, 23, 42, 0.86)",
-                border: "1px solid rgba(56, 189, 248, 0.3)",
                 display: "flex",
                 flexDirection: "column",
                 gap: 16,
               }}
             >
-              <div
+              {/* FULL INSPECTION SUMMARY CARD */}
+              <section
+                aria-live="polite"
                 style={{
+                  borderRadius: 18,
+                  padding: "22px 24px",
+                  background: "rgba(15, 23, 42, 0.86)",
+                  border: "1px solid rgba(56, 189, 248, 0.3)",
                   display: "flex",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 10,
+                  flexDirection: "column",
+                  gap: 16,
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span
-                    style={{
-                      fontSize: "0.76rem",
-                      fontWeight: 800,
-                      padding: "4px 10px",
-                      borderRadius: 999,
-                      background: severityColor(
-                        selectedPin.analysis.severity_level
-                      ).bg,
-                      border: `1px solid ${
-                        severityColor(selectedPin.analysis.severity_level)
-                          .border
-                      }`,
-                      color: severityColor(selectedPin.analysis.severity_level)
-                        .text,
-                    }}
-                  >
-                    {selectedPin.analysis.severity_level}（Lv.
-                    {selectedPin.analysis.severity}/5）
-                  </span>
-                  <span
-                    style={{
-                      fontSize: "0.78rem",
-                      fontWeight: 700,
-                      padding: "4px 10px",
-                      borderRadius: 999,
-                      background: "rgba(30, 41, 59, 0.9)",
-                      color: categoryMeta(selectedPin.analysis.category).color,
-                    }}
-                  >
-                    {categoryMeta(selectedPin.analysis.category).icon}{" "}
-                    {selectedPin.analysis.category}
-                  </span>
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <button
-                    type="button"
-                    onClick={() => handleUpvotePin(selectedPin.id)}
-                    style={{
-                      padding: "5px 11px",
-                      borderRadius: 8,
-                      border: "1px solid rgba(56, 189, 248, 0.4)",
-                      background: "rgba(14, 165, 233, 0.15)",
-                      color: "#7dd3fc",
-                      fontSize: "0.76rem",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
-                  >
-                    👍 私も確認した ({selectedPin.upvotes})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleCyclePinStatus(selectedPin.id)}
-                    style={{
-                      padding: "5px 11px",
-                      borderRadius: 8,
-                      border: "1px solid rgba(16, 185, 129, 0.4)",
-                      background: "rgba(16, 185, 129, 0.14)",
-                      color: "#6ee7b7",
-                      fontSize: "0.76rem",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
-                  >
-                    状態: {selectedPin.workflowStatus} ↻
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <h3
-                  style={{
-                    margin: 0,
-                    fontSize: "1.22rem",
-                    fontWeight: 800,
-                    color: "#f8fafc",
-                    lineHeight: 1.4,
-                  }}
-                >
-                  {selectedPin.analysis.title}
-                </h3>
                 <div
                   style={{
-                    marginTop: 6,
-                    fontSize: "0.82rem",
-                    color: "#94a3b8",
                     display: "flex",
                     flexWrap: "wrap",
-                    gap: 12,
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 10,
                   }}
                 >
-                  <span>📍 {selectedPin.locationText}</span>
-                  <span>
-                    🌐 ({selectedPin.latitude}, {selectedPin.longitude})
-                  </span>
-                  <a
-                    href={`https://www.google.com/maps?q=${encodeURIComponent(
-                      `${selectedPin.latitude},${selectedPin.longitude}`
-                    )}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      color: "#38bdf8",
-                      textDecoration: "none",
-                      fontWeight: 700,
-                    }}
-                  >
-                    Google マップで開く ↗
-                  </a>
-                </div>
-              </div>
-
-              {/* Hazard Score Meter & Responsible Department */}
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1.2fr",
-                  gap: 12,
-                }}
-              >
-                <div
-                  style={{
-                    padding: "12px 14px",
-                    borderRadius: 12,
-                    background: "rgba(2, 6, 23, 0.55)",
-                    border: "1px solid rgba(148, 163, 184, 0.2)",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: "0.74rem",
-                      color: "#94a3b8",
-                      fontWeight: 600,
-                    }}
-                  >
-                    AI 総合ハザードスコア
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "baseline",
-                      gap: 6,
-                      marginTop: 4,
-                    }}
-                  >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span
                       style={{
-                        fontSize: "1.65rem",
-                        fontWeight: 900,
-                        color: severityColor(
-                          selectedPin.analysis.severity_level
-                        ).dot,
-                      }}
-                    >
-                      {selectedPin.analysis.hazard_score}
-                    </span>
-                    <span style={{ fontSize: "0.82rem", color: "#94a3b8" }}>
-                      / 100
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 6,
-                      height: 7,
-                      borderRadius: 999,
-                      background: "rgba(30, 41, 59, 0.9)",
-                      overflow: "hidden",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: `${selectedPin.analysis.hazard_score}%`,
-                        height: "100%",
+                        fontSize: "0.76rem",
+                        fontWeight: 800,
+                        padding: "4px 10px",
+                        borderRadius: 999,
                         background: severityColor(
                           selectedPin.analysis.severity_level
-                        ).dot,
+                        ).bg,
+                        border: `1px solid ${
+                          severityColor(selectedPin.analysis.severity_level)
+                            .border
+                        }`,
+                        color: severityColor(selectedPin.analysis.severity_level)
+                          .text,
                       }}
-                    />
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    padding: "12px 14px",
-                    borderRadius: 12,
-                    background: "rgba(2, 6, 23, 0.55)",
-                    border: "1px solid rgba(148, 163, 184, 0.2)",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: "0.74rem",
-                      color: "#94a3b8",
-                      fontWeight: 600,
-                    }}
-                  >
-                    自治体 推定所管部署
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "0.92rem",
-                      fontWeight: 800,
-                      color: "#e2e8f0",
-                      marginTop: 6,
-                    }}
-                  >
-                    🏛️ {selectedPin.analysis.department}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "0.73rem",
-                      color: "#38bdf8",
-                      marginTop: 4,
-                    }}
-                  >
-                    ⚡ 解析モデル: {selectedPin.usedModel}
-                  </div>
-                </div>
-              </div>
-
-              {/* Affected Groups Chips */}
-              <div
-                style={{
-                  padding: "12px 14px",
-                  borderRadius: 12,
-                  background: "rgba(14, 165, 233, 0.08)",
-                  border: "1px solid rgba(56, 189, 248, 0.24)",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "0.76rem",
-                    fontWeight: 700,
-                    color: "#7dd3fc",
-                    marginBottom: 8,
-                  }}
-                >
-                  ♿ 影響を受ける当事者・通行者グループ
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {selectedPin.analysis.affected_groups.map((grp) => (
+                    >
+                      {selectedPin.analysis.severity_level}（Lv.
+                      {selectedPin.analysis.severity}/5）
+                    </span>
                     <span
-                      key={grp}
                       style={{
                         fontSize: "0.78rem",
                         fontWeight: 700,
                         padding: "4px 10px",
                         borderRadius: 999,
-                        background: "rgba(15, 23, 42, 0.85)",
-                        border: "1px solid rgba(56, 189, 248, 0.35)",
-                        color: "#e2e8f0",
+                        background: "rgba(30, 41, 59, 0.9)",
+                        color: categoryMeta(selectedPin.analysis.category).color,
                       }}
                     >
-                      👥 {grp}
+                      {categoryMeta(selectedPin.analysis.category).icon}{" "}
+                      {selectedPin.analysis.category}
                     </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* Barrier-free Assessment & Disaster Impact */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <div
-                  style={{
-                    padding: "12px 14px",
-                    borderRadius: 12,
-                    background: "rgba(2, 6, 23, 0.5)",
-                    border: "1px solid rgba(148, 163, 184, 0.18)",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: "0.76rem",
-                      fontWeight: 700,
-                      color: "#38bdf8",
-                      marginBottom: 4,
-                    }}
-                  >
-                    🦯 バリアフリー・通行アクセシビリティ評価
                   </div>
-                  <p
+
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    {selectedGoal !== "map" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGmapsCenterOverride(null);
+                          setSelectedGoal("map");
+                          setMapViewMode("gmaps");
+                        }}
+                        style={{
+                          padding: "5px 11px",
+                          borderRadius: 8,
+                          border: "1px solid rgba(192, 132, 252, 0.45)",
+                          background: "rgba(168, 85, 247, 0.18)",
+                          color: "#e9d5ff",
+                          fontSize: "0.76rem",
+                          fontWeight: 800,
+                          cursor: "pointer",
+                        }}
+                      >
+                        🗺️ 安全マップ（Google マップ）でこのピンを見る
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleUpvotePin(selectedPin.id)}
+                      style={{
+                        padding: "5px 11px",
+                        borderRadius: 8,
+                        border: "1px solid rgba(56, 189, 248, 0.4)",
+                        background: "rgba(14, 165, 233, 0.15)",
+                        color: "#7dd3fc",
+                        fontSize: "0.76rem",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      👍 私も確認した ({selectedPin.upvotes})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleCyclePinStatus(selectedPin.id)}
+                      style={{
+                        padding: "5px 11px",
+                        borderRadius: 8,
+                        border: "1px solid rgba(16, 185, 129, 0.4)",
+                        background: "rgba(16, 185, 129, 0.14)",
+                        color: "#6ee7b7",
+                        fontSize: "0.76rem",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      状態: {selectedPin.workflowStatus} ↻
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <h3
                     style={{
                       margin: 0,
-                      fontSize: "0.84rem",
-                      color: "#e2e8f0",
-                      lineHeight: 1.6,
+                      fontSize: "1.22rem",
+                      fontWeight: 800,
+                      color: "#f8fafc",
+                      lineHeight: 1.4,
                     }}
                   >
-                    {selectedPin.analysis.barrier_free_assessment}
-                  </p>
-                </div>
-
-                <div
-                  style={{
-                    padding: "12px 14px",
-                    borderRadius: 12,
-                    background: "rgba(2, 6, 23, 0.5)",
-                    border: "1px solid rgba(148, 163, 184, 0.18)",
-                  }}
-                >
+                    {selectedPin.analysis.title}
+                  </h3>
                   <div
                     style={{
-                      fontSize: "0.76rem",
-                      fontWeight: 700,
-                      color: "#fb923c",
-                      marginBottom: 4,
+                      marginTop: 6,
+                      fontSize: "0.82rem",
+                      color: "#94a3b8",
+                      display: "flex",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      gap: 10,
                     }}
                   >
-                    🌍 防災・環境・地域安全インパクト
+                    <span>📍 {selectedPin.locationText}</span>
+                    <span>
+                      🌐 ({selectedPin.latitude}, {selectedPin.longitude})
+                    </span>
                   </div>
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: "0.84rem",
-                      color: "#e2e8f0",
-                      lineHeight: 1.6,
-                    }}
-                  >
-                    {selectedPin.analysis.eco_disaster_impact}
-                  </p>
-                </div>
-
-                <div
-                  style={{
-                    padding: "12px 14px",
-                    borderRadius: 12,
-                    background: "rgba(16, 185, 129, 0.1)",
-                    border: "1px solid rgba(16, 185, 129, 0.32)",
-                  }}
-                >
                   <div
                     style={{
-                      fontSize: "0.76rem",
-                      fontWeight: 700,
-                      color: "#6ee7b7",
-                      marginBottom: 4,
+                      marginTop: 8,
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 8,
                     }}
                   >
-                    🛠️ AI 推奨インフラ修繕・改善提案
+                    <a
+                      href={`https://www.google.com/maps?q=${encodeURIComponent(
+                        `${selectedPin.latitude},${selectedPin.longitude}`
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        padding: "5px 11px",
+                        borderRadius: 8,
+                        border: "1px solid rgba(56, 189, 248, 0.45)",
+                        background: "rgba(14, 165, 233, 0.16)",
+                        color: "#7dd3fc",
+                        textDecoration: "none",
+                        fontSize: "0.76rem",
+                        fontWeight: 800,
+                      }}
+                    >
+                      🗺️ Google マップで開く ↗
+                    </a>
+                    <a
+                      href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+                        `${selectedPin.latitude},${selectedPin.longitude}`
+                      )}&travelmode=walking`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        padding: "5px 11px",
+                        borderRadius: 8,
+                        border: "1px solid rgba(52, 211, 153, 0.45)",
+                        background: "rgba(16, 185, 129, 0.16)",
+                        color: "#6ee7b7",
+                        textDecoration: "none",
+                        fontSize: "0.76rem",
+                        fontWeight: 800,
+                      }}
+                    >
+                      🚶 安全ルートを検索 ↗
+                    </a>
+                    <a
+                      href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${encodeURIComponent(
+                        `${selectedPin.latitude},${selectedPin.longitude}`
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        padding: "5px 11px",
+                        borderRadius: 8,
+                        border: "1px solid rgba(192, 132, 252, 0.45)",
+                        background: "rgba(168, 85, 247, 0.16)",
+                        color: "#e9d5ff",
+                        textDecoration: "none",
+                        fontSize: "0.76rem",
+                        fontWeight: 800,
+                      }}
+                    >
+                      👁️ ストリートビューで確認 ↗
+                    </a>
                   </div>
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: "0.84rem",
-                      color: "#ecfdf5",
-                      lineHeight: 1.6,
-                    }}
-                  >
-                    {selectedPin.analysis.suggested_fix}
-                  </p>
                 </div>
 
-                {/* Synthesized BarrierFree & MachiCool & Disaster: Safe Detour & Evacuation Advice */}
+                {/* Safe Detour & Evacuation Advice (Highlighted first for immediate user utility) */}
                 <div
                   style={{
-                    padding: "12px 14px",
+                    padding: "13px 15px",
                     borderRadius: 12,
                     background: "rgba(14, 165, 233, 0.14)",
                     border: "1.5px solid rgba(56, 189, 248, 0.45)",
@@ -3570,7 +4384,7 @@ export default function MachiEyeLive() {
                   <p
                     style={{
                       margin: 0,
-                      fontSize: "0.85rem",
+                      fontSize: "0.86rem",
                       fontWeight: 700,
                       color: "#f0f9ff",
                       lineHeight: 1.6,
@@ -3581,33 +4395,335 @@ export default function MachiEyeLive() {
                   </p>
                 </div>
 
-                {/* Synthesized Inbound: 1-Click Multilingual Safety & Detour Notice Card (JA / EN / ZH / KO) */}
-                {(() => {
-                  const notices = selectedPin.analysis.multilingual_notices ?? {
-                    ja: `【やさしい日本語】「${selectedPin.analysis.title}」に注意してください。車いす・ベビーカーのかたは安全なルートへ迂回してください。`,
-                    en: `[SAFETY NOTICE] Caution: ${selectedPin.analysis.title}. Wheelchair and stroller users: please take a step-free safe detour.`,
-                    zh: `【安全提示】注意：${selectedPin.analysis.title}。轮椅及婴儿车使用者请绕行平坦安全的无障碍通道。`,
-                    ko: `【안전 안내】주의: ${selectedPin.analysis.title}. 휠체어·유모차 이용자는 안전한 우회로를 이용해 주세요.`,
-                  };
-                  const cardText =
-                    multilingualLang === "all"
-                      ? [
-                          `🇯🇵 [やさしい日本語] ${notices.ja}`,
-                          `🇺🇸 [English] ${notices.en}`,
-                          `🇨🇳 [中文] ${notices.zh}`,
-                          `🇰🇷 [한국어] ${notices.ko}`,
-                        ].join("\n")
-                      : notices[multilingualLang];
-
-                  return (
+                {/* Hazard Score Meter & Responsible Department */}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                    gap: 12,
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: "12px 14px",
+                      borderRadius: 12,
+                      background: "rgba(2, 6, 23, 0.55)",
+                      border: "1px solid rgba(148, 163, 184, 0.2)",
+                    }}
+                  >
                     <div
                       style={{
-                        padding: "13px 15px",
-                        borderRadius: 12,
-                        background: "rgba(30, 41, 59, 0.85)",
-                        border: "1px solid rgba(168, 85, 247, 0.45)",
+                        fontSize: "0.74rem",
+                        color: "#94a3b8",
+                        fontWeight: 600,
                       }}
                     >
+                      AI 総合ハザードスコア
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "baseline",
+                        gap: 6,
+                        marginTop: 4,
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "1.65rem",
+                          fontWeight: 900,
+                          color: severityColor(
+                            selectedPin.analysis.severity_level
+                          ).dot,
+                        }}
+                      >
+                        {selectedPin.analysis.hazard_score}
+                      </span>
+                      <span style={{ fontSize: "0.82rem", color: "#94a3b8" }}>
+                        / 100
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 6,
+                        height: 7,
+                        borderRadius: 999,
+                        background: "rgba(30, 41, 59, 0.9)",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${selectedPin.analysis.hazard_score}%`,
+                          height: "100%",
+                          background: severityColor(
+                            selectedPin.analysis.severity_level
+                          ).dot,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      padding: "12px 14px",
+                      borderRadius: 12,
+                      background: "rgba(2, 6, 23, 0.55)",
+                      border: "1px solid rgba(148, 163, 184, 0.2)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: "0.74rem",
+                        color: "#94a3b8",
+                        fontWeight: 600,
+                      }}
+                    >
+                      自治体 推定所管部署
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "0.92rem",
+                        fontWeight: 800,
+                        color: "#e2e8f0",
+                        marginTop: 6,
+                      }}
+                    >
+                      🏛️ {selectedPin.analysis.department}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "0.73rem",
+                        color: "#38bdf8",
+                        marginTop: 4,
+                      }}
+                    >
+                      ⚡ 解析モデル: {selectedPin.usedModel}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Affected Groups & Detailed Assessments inside a clean collapsible <details> */}
+                <details
+                  style={{
+                    borderRadius: 12,
+                    background: "rgba(2, 6, 23, 0.5)",
+                    border: "1px solid rgba(148, 163, 184, 0.22)",
+                    padding: "12px 14px",
+                  }}
+                >
+                  <summary
+                    style={{
+                      cursor: "pointer",
+                      fontSize: "0.84rem",
+                      fontWeight: 800,
+                      color: "#7dd3fc",
+                    }}
+                  >
+                    🔍 詳細なバリアフリー評価・防災インパクト・推奨修繕案を表示する
+                  </summary>
+                  <div
+                    style={{
+                      marginTop: 12,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 10,
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        background: "rgba(14, 165, 233, 0.08)",
+                        border: "1px solid rgba(56, 189, 248, 0.22)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: "0.75rem",
+                          fontWeight: 700,
+                          color: "#7dd3fc",
+                          marginBottom: 6,
+                        }}
+                      >
+                        ♿ 影響を受ける当事者・通行者グループ
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        {selectedPin.analysis.affected_groups.map((grp) => (
+                          <span
+                            key={grp}
+                            style={{
+                              fontSize: "0.76rem",
+                              fontWeight: 700,
+                              padding: "3px 9px",
+                              borderRadius: 999,
+                              background: "rgba(15, 23, 42, 0.85)",
+                              border: "1px solid rgba(56, 189, 248, 0.35)",
+                              color: "#e2e8f0",
+                            }}
+                          >
+                            👥 {grp}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        background: "rgba(15, 23, 42, 0.7)",
+                        border: "1px solid rgba(148, 163, 184, 0.16)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: "0.75rem",
+                          fontWeight: 700,
+                          color: "#38bdf8",
+                          marginBottom: 4,
+                        }}
+                      >
+                        🦯 バリアフリー・通行アクセシビリティ評価
+                      </div>
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: "0.83rem",
+                          color: "#e2e8f0",
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        {selectedPin.analysis.barrier_free_assessment}
+                      </p>
+                    </div>
+
+                    <div
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        background: "rgba(15, 23, 42, 0.7)",
+                        border: "1px solid rgba(148, 163, 184, 0.16)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: "0.75rem",
+                          fontWeight: 700,
+                          color: "#fb923c",
+                          marginBottom: 4,
+                        }}
+                      >
+                        🌍 防災・環境・地域安全インパクト
+                      </div>
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: "0.83rem",
+                          color: "#e2e8f0",
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        {selectedPin.analysis.eco_disaster_impact}
+                      </p>
+                    </div>
+
+                    <div
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        background: "rgba(16, 185, 129, 0.1)",
+                        border: "1px solid rgba(16, 185, 129, 0.3)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: "0.75rem",
+                          fontWeight: 700,
+                          color: "#6ee7b7",
+                          marginBottom: 4,
+                        }}
+                      >
+                        🛠️ AI 推奨インフラ修繕・改善提案
+                      </div>
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: "0.83rem",
+                          color: "#ecfdf5",
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        {selectedPin.analysis.suggested_fix}
+                      </p>
+                    </div>
+                  </div>
+                </details>
+
+                {/* Privacy Guard Check */}
+                <div
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 10,
+                    background:
+                      selectedPin.analysis.privacy_check.has_face ||
+                      selectedPin.analysis.privacy_check.has_license_plate ||
+                      selectedPin.analysis.privacy_check.has_nameplate
+                        ? "rgba(245, 158, 11, 0.14)"
+                        : "rgba(16, 185, 129, 0.1)",
+                    border:
+                      selectedPin.analysis.privacy_check.has_face ||
+                      selectedPin.analysis.privacy_check.has_license_plate ||
+                      selectedPin.analysis.privacy_check.has_nameplate
+                        ? "1px solid rgba(245, 158, 11, 0.45)"
+                        : "1px solid rgba(16, 185, 129, 0.35)",
+                    fontSize: "0.78rem",
+                    color: "#cbd5e1",
+                  }}
+                >
+                  <strong>🔒 プライバシーAI監査:</strong>{" "}
+                  {selectedPin.analysis.privacy_check.warning_message}
+                </div>
+              </section>
+
+              {/* COLLAPSIBLE <details> 1: Multilingual Safety & Detour Notice Card (JA / EN / ZH / KO) */}
+              {(() => {
+                const notices = selectedPin.analysis.multilingual_notices ?? {
+                  ja: `【やさしい日本語】「${selectedPin.analysis.title}」に注意してください。車いす・ベビーカーのかたは安全なルートへ迂回してください。`,
+                  en: `[SAFETY NOTICE] Caution: ${selectedPin.analysis.title}. Wheelchair and stroller users: please take a step-free safe detour.`,
+                  zh: `【安全提示】注意：${selectedPin.analysis.title}。轮椅及婴儿车使用者请绕行平坦安全的无障碍通道。`,
+                  ko: `【안전 안내】주의: ${selectedPin.analysis.title}. 휠체어·유모차 이용자는 안전한 우회로를 이용해 주세요.`,
+                };
+                const cardText =
+                  multilingualLang === "all"
+                    ? [
+                        `🇯🇵 [やさしい日本語] ${notices.ja}`,
+                        `🇺🇸 [English] ${notices.en}`,
+                        `🇨🇳 [中文] ${notices.zh}`,
+                        `🇰🇷 [한국어] ${notices.ko}`,
+                      ].join("\n")
+                    : notices[multilingualLang];
+
+                return (
+                  <details
+                    style={{
+                      borderRadius: 16,
+                      padding: "16px 20px",
+                      background: "rgba(15, 23, 42, 0.86)",
+                      border: "1px solid rgba(168, 85, 247, 0.4)",
+                    }}
+                  >
+                    <summary
+                      style={{
+                        cursor: "pointer",
+                        fontSize: "0.92rem",
+                        fontWeight: 800,
+                        color: "#e9d5ff",
+                      }}
+                    >
+                      🌐 多言語あんしん注意カードを開く（やさしい日本語 / 英語 / 中国語 / 韓国語 1クリックコピー）
+                    </summary>
+                    <div style={{ marginTop: 12 }}>
                       <div
                         style={{
                           display: "flex",
@@ -3618,15 +4734,6 @@ export default function MachiEyeLive() {
                           marginBottom: 8,
                         }}
                       >
-                        <div
-                          style={{
-                            fontSize: "0.78rem",
-                            fontWeight: 800,
-                            color: "#e9d5ff",
-                          }}
-                        >
-                          🌐 多言語あんしん注意カード（日 / 英 / 中 / 韓 1クリック切替＆コピー）
-                        </div>
                         <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
                           {(
                             [
@@ -3642,7 +4749,7 @@ export default function MachiEyeLive() {
                               type="button"
                               onClick={() => setMultilingualLang(lang.id)}
                               style={{
-                                padding: "3px 9px",
+                                padding: "4px 10px",
                                 borderRadius: 999,
                                 border:
                                   multilingualLang === lang.id
@@ -3656,7 +4763,7 @@ export default function MachiEyeLive() {
                                   multilingualLang === lang.id
                                     ? "#f3e8ff"
                                     : "#cbd5e1",
-                                fontSize: "0.72rem",
+                                fontSize: "0.74rem",
                                 fontWeight: 700,
                                 cursor: "pointer",
                               }}
@@ -3664,47 +4771,47 @@ export default function MachiEyeLive() {
                               {lang.label}
                             </button>
                           ))}
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              try {
-                                await navigator.clipboard.writeText(cardText);
-                                setCopiedMultilingual(true);
-                                setTimeout(
-                                  () => setCopiedMultilingual(false),
-                                  2500
-                                );
-                              } catch {
-                                // ignore
-                              }
-                            }}
-                            style={{
-                              padding: "3px 10px",
-                              borderRadius: 7,
-                              border: "1px solid rgba(52, 211, 153, 0.45)",
-                              background: copiedMultilingual
-                                ? "rgba(16, 185, 129, 0.3)"
-                                : "rgba(16, 185, 129, 0.16)",
-                              color: "#6ee7b7",
-                              fontSize: "0.72rem",
-                              fontWeight: 800,
-                              cursor: "pointer",
-                            }}
-                          >
-                            {copiedMultilingual ? "✓ コピー済" : "📋 注意文をコピー"}
-                          </button>
                         </div>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(cardText);
+                              setCopiedMultilingual(true);
+                              setTimeout(
+                                () => setCopiedMultilingual(false),
+                                2500
+                              );
+                            } catch {
+                              // ignore
+                            }
+                          }}
+                          style={{
+                            padding: "5px 12px",
+                            borderRadius: 7,
+                            border: "1px solid rgba(52, 211, 153, 0.45)",
+                            background: copiedMultilingual
+                              ? "rgba(16, 185, 129, 0.3)"
+                              : "rgba(16, 185, 129, 0.16)",
+                            color: "#6ee7b7",
+                            fontSize: "0.75rem",
+                            fontWeight: 800,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {copiedMultilingual ? "✓ コピー済" : "📋 注意文をコピー"}
+                        </button>
                       </div>
                       <pre
                         style={{
                           margin: 0,
                           whiteSpace: "pre-wrap",
                           fontFamily: "inherit",
-                          fontSize: "0.8rem",
+                          fontSize: "0.82rem",
                           lineHeight: 1.55,
                           color: "#f8fafc",
                           background: "rgba(2, 6, 23, 0.65)",
-                          padding: "9px 11px",
+                          padding: "10px 12px",
                           borderRadius: 8,
                           border: "1px solid rgba(148, 163, 184, 0.2)",
                         }}
@@ -3712,450 +4819,430 @@ export default function MachiEyeLive() {
                         {cardText}
                       </pre>
                     </div>
-                  );
-                })()}
-              </div>
+                  </details>
+                );
+              })()}
 
-              {/* Privacy Guard Check */}
-              <div
+              {/* COLLAPSIBLE <details> 2: 1-CLICK MUNICIPALITY REPORT GENERATOR & LOCAL/GAS SAVE */}
+              <details
                 style={{
-                  padding: "10px 14px",
-                  borderRadius: 10,
-                  background:
-                    selectedPin.analysis.privacy_check.has_face ||
-                    selectedPin.analysis.privacy_check.has_license_plate ||
-                    selectedPin.analysis.privacy_check.has_nameplate
-                      ? "rgba(245, 158, 11, 0.14)"
-                      : "rgba(16, 185, 129, 0.1)",
-                  border:
-                    selectedPin.analysis.privacy_check.has_face ||
-                    selectedPin.analysis.privacy_check.has_license_plate ||
-                    selectedPin.analysis.privacy_check.has_nameplate
-                      ? "1px solid rgba(245, 158, 11, 0.45)"
-                      : "1px solid rgba(16, 185, 129, 0.35)",
-                  fontSize: "0.78rem",
-                  color: "#cbd5e1",
+                  borderRadius: 16,
+                  padding: "16px 20px",
+                  background: "rgba(15, 23, 42, 0.86)",
+                  border: "1px solid rgba(16, 185, 129, 0.38)",
                 }}
               >
-                <strong>🔒 プライバシーAI監査:</strong>{" "}
-                {selectedPin.analysis.privacy_check.warning_message}
-              </div>
-            </section>
-
-            {/* 1-CLICK MUNICIPALITY REPORT GENERATOR */}
-            <section
-              style={{
-                borderRadius: 18,
-                padding: "22px 24px",
-                background: "rgba(15, 23, 42, 0.86)",
-                border: "1px solid rgba(16, 185, 129, 0.35)",
-                display: "flex",
-                flexDirection: "column",
-                gap: 14,
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 10,
-                }}
-              >
-                <div>
-                  <span
-                    style={{
-                      fontSize: "0.72rem",
-                      fontWeight: 800,
-                      color: "#34d399",
-                      letterSpacing: "0.06em",
-                    }}
-                  >
-                    MODULE 03 // 1-CLICK MUNICIPALITY REPORT GENERATOR
-                  </span>
-                  <h3
-                    style={{
-                      margin: "2px 0 0",
-                      fontSize: "1.15rem",
-                      fontWeight: 800,
-                      color: "#f8fafc",
-                    }}
-                  >
-                    📨 自治体通報・改善要望レポート自動生成
-                  </h3>
-                </div>
-
-                {/* Format Mode Switcher */}
-                <div style={{ display: "flex", gap: 6 }}>
-                  {(
-                    [
-                      { id: "standard", label: "標準通報文" },
-                      { id: "urgent", label: "緊急安全措置" },
-                      { id: "barrierfree", label: "バリアフリー要望書" },
-                    ] as const
-                  ).map((mode) => (
-                    <button
-                      key={mode.id}
-                      type="button"
-                      onClick={() => setReportFormatMode(mode.id)}
-                      style={{
-                        padding: "5px 10px",
-                        borderRadius: 8,
-                        border:
-                          reportFormatMode === mode.id
-                            ? "1px solid #34d399"
-                            : "1px solid rgba(148, 163, 184, 0.25)",
-                        background:
-                          reportFormatMode === mode.id
-                            ? "rgba(16, 185, 129, 0.2)"
-                            : "rgba(30, 41, 59, 0.7)",
-                        color:
-                          reportFormatMode === mode.id ? "#6ee7b7" : "#cbd5e1",
-                        fontSize: "0.74rem",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                      }}
-                    >
-                      {mode.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Action Toolbar: Copy, Markdown Download, JSON Download */}
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: 8,
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={handleCopyReport}
+                <summary
                   style={{
-                    flex: 1.3,
-                    padding: "10px 14px",
-                    borderRadius: 10,
-                    border: "1px solid rgba(16, 185, 129, 0.5)",
-                    background:
-                      "linear-gradient(135deg, #10b981 0%, #059669 100%)",
-                    color: "#ffffff",
-                    fontSize: "0.84rem",
+                    cursor: "pointer",
+                    fontSize: "0.92rem",
                     fontWeight: 800,
-                    cursor: "pointer",
+                    color: "#6ee7b7",
                   }}
                 >
-                  {copiedReport
-                    ? "✅ クリップボードにコピー完了！"
-                    : "📋 1クリックで通報レポートをコピー"}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDownloadMarkdown}
-                  style={{
-                    flex: 1,
-                    padding: "10px 12px",
-                    borderRadius: 10,
-                    border: "1px solid rgba(56, 189, 248, 0.4)",
-                    background: "rgba(14, 165, 233, 0.16)",
-                    color: "#7dd3fc",
-                    fontSize: "0.8rem",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  📝 Markdown (.md) 保存
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDownloadJson}
-                  style={{
-                    flex: 1,
-                    padding: "10px 12px",
-                    borderRadius: 10,
-                    border: "1px solid rgba(148, 163, 184, 0.35)",
-                    background: "rgba(30, 41, 59, 0.85)",
-                    color: "#e2e8f0",
-                    fontSize: "0.8rem",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  📦 構造化 JSON (.json) 保存
-                </button>
-              </div>
+                  📨 自治体通報・改善要望レポート作成 ＆ PC・スマホ保存・Googleシート連携を開く
+                </summary>
 
-              {/* Generated Formal Report Preview */}
-              <pre
-                style={{
-                  margin: 0,
-                  padding: "14px 16px",
-                  borderRadius: 12,
-                  background: "rgba(2, 6, 23, 0.78)",
-                  border: "1px solid rgba(148, 163, 184, 0.24)",
-                  color: "#e2e8f0",
-                  fontSize: "0.8rem",
-                  lineHeight: 1.65,
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                  maxHeight: 340,
-                  overflowY: "auto",
-                  fontFamily:
-                    '"JetBrains Mono", "BIZ UDGothic", "Hiragino Kaku Gothic ProN", monospace',
-                }}
-              >
-                {formattedMunicipalityReport}
-              </pre>
-
-              {/* Suggested Community Patrol Tasks */}
-              {selectedPin.analysis.suggested_tasks.length > 0 && (
                 <div
                   style={{
-                    padding: "12px 14px",
-                    borderRadius: 12,
-                    background: "rgba(2, 6, 23, 0.5)",
-                    border: "1px solid rgba(148, 163, 184, 0.18)",
+                    marginTop: 14,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 14,
                   }}
                 >
-                  <div
-                    style={{
-                      fontSize: "0.76rem",
-                      fontWeight: 700,
-                      color: "#cbd5e1",
-                      marginBottom: 8,
-                    }}
-                  >
-                    📋 地域見守り・フォローアップ推奨タスク
-                  </div>
                   <div
                     style={{
                       display: "flex",
-                      flexDirection: "column",
-                      gap: 6,
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 10,
                     }}
                   >
-                    {selectedPin.analysis.suggested_tasks.map((t, idx) => (
-                      <div
-                        key={`${t.title}-${idx}`}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: 8,
-                          fontSize: "0.79rem",
-                          padding: "6px 10px",
-                          borderRadius: 8,
-                          background: "rgba(15, 23, 42, 0.8)",
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontWeight: 700, color: "#f1f5f9" }}>
-                            ・{t.title}
-                          </div>
-                          <div style={{ fontSize: "0.73rem", color: "#94a3b8" }}>
-                            {t.memo}
-                          </div>
-                        </div>
-                        <span
-                          style={{
-                            fontSize: "0.7rem",
-                            fontWeight: 700,
-                            padding: "2px 8px",
-                            borderRadius: 999,
-                            background:
-                              t.priority === "high"
-                                ? "rgba(239, 68, 68, 0.2)"
-                                : "rgba(56, 189, 248, 0.18)",
-                            color:
-                              t.priority === "high" ? "#fca5a5" : "#7dd3fc",
-                          }}
-                        >
-                          {t.priority}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Local PC/Smartphone Save (.json / .md) & Google Workspace GAS Dock */}
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  padding: "12px 14px",
-                  borderRadius: 12,
-                  background: "rgba(14, 165, 233, 0.1)",
-                  border: "1px solid rgba(56, 189, 248, 0.28)",
-                }}
-              >
-                <span style={{ fontSize: "0.78rem", color: "#cbd5e1" }}>
-                  PC・スマホ（SSD／ローカル）への通報書ファイル保存（.json / .md）、および地域安全台帳シート・カレンダー連携
-                </span>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  <button
-                    type="button"
-                    onClick={handleSaveToLocalDevice}
-                    disabled={driveArchiving}
-                    style={{
-                      padding: "8px 14px",
-                      borderRadius: 9,
-                      border: "1px solid rgba(52, 211, 153, 0.55)",
-                      background:
-                        "linear-gradient(135deg, #059669 0%, #0284c7 100%)",
-                      color: "#ffffff",
-                      fontSize: "0.78rem",
-                      fontWeight: 800,
-                      cursor: driveArchiving ? "wait" : "pointer",
-                    }}
-                  >
-                    {driveArchiving
-                      ? "⏳ 保存中..."
-                      : "💾 PC・スマホに保存 (.json / .md)"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleGasSync}
-                    disabled={gasSyncing}
-                    style={{
-                      padding: "8px 14px",
-                      borderRadius: 9,
-                      border: "1px solid rgba(56, 189, 248, 0.45)",
-                      background: "rgba(2, 132, 199, 0.85)",
-                      color: "#ffffff",
-                      fontSize: "0.78rem",
-                      fontWeight: 700,
-                      cursor: gasSyncing ? "wait" : "pointer",
-                    }}
-                  >
-                    {gasSyncing
-                      ? "⏳ Google Workspace 連携中..."
-                      : "🗺️ Google シート / カレンダーへ連携 (GAS)"}
-                  </button>
-                </div>
-              </div>
-
-              {driveArchiveInfo && (
-                <div
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: 10,
-                    background: "rgba(16, 185, 129, 0.16)",
-                    border: "1px solid rgba(16, 185, 129, 0.45)",
-                    color: "#a7f3d0",
-                    fontSize: "0.8rem",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 6,
-                  }}
-                >
-                  <div>
-                    💾 <strong>PC・スマホへのローカル保存完了</strong>{" "}
                     <span
                       style={{
-                        fontSize: "0.72rem",
-                        padding: "2px 7px",
-                        borderRadius: 999,
-                        background: "rgba(15, 23, 42, 0.65)",
-                        color: "#6ee7b7",
+                        fontSize: "0.8rem",
+                        fontWeight: 700,
+                        color: "#cbd5e1",
                       }}
                     >
-                      {driveArchiveInfo.mode}
+                      通報書フォーマット切替:
                     </span>
-                  </div>
-                  <div>{driveArchiveInfo.message}</div>
-                  {driveArchiveInfo.folder && (
-                    <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
-                      📁 保存ファイル: <code>{driveArchiveInfo.folder}</code>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {(
+                        [
+                          { id: "standard", label: "標準通報文" },
+                          { id: "urgent", label: "緊急安全措置" },
+                          { id: "barrierfree", label: "バリアフリー要望書" },
+                        ] as const
+                      ).map((mode) => (
+                        <button
+                          key={mode.id}
+                          type="button"
+                          onClick={() => setReportFormatMode(mode.id)}
+                          style={{
+                            padding: "5px 10px",
+                            borderRadius: 8,
+                            border:
+                              reportFormatMode === mode.id
+                                ? "1px solid #34d399"
+                                : "1px solid rgba(148, 163, 184, 0.25)",
+                            background:
+                              reportFormatMode === mode.id
+                                ? "rgba(16, 185, 129, 0.2)"
+                                : "rgba(30, 41, 59, 0.7)",
+                            color:
+                              reportFormatMode === mode.id
+                                ? "#6ee7b7"
+                                : "#cbd5e1",
+                            fontSize: "0.74rem",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {mode.label}
+                        </button>
+                      ))}
                     </div>
-                  )}
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  </div>
+
+                  {/* Action Toolbar: Copy, Markdown Download, JSON Download */}
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 8,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={handleCopyReport}
+                      style={{
+                        flex: 1.3,
+                        padding: "10px 14px",
+                        borderRadius: 10,
+                        border: "1px solid rgba(16, 185, 129, 0.5)",
+                        background:
+                          "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                        color: "#ffffff",
+                        fontSize: "0.84rem",
+                        fontWeight: 800,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {copiedReport
+                        ? "✅ クリップボードにコピー完了！"
+                        : "📋 1クリックで通報レポートをコピー"}
+                    </button>
                     <button
                       type="button"
                       onClick={handleDownloadMarkdown}
                       style={{
-                        padding: "5px 10px",
-                        borderRadius: 7,
-                        border: "1px solid rgba(56, 189, 248, 0.45)",
-                        background: "rgba(14, 165, 233, 0.2)",
+                        flex: 1,
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        border: "1px solid rgba(56, 189, 248, 0.4)",
+                        background: "rgba(14, 165, 233, 0.16)",
                         color: "#7dd3fc",
-                        fontSize: "0.75rem",
+                        fontSize: "0.8rem",
                         fontWeight: 700,
                         cursor: "pointer",
                       }}
                     >
-                      📝 Markdown (.md) を再ダウンロード
+                      📝 Markdown (.md) 保存
                     </button>
                     <button
                       type="button"
                       onClick={handleDownloadJson}
                       style={{
-                        padding: "5px 10px",
-                        borderRadius: 7,
+                        flex: 1,
+                        padding: "10px 12px",
+                        borderRadius: 10,
                         border: "1px solid rgba(148, 163, 184, 0.35)",
                         background: "rgba(30, 41, 59, 0.85)",
                         color: "#e2e8f0",
-                        fontSize: "0.75rem",
+                        fontSize: "0.8rem",
                         fontWeight: 700,
                         cursor: "pointer",
                       }}
                     >
-                      📦 JSON (.json) をダウンロード
+                      📦 構造化 JSON (.json) 保存
                     </button>
                   </div>
-                </div>
-              )}
-              {driveError && (
-                <div
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: 10,
-                    background: "rgba(239, 68, 68, 0.16)",
-                    border: "1px solid rgba(239, 68, 68, 0.4)",
-                    color: "#fecaca",
-                    fontSize: "0.8rem",
-                  }}
-                >
-                  ⚠️ {driveError}
-                </div>
-              )}
 
-              {gasMessage && (
-                <div
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: 10,
-                    background: "rgba(16, 185, 129, 0.16)",
-                    border: "1px solid rgba(16, 185, 129, 0.4)",
-                    color: "#a7f3d0",
-                    fontSize: "0.8rem",
-                  }}
-                >
-                  ✅ {gasMessage}
+                  {/* Generated Formal Report Preview */}
+                  <pre
+                    style={{
+                      margin: 0,
+                      padding: "14px 16px",
+                      borderRadius: 12,
+                      background: "rgba(2, 6, 23, 0.78)",
+                      border: "1px solid rgba(148, 163, 184, 0.24)",
+                      color: "#e2e8f0",
+                      fontSize: "0.8rem",
+                      lineHeight: 1.65,
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                      maxHeight: 280,
+                      overflowY: "auto",
+                      fontFamily:
+                        '"JetBrains Mono", "BIZ UDGothic", "Hiragino Kaku Gothic ProN", monospace',
+                    }}
+                  >
+                    {formattedMunicipalityReport}
+                  </pre>
+
+                  {/* Suggested Community Patrol Tasks */}
+                  {selectedPin.analysis.suggested_tasks.length > 0 && (
+                    <div
+                      style={{
+                        padding: "12px 14px",
+                        borderRadius: 12,
+                        background: "rgba(2, 6, 23, 0.5)",
+                        border: "1px solid rgba(148, 163, 184, 0.18)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: "0.76rem",
+                          fontWeight: 700,
+                          color: "#cbd5e1",
+                          marginBottom: 8,
+                        }}
+                      >
+                        📋 地域見守り・フォローアップ推奨タスク
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 6,
+                        }}
+                      >
+                        {selectedPin.analysis.suggested_tasks.map((t, idx) => (
+                          <div
+                            key={`${t.title}-${idx}`}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: 8,
+                              fontSize: "0.79rem",
+                              padding: "6px 10px",
+                              borderRadius: 8,
+                              background: "rgba(15, 23, 42, 0.8)",
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontWeight: 700, color: "#f1f5f9" }}>
+                                ・{t.title}
+                              </div>
+                              <div
+                                style={{ fontSize: "0.73rem", color: "#94a3b8" }}
+                              >
+                                {t.memo}
+                              </div>
+                            </div>
+                            <span
+                              style={{
+                                fontSize: "0.7rem",
+                                fontWeight: 700,
+                                padding: "2px 8px",
+                                borderRadius: 999,
+                                background:
+                                  t.priority === "high"
+                                    ? "rgba(239, 68, 68, 0.2)"
+                                    : "rgba(56, 189, 248, 0.18)",
+                                color:
+                                  t.priority === "high" ? "#fca5a5" : "#7dd3fc",
+                              }}
+                            >
+                              {t.priority}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Local PC/Smartphone Save (.json / .md) & Google Workspace GAS Dock */}
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      padding: "12px 14px",
+                      borderRadius: 12,
+                      background: "rgba(14, 165, 233, 0.1)",
+                      border: "1px solid rgba(56, 189, 248, 0.28)",
+                    }}
+                  >
+                    <span style={{ fontSize: "0.78rem", color: "#cbd5e1" }}>
+                      PC・スマホへの通報書ファイル保存（.json / .md）、および地域安全台帳シート・カレンダー連携
+                    </span>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={handleSaveToLocalDevice}
+                        disabled={driveArchiving}
+                        style={{
+                          padding: "8px 14px",
+                          borderRadius: 9,
+                          border: "1px solid rgba(52, 211, 153, 0.55)",
+                          background:
+                            "linear-gradient(135deg, #059669 0%, #0284c7 100%)",
+                          color: "#ffffff",
+                          fontSize: "0.78rem",
+                          fontWeight: 800,
+                          cursor: driveArchiving ? "wait" : "pointer",
+                        }}
+                      >
+                        {driveArchiving
+                          ? "⏳ 保存中..."
+                          : "💾 PC・スマホに保存 (.json / .md)"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleGasSync}
+                        disabled={gasSyncing}
+                        style={{
+                          padding: "8px 14px",
+                          borderRadius: 9,
+                          border: "1px solid rgba(56, 189, 248, 0.45)",
+                          background: "rgba(2, 132, 199, 0.85)",
+                          color: "#ffffff",
+                          fontSize: "0.78rem",
+                          fontWeight: 700,
+                          cursor: gasSyncing ? "wait" : "pointer",
+                        }}
+                      >
+                        {gasSyncing
+                          ? "⏳ Google Workspace 連携中..."
+                          : "🗺️ Google シート / カレンダーへ連携 (GAS)"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {driveArchiveInfo && (
+                    <div
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        background: "rgba(16, 185, 129, 0.16)",
+                        border: "1px solid rgba(16, 185, 129, 0.45)",
+                        color: "#a7f3d0",
+                        fontSize: "0.8rem",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                      }}
+                    >
+                      <div>
+                        💾 <strong>PC・スマホへのローカル保存完了</strong>{" "}
+                        <span
+                          style={{
+                            fontSize: "0.72rem",
+                            padding: "2px 7px",
+                            borderRadius: 999,
+                            background: "rgba(15, 23, 42, 0.65)",
+                            color: "#6ee7b7",
+                          }}
+                        >
+                          {driveArchiveInfo.mode}
+                        </span>
+                      </div>
+                      <div>{driveArchiveInfo.message}</div>
+                      {driveArchiveInfo.folder && (
+                        <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
+                          📁 保存ファイル: <code>{driveArchiveInfo.folder}</code>
+                        </div>
+                      )}
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          onClick={handleDownloadMarkdown}
+                          style={{
+                            padding: "5px 10px",
+                            borderRadius: 7,
+                            border: "1px solid rgba(56, 189, 248, 0.45)",
+                            background: "rgba(14, 165, 233, 0.2)",
+                            color: "#7dd3fc",
+                            fontSize: "0.75rem",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                          }}
+                        >
+                          📝 Markdown (.md) を再ダウンロード
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDownloadJson}
+                          style={{
+                            padding: "5px 10px",
+                            borderRadius: 7,
+                            border: "1px solid rgba(148, 163, 184, 0.35)",
+                            background: "rgba(30, 41, 59, 0.85)",
+                            color: "#e2e8f0",
+                            fontSize: "0.75rem",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                          }}
+                        >
+                          📦 JSON (.json) をダウンロード
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {driveError && (
+                    <div
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        background: "rgba(239, 68, 68, 0.16)",
+                        border: "1px solid rgba(239, 68, 68, 0.4)",
+                        color: "#fecaca",
+                        fontSize: "0.8rem",
+                      }}
+                    >
+                      ⚠️ {driveError}
+                    </div>
+                  )}
+
+                  {gasMessage && (
+                    <div
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        background: "rgba(16, 185, 129, 0.16)",
+                        border: "1px solid rgba(16, 185, 129, 0.4)",
+                        color: "#a7f3d0",
+                        fontSize: "0.8rem",
+                      }}
+                    >
+                      ✅ {gasMessage}
+                    </div>
+                  )}
+                  {gasError && (
+                    <div
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        background: "rgba(239, 68, 68, 0.16)",
+                        border: "1px solid rgba(239, 68, 68, 0.4)",
+                        color: "#fecaca",
+                        fontSize: "0.8rem",
+                      }}
+                    >
+                      ⚠️ {gasError}
+                    </div>
+                  )}
                 </div>
-              )}
-              {gasError && (
-                <div
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: 10,
-                    background: "rgba(239, 68, 68, 0.16)",
-                    border: "1px solid rgba(239, 68, 68, 0.4)",
-                    color: "#fecaca",
-                    fontSize: "0.8rem",
-                  }}
-                >
-                  ⚠️ {gasError}
-                </div>
-              )}
-            </section>
-          </div>
-        )}
+              </details>
+            </div>
+          )}
       </div>
     </div>
   );
