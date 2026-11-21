@@ -55,7 +55,12 @@ export type ShowcaseAppId =
   | "souzoku"
   | "condate"
   | "koutsuu"
-  | "kyouiku";
+  | "kyouiku"
+  | "kankou"
+  | "souji"
+  | "report"
+  | "merukari"
+  | "eiyou";
 
 export interface ShowcaseAppConfig {
   id: ShowcaseAppId;
@@ -1393,5 +1398,125 @@ export const SHOWCASE_APPS: Record<ShowcaseAppId, ShowcaseAppConfig> = {
     gasPrefix: "[親子ルールAI]",
     systemInstruction:
       "あなたは親子が感情的にぶつからず、子どもの自主性を育てながらデジタル機器の約束を作るファミリーコーチです。学年と困りごとから、alert_level (high/medium/low)、alert_title（ケンカが起きている本当のトリガー）、alert_message（一方的な禁止より納得合意が効く理由）、items（キリよく終わる事前予告・ご褒美設計・仕組み化3点）、checklist（スクリーンタイム設定・充電場所固定・見直し日設定チェック）、copyable_draft（子どもと一緒に読んでサインできる優しい親子デジタル約束表）、suggested_tasks（1週間後のルール振り返り親子会議タスク）を日本語で構造化してください。",
+  },
+  kankou: {
+    id: "kankou",
+    name: "子連れ・三世代バリアフリーお出かけナビ AI",
+    category: "まちと地球の未来部門",
+    tagline: "ベビーカー・車椅子・トイレ休憩・雨天代替まで配慮した三世代みんなが笑顔の半日コースを提案",
+    subtitle:
+      "「坂道や階段が多くて疲れた…」を防ぐ優しいお出かけ設計。Gemini 3.8 Flash が休憩・授乳室・段差配慮込みのルートを作成します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + みんなの観光バリアフリー",
+    accentColor: "#0d9488",
+    accentSoft: "#f0fdfa",
+    inputLabel: "同行者（幼児・高齢者など）・行き先エリア・移動手段・配慮したいこと",
+    inputPlaceholder: "例: 70代の祖母と2歳児を連れて横浜エリアへ半日お出かけ。歩く距離を短くしたい...",
+    sampleText:
+      "70代後半の祖父母（長距離歩行が負担）と2歳児（ベビーカー）を連れて週末に浅草〜スカイツリー周辺を半日観光したい。エレベーター導線、多目的トイレ、座って休めるカフェ、雨天時の屋内代替案を含めて組んでほしい。",
+    sampleLocation: "週末の三世代お出かけ前夜",
+    showLocationInput: true,
+    submitLabel: "三世代みんなが無理なく楽しめるコースを作成",
+    section1Title: "1. 移動負担を減らす時間帯別ルート＆休憩3ポイント",
+    section2Title: "2. 出発前のバリアフリー＆持ち物確認チェック",
+    section3Title: "3. 家族LINEにそのまま送れる当日のしおりメモ",
+    gasPrefix: "[三世代お出かけAI]",
+    systemInstruction:
+      "あなたは幼児連れや高齢者を含む三世代のお出かけを快適にするユニバーサル観光プランナーです。同行者とエリアから、alert_level (high/medium/low)、alert_title（混雑・階段・トイレ間隔など最大の注意点）、alert_message（全員が疲れずに楽しむペース配分のコツ）、items（午前・昼食休憩・午後の無理ない3ステップと雨天代替）、checklist（エレベーター出口・多目的トイレ・折りたたみ椅子/常備薬チェック）、copyable_draft（家族LINEにそのまま貼れるやさしいお出かけしおり）、suggested_tasks（レストラン予約・天候確認タスク）を日本語で構造化してください。",
+  },
+  souji: {
+    id: "souji",
+    name: "週末15分ズボラ片付け＆大掃除順番ナビ AI",
+    category: "暮らし・家族部門",
+    tagline: "散らかった部屋の状況と持ち時間から「達成感が出る最短15分の着手順」をピンポイント指示",
+    subtitle:
+      "「どこから手をつければいいか分からず動けない…」を解消。Gemini 3.8 Flash が迷わず動ける3ステップとゴミ袋準備リストを作ります。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 15分スッキリ片付け",
+    accentColor: "#10b981",
+    accentSoft: "#ecfdf5",
+    inputLabel: "一番気になっている場所・散らかり具合・使える時間",
+    inputPlaceholder: "例: リビングのテーブルに郵便物と服が山積み。週末に30分だけ片付けたい...",
+    sampleText:
+      "リビングのダイニングテーブルに未開封の郵便物とチラシ、読みかけの本が山積みで食事のスペースが狭い。キッチン周りも少し油汚れが気になる。今日の午後、30分タイマーで一気に見た目をスッキリさせたい。",
+    sampleLocation: "週末の30分リセット掃除",
+    showLocationInput: true,
+    submitLabel: "迷わず動ける最短片付け順番＆リストを生成",
+    section1Title: "1. 見た目が劇的に変わる30分タイムライン3ステップ",
+    section2Title: "2. 始める前に手元へ揃える道具＆ゴミ袋チェック",
+    section3Title: "3. 散らかりを戻さない1日1分キープ宣言メモ",
+    gasPrefix: "[片付けAI]",
+    systemInstruction:
+      "あなたは片付けが苦手な人が最初の1分で動き出せるように導く整理収納コーチです。散らかり状況と持ち時間から、alert_level (high/medium/low)、alert_title（最初に着手すると一番達成感が出る場所）、alert_message（途中で思い出の品に脱線しないコツ）、items（0〜10分・10〜20分・20〜30分の具体的手順3点）、checklist（ゴミ袋・一時保留ボックス・雑巾/洗剤・タイマーチェック）、copyable_draft（片付け後に家族や自分向けに貼れる1日1分リセットルール）、suggested_tasks（ゴミ収集日出し・週1回15分リセットタスク）を日本語で構造化してください。",
+  },
+  report: {
+    id: "report",
+    name: "日報・週報・進捗報告 30秒スッキリ整理 AI",
+    category: "シゴト・学び部門",
+    tagline: "箇条書きの作業メモを「結論ファースト・課題と次アクション明確」な日報・週報へ即変換",
+    subtitle:
+      "「毎日18時に日報を書くのが地味に重い…」を30秒に短縮。Gemini 3.8 Flash が上司・チームに伝わりやすい構造化レポートを作ります。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 30秒ビジネス報告",
+    accentColor: "#3b82f6",
+    accentSoft: "#eff6ff",
+    inputLabel: "今日・今週やったこと（雑な箇条書きでOK）・詰まっている点",
+    inputPlaceholder: "例: A社見積り修正した、バグ1件直した、明日はデザイン確認予定...",
+    sampleText:
+      "・顧客B社向けの提案スライド8割完成（価格表だけ経理確認待ち）\n・ログイン画面のレスポンシブ崩れ修正してPR提出\n・テスト環境のAPIが少し遅いのが気になっている\n・明日は午前中にB社資料仕上げて午後は定例MTG",
+    sampleLocation: "終業前18:00のSlack・日報ツール",
+    showLocationInput: true,
+    submitLabel: "結論ファーストの綺麗な日報・週報を生成",
+    section1Title: "1. 報告で強調すべき成果・リスク・相談点3つ",
+    section2Title: "2. 提出前に抜けていないか確認する報告チェック",
+    section3Title: "3. Slack・Teams・メールにそのまま貼れる完成日報",
+    gasPrefix: "[日報AI]",
+    systemInstruction:
+      "あなたは読み手（上司・PM・チームメンバー）が10秒で状況を把握できるビジネス報告の達人です。雑な作業メモから、alert_level (high/medium/low)、alert_title（上司へ早めに共有すべきブロッカー・確認待ち事項）、alert_message（評価と信頼が上がる報告の書き方ポイント）、items（完了成果・進行中リスク・明日以降の次アクション3点）、checklist（期限明記・依頼相手タグ付け・機密情報配慮チェック）、copyable_draft（Slackや日報システムにそのままコピペできる簡潔で美しい日報テンプレート）、suggested_tasks（確認待ち事項のリマインドタスク）を日本語で構造化してください。",
+  },
+  merukari: {
+    id: "merukari",
+    name: "フリマ出品・説明文＆梱包トラブル防止 AI",
+    category: "暮らし・家族部門",
+    tagline: "売りたい物のメモから「売れやすいタイトル・傷の誠実な書き方・最安発送方法」を一発作成",
+    subtitle:
+      "「説明文を書くのが面倒で出品が止まる」「送料で赤字になった」を解決。Gemini 3.8 Flash がクレームを防ぐ安心出品文を生成します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + フリマ出品サポート",
+    accentColor: "#ef4444",
+    accentSoft: "#fef2f2",
+    inputLabel: "売りたい商品名・使用回数・傷や汚れ・付属品の有無",
+    inputPlaceholder: "例: 2年使ったワイヤレスイヤホン。ケースに小傷あり、箱とケーブル付き...",
+    sampleText:
+      "2年前に購入した子ども用レインコート（110cm・ネイビー）。雨の日に5回ほど着用し、左袖口にうっすら擦れはあるが破れや記名なし。収納袋つき。なるべく送料を抑えてトラブルなく売りたい。",
+    sampleLocation: "週末の不用品フリマ出品",
+    showLocationInput: true,
+    submitLabel: "売れやすい出品文＆最安発送・梱包ガイドを生成",
+    section1Title: "1. 売れやすさUP＆クレーム防止の出品コツ3点",
+    section2Title: "2. 撮影・検品・最安発送サイズ確認チェック",
+    section3Title: "3. フリマアプリにそのまま貼れる出品タイトル＆説明文",
+    gasPrefix: "[フリマAI]",
+    systemInstruction:
+      "あなたはフリマアプリでの高評価取引と梱包・送料ミス防止に詳しい出品サポートコーチです。商品メモから、alert_level (high/medium/low)、alert_title（購入後トラブルや送料オーバーになりやすい注意点）、alert_message（相場感と写真1枚目で選ばれるコツ）、items（検索されやすいキーワード・傷の誠実な記載・厚み3cm以内など最安発送アドバイス3点）、checklist（傷のアップ写真・記名や個人情報消し・防水袋/緩衝材チェック）、copyable_draft（そのままコピペして出品できるタイトル＋丁寧な商品説明文）、suggested_tasks（週末撮影・発送期限管理タスク）を日本語で構造化してください。",
+  },
+  eiyou: {
+    id: "eiyou",
+    name: "コンビニ・外食バランス栄養ちょい足し AI",
+    category: "暮らし・家族部門",
+    tagline: "忙しい日のコンビニ飯・外食メモから「あと1品足すだけ」で栄養バランスを整える現実的アドバイス",
+    subtitle:
+      "「自炊できない日に野菜とタンパク質が足りない…」を無理なくカバー。Gemini 3.8 Flash がコンビニで買えるちょい足し1品を提案します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 現実的ちょい足し栄養",
+    accentColor: "#84cc16",
+    accentSoft: "#f7fee7",
+    inputLabel: "今日食べたもの・これから買う予定のコンビニ飯や外食",
+    inputPlaceholder: "例: 朝はカフェラテだけ、昼はコンビニのおにぎり2個とカップ麺になりそう...",
+    sampleText:
+      "朝は食パン1枚とコーヒー、昼は忙しくてコンビニの明太子パスタのみになりそう。夕方にお腹が空いてお菓子を食べてしまいがちなので、昼と夜にコンビニで買える現実的なちょい足しメニューを知りたい。",
+    sampleLocation: "昼休みのコンビニ店頭",
+    showLocationInput: true,
+    submitLabel: "無理なく整うちょい足し1品＆夜のリカバリー案を生成",
+    section1Title: "1. 不足している栄養素＆コンビニちょい足し3候補",
+    section2Title: "2. 血糖値急上昇・午後の眠気を防ぐ食べ方チェック",
+    section3Title: "3. コンビニ買い物メモ＆夕食バランス調整メモ",
+    gasPrefix: "[栄養AI]",
+    systemInstruction:
+      "あなたは忙しい社会人に自炊を強要せず、コンビニや外食でも現実的に栄養バランスを整える管理栄養アドバイスアシスタントです（持病や食事制限がある方は医師・管理栄養士の指導を優先するよう案内してください）。食事メモから、alert_level (high/medium/low)、alert_title（現在不足している栄養素と午後の眠気リスク）、alert_message（罪悪感ゼロで整える1品プラスのコツ）、items（タンパク質・食物繊維・ビタミンを補うコンビニちょい足し候補3点）、checklist（食べる順番・水分補給・間食の選び方チェック）、copyable_draft（そのままコンビニでカゴに入れられる今日のちょい足しメモ）、suggested_tasks（水分補給・夕食バランス調整タスク）を日本語で構造化してください。",
   },
 };
