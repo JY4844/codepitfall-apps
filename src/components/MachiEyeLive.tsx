@@ -86,7 +86,7 @@ interface ScenarioPreset {
   initialAnalysis: MachiEyeAnalysis;
 }
 
-const STORAGE_KEY = "machieye_live_community_pins_v3";
+const STORAGE_KEY = "machieye_live_user_pins_v4";
 const ACCEPTED_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_IMAGE_DIM = 1600;
@@ -1083,13 +1083,6 @@ export default function MachiEyeLive() {
   const gmapDraftMarkerRef = useRef<GoogleMarkerInstance | null>(null);
   const gmapInfoWindowRef = useRef<GoogleInfoWindowInstance | null>(null);
 
-  // Progressive Disclosure state: Step 1 = null ("まずはやりたいことを選ぶ"), Step 2 = focused tool/map, Step 3 = inspection results
-  const [selectedGoal, setSelectedGoal] = useState<
-    null | "hazard" | "disaster" | "map"
-  >(null);
-  const [hasCompletedInspection, setHasCompletedInspection] =
-    useState<boolean>(false);
-
   // Map View Switcher: default to "gmaps" (🗺️ Google マップ)
   const [mapViewMode, setMapViewMode] = useState<"gmaps" | "radar">("gmaps");
   const [gmapsCenterOverride, setGmapsCenterOverride] = useState<{
@@ -1100,13 +1093,9 @@ export default function MachiEyeLive() {
   const [gmapsSdkReady, setGmapsSdkReady] = useState<boolean>(false);
   const [gmapsSdkFailed, setGmapsSdkFailed] = useState<boolean>(false);
 
-  // Community pins state (localStorage persisted)
-  const [pins, setPins] = useState<CommunitySafetyPin[]>(() =>
-    createDefaultSeedPins()
-  );
-  const [selectedPinId, setSelectedPinId] = useState<string>(
-    "seed-tactile-block"
-  );
+  // Community pins state (localStorage persisted, starts COMPLETELY EMPTY by default)
+  const [pins, setPins] = useState<CommunitySafetyPin[]>([]);
+  const [selectedPinId, setSelectedPinId] = useState<string>("");
   const [filterCategory, setFilterCategory] = useState<
     "すべて" | MachiEyeCategory
   >("すべて");
@@ -1114,26 +1103,14 @@ export default function MachiEyeLive() {
     "すべて" | MachiEyeSeverityLevel
   >("すべて");
 
-  // Inspector form state
-  const [activeScenarioId, setActiveScenarioId] = useState<string>("tactile-block");
-  const [sourceText, setSourceText] = useState<string>(
-    BUILTIN_SCENARIOS[0].sourceText
-  );
-  const [locationText, setLocationText] = useState<string>(
-    BUILTIN_SCENARIOS[0].locationText
-  );
-  const [latitude, setLatitude] = useState<string>(
-    BUILTIN_SCENARIOS[0].latitude
-  );
-  const [longitude, setLongitude] = useState<string>(
-    BUILTIN_SCENARIOS[0].longitude
-  );
-  const [draftMapX, setDraftMapX] = useState<number>(
-    BUILTIN_SCENARIOS[0].mapX
-  );
-  const [draftMapY, setDraftMapY] = useState<number>(
-    BUILTIN_SCENARIOS[0].mapY
-  );
+  // Inspector form state (starts COMPLETELY EMPTY by default)
+  const [activeScenarioId, setActiveScenarioId] = useState<string>("");
+  const [sourceText, setSourceText] = useState<string>("");
+  const [locationText, setLocationText] = useState<string>("");
+  const [latitude, setLatitude] = useState<string>("");
+  const [longitude, setLongitude] = useState<string>("");
+  const [draftMapX, setDraftMapX] = useState<number>(50);
+  const [draftMapY, setDraftMapY] = useState<number>(50);
   const [geminiModel, setGeminiModel] = useState<
     "gemini-2.5-flash" | "gemini-3.8-flash" | "gemini-4-hydrogen"
   >("gemini-2.5-flash");
@@ -1154,9 +1131,6 @@ export default function MachiEyeLive() {
     "standard" | "urgent" | "barrierfree"
   >("standard");
   const [copiedReport, setCopiedReport] = useState<boolean>(false);
-  const [scenarioModeFilter, setScenarioModeFilter] = useState<
-    "all" | "hazard" | "disaster"
-  >("all");
   const [multilingualLang, setMultilingualLang] = useState<
     "all" | "ja" | "en" | "zh" | "ko"
   >("all");
@@ -1173,7 +1147,7 @@ export default function MachiEyeLive() {
   } | null>(null);
   const [driveError, setDriveError] = useState<string>("");
 
-  // Load pins from localStorage on mount
+  // Load user's own saved pins from localStorage on mount (no pre-populated fake seed pins)
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY);
@@ -1186,17 +1160,6 @@ export default function MachiEyeLive() {
       }
     } catch {
       // ignore storage errors
-    }
-    // Generate initial scenario street visual preview
-    const photo = generateScenarioStreetPhoto(
-      BUILTIN_SCENARIOS[0].id,
-      BUILTIN_SCENARIOS[0].shortTitle
-    );
-    if (photo.previewUrl) {
-      setImageBase64(photo.base64);
-      setImageMimeType(photo.mimeType);
-      setImagePreview(photo.previewUrl);
-      setImageName("scenario-tactile-block.jpg");
     }
   }, []);
 
@@ -1293,7 +1256,7 @@ export default function MachiEyeLive() {
 
   // Initialize or update interactive Google Map + color-coded markers when JS API is active
   useEffect(() => {
-    if (selectedGoal !== "map" || mapViewMode !== "gmaps") {
+    if (mapViewMode !== "gmaps") {
       gmapInstanceRef.current = null;
       gmapDraftMarkerRef.current = null;
       gmapMarkersRef.current = [];
@@ -1432,7 +1395,6 @@ export default function MachiEyeLive() {
       gmapMarkersRef.current.push(marker);
     });
   }, [
-    selectedGoal,
     gmapsSdkReady,
     gmapsSdkFailed,
     mapViewMode,
@@ -1442,31 +1404,7 @@ export default function MachiEyeLive() {
     activeGoogleMapCenter.lng,
   ]);
 
-  const handlePickGoal = (goal: "hazard" | "disaster" | "map") => {
-    setSelectedGoal(goal);
-    setHasCompletedInspection(false);
-    setErrorMsg("");
-    setStatusBanner("");
-    setGasMessage("");
-    setGasError("");
-    if (goal === "hazard") {
-      setScenarioModeFilter("hazard");
-      const firstHazard =
-        BUILTIN_SCENARIOS.find((sc) => sc.mode === "hazard") ||
-        BUILTIN_SCENARIOS[0];
-      void handleSelectScenario(firstHazard, false);
-    } else if (goal === "disaster") {
-      setScenarioModeFilter("disaster");
-      const firstDisaster =
-        BUILTIN_SCENARIOS.find((sc) => sc.mode === "disaster") ||
-        BUILTIN_SCENARIOS[1];
-      void handleSelectScenario(firstDisaster, false);
-    } else {
-      setMapViewMode("gmaps");
-    }
-  };
-
-  // Select a built-in scenario and optionally auto-run inspection
+  // Select a built-in scenario example only when the user clicks "例を1つ試す"
   const handleSelectScenario = async (
     scenario: ScenarioPreset,
     autoInspect: boolean
@@ -1679,7 +1617,6 @@ export default function MachiEyeLive() {
       setSelectedPinId(newPin.id);
       setFilterCategory("すべて");
       setFilterSeverity("すべて");
-      setHasCompletedInspection(true);
       setStatusBanner(
         `✅ AI ハザード＆バリアフリー点検が完了し、コミュニティ安全マップに新規ピン「${data.result.title}」をプロットしました！`
       );
@@ -1743,13 +1680,12 @@ export default function MachiEyeLive() {
   };
 
   const handleResetSeedPins = () => {
-    const defaults = createDefaultSeedPins();
-    savePins(defaults);
+    savePins([]);
     setGmapsCenterOverride(null);
-    setSelectedPinId(defaults[0].id);
+    setSelectedPinId("");
     setFilterCategory("すべて");
     setFilterSeverity("すべて");
-    setStatusBanner("🔄 コミュニティ安全マップを初期シードデータ（6地点）にリセットしました。");
+    setStatusBanner("🗑️ 保存されていた安全ピンをクリアしました。");
   };
 
   // Formatted Municipality Report based on selected pin and template mode
@@ -2121,321 +2057,14 @@ export default function MachiEyeLive() {
                     color: "#cbd5e1",
                   }}
                 >
-                  街の危険チェック・防災診断・Google マップ安全マップから、やりたいことを選んでスタートできます。
+                  あなたの街の危険・段差・防災リスクを写真やメモでAI点検し、現在地GPS連動のGoogleマップへ記録できます。
                 </p>
               </div>
             </div>
-
-            {selectedGoal !== null && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedGoal(null);
-                  setHasCompletedInspection(false);
-                  setStatusBanner("");
-                  setErrorMsg("");
-                }}
-                style={{
-                  padding: "8px 16px",
-                  borderRadius: 999,
-                  border: "1.5px solid rgba(56, 189, 248, 0.55)",
-                  background: "rgba(14, 165, 233, 0.18)",
-                  color: "#f0f9ff",
-                  fontSize: "0.82rem",
-                  fontWeight: 800,
-                  cursor: "pointer",
-                }}
-              >
-                ← やりたいことを選び直す
-              </button>
-            )}
           </div>
         </header>
 
-        {/* STEP 1 (Progressive Disclosure): Show ONLY 3 big, calm, welcoming "まずはやりたいことを選ぶ" cards */}
-        {selectedGoal === null && (
-          <section
-            aria-label="まずはやりたいことを選ぶ"
-            style={{
-              maxWidth: 1040,
-              margin: "12px auto 32px",
-              padding: "28px 24px",
-              borderRadius: 22,
-              background: "rgba(15, 23, 42, 0.78)",
-              border: "1px solid rgba(56, 189, 248, 0.25)",
-              boxShadow: "0 20px 45px -18px rgba(0, 0, 0, 0.6)",
-            }}
-          >
-            <div style={{ textAlign: "center", marginBottom: 24 }}>
-              <span
-                style={{
-                  display: "inline-block",
-                  fontSize: "0.76rem",
-                  fontWeight: 800,
-                  color: "#34d399",
-                  background: "rgba(16, 185, 129, 0.14)",
-                  border: "1px solid rgba(16, 185, 129, 0.38)",
-                  padding: "4px 14px",
-                  borderRadius: 999,
-                  marginBottom: 10,
-                }}
-              >
-                STEP 1 // まずはやりたいことを選ぶ
-              </span>
-              <h2
-                style={{
-                  margin: 0,
-                  fontSize: "1.42rem",
-                  fontWeight: 800,
-                  color: "#f8fafc",
-                }}
-              >
-                今日はどんな安全チェックをしますか？
-              </h2>
-              <p
-                style={{
-                  margin: "6px 0 0",
-                  fontSize: "0.88rem",
-                  color: "#94a3b8",
-                }}
-              >
-                下の3つのカードから1つ選ぶと、必要な機能だけがすっきり表示されます。
-              </p>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                gap: 18,
-              }}
-            >
-              {/* Card 1: 🚧 街の危険・段差を写真でチェックする */}
-              <button
-                type="button"
-                onClick={() => handlePickGoal("hazard")}
-                style={{
-                  textAlign: "left",
-                  padding: "24px 22px",
-                  borderRadius: 18,
-                  border: "1.5px solid rgba(56, 189, 248, 0.38)",
-                  background:
-                    "linear-gradient(160deg, rgba(15, 23, 42, 0.95) 0%, rgba(14, 116, 144, 0.22) 100%)",
-                  color: "#f8fafc",
-                  cursor: "pointer",
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "space-between",
-                  gap: 16,
-                  boxShadow: "0 12px 28px -12px rgba(14, 165, 233, 0.35)",
-                }}
-              >
-                <div>
-                  <div
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 8,
-                      padding: "4px 11px",
-                      borderRadius: 999,
-                      background: "rgba(56, 189, 248, 0.18)",
-                      color: "#7dd3fc",
-                      fontSize: "0.75rem",
-                      fontWeight: 800,
-                      marginBottom: 12,
-                    }}
-                  >
-                    日常バリアフリー・通学路点検
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "1.18rem",
-                      fontWeight: 800,
-                      lineHeight: 1.4,
-                      color: "#f8fafc",
-                      marginBottom: 8,
-                    }}
-                  >
-                    🚧 街の危険・段差を写真でチェックする
-                  </div>
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: "0.85rem",
-                      color: "#cbd5e1",
-                      lineHeight: 1.6,
-                    }}
-                  >
-                    点字ブロックの破損・ベビーカーや車椅子の段差・夜道の死角などを写真（またはサンプル）でAI点検し、安全な迂回ルートを提案します。
-                  </p>
-                </div>
-                <div
-                  style={{
-                    fontSize: "0.84rem",
-                    fontWeight: 800,
-                    color: "#38bdf8",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <span>写真・サンプルでチェックする</span>
-                  <span>→</span>
-                </div>
-              </button>
-
-              {/* Card 2: 🛟 防災・災害対策（豪雨・停電・避難）を診断する */}
-              <button
-                type="button"
-                onClick={() => handlePickGoal("disaster")}
-                style={{
-                  textAlign: "left",
-                  padding: "24px 22px",
-                  borderRadius: 18,
-                  border: "1.5px solid rgba(52, 211, 153, 0.38)",
-                  background:
-                    "linear-gradient(160deg, rgba(15, 23, 42, 0.95) 0%, rgba(16, 185, 129, 0.2) 100%)",
-                  color: "#f8fafc",
-                  cursor: "pointer",
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "space-between",
-                  gap: 16,
-                  boxShadow: "0 12px 28px -12px rgba(16, 185, 129, 0.35)",
-                }}
-              >
-                <div>
-                  <div
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 8,
-                      padding: "4px 11px",
-                      borderRadius: 999,
-                      background: "rgba(16, 185, 129, 0.18)",
-                      color: "#6ee7b7",
-                      fontSize: "0.75rem",
-                      fontWeight: 800,
-                      marginBottom: 12,
-                    }}
-                  >
-                    豪雨冠水・地震台風・ペット同行避難
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "1.18rem",
-                      fontWeight: 800,
-                      lineHeight: 1.4,
-                      color: "#f8fafc",
-                      marginBottom: 8,
-                    }}
-                  >
-                    🛟 防災・災害対策（豪雨・停電・避難）を診断する
-                  </div>
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: "0.85rem",
-                      color: "#cbd5e1",
-                      lineHeight: 1.6,
-                    }}
-                  >
-                    側溝の詰まりによる冠水リスク・地震や台風時の危険ブロック塀回避・猛暑の日陰やペット同行避難ルートをAI診断します。
-                  </p>
-                </div>
-                <div
-                  style={{
-                    fontSize: "0.84rem",
-                    fontWeight: 800,
-                    color: "#34d399",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <span>防災・避難ルートを診断する</span>
-                  <span>→</span>
-                </div>
-              </button>
-
-              {/* Card 3: 🗺️ みんなの安全マップ（Google マップ）を見る */}
-              <button
-                type="button"
-                onClick={() => handlePickGoal("map")}
-                style={{
-                  textAlign: "left",
-                  padding: "24px 22px",
-                  borderRadius: 18,
-                  border: "1.5px solid rgba(192, 132, 252, 0.42)",
-                  background:
-                    "linear-gradient(160deg, rgba(15, 23, 42, 0.95) 0%, rgba(147, 51, 234, 0.22) 100%)",
-                  color: "#f8fafc",
-                  cursor: "pointer",
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "space-between",
-                  gap: 16,
-                  boxShadow: "0 12px 28px -12px rgba(168, 85, 247, 0.35)",
-                }}
-              >
-                <div>
-                  <div
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 8,
-                      padding: "4px 11px",
-                      borderRadius: 999,
-                      background: "rgba(168, 85, 247, 0.2)",
-                      color: "#e9d5ff",
-                      fontSize: "0.75rem",
-                      fontWeight: 800,
-                      marginBottom: 12,
-                    }}
-                  >
-                    Google マップ・現在地GPS・ストリートビュー
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "1.18rem",
-                      fontWeight: 800,
-                      lineHeight: 1.4,
-                      color: "#f8fafc",
-                      marginBottom: 8,
-                    }}
-                  >
-                    🗺️ みんなの安全マップ（Google マップ）を見る
-                  </div>
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: "0.85rem",
-                      color: "#cbd5e1",
-                      lineHeight: 1.6,
-                    }}
-                  >
-                    地域で共有された危険ピン（現在 {summaryStats.total} 地点）を Google マップ上で確認し、現在地GPS移動・歩行者安全ルート・ストリートビューを開けます。
-                  </p>
-                </div>
-                <div
-                  style={{
-                    fontSize: "0.84rem",
-                    fontWeight: 800,
-                    color: "#d8b4fe",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <span>Google マップを開く（{summaryStats.total}地点）</span>
-                  <span>→</span>
-                </div>
-              </button>
-            </div>
-          </section>
-        )}
-
-        {selectedGoal !== null && statusBanner && (
+        {statusBanner && (
           <div
             role="status"
             style={{
@@ -2453,7 +2082,7 @@ export default function MachiEyeLive() {
           </div>
         )}
 
-        {selectedGoal !== null && errorMsg && (
+        {errorMsg && (
           <div
             role="alert"
             style={{
@@ -2471,257 +2100,27 @@ export default function MachiEyeLive() {
           </div>
         )}
 
-        {/* STEP 2: Focused Input Box (for hazard/disaster) OR Focused Google Map (for map) */}
-        {selectedGoal !== null && (
-          <div
+        {/* Direct Focused Input Box + Clean Google Map */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 20,
+            marginBottom: 24,
+          }}
+        >
+          {/* PANEL 1: Multimodal Photo/Camera Hazard & Barrier-Free Inspector */}
+          <section
             style={{
+              borderRadius: 18,
+              padding: "20px 22px",
+              background: "rgba(15, 23, 42, 0.82)",
+              border: "1px solid rgba(148, 163, 184, 0.22)",
               display: "flex",
               flexDirection: "column",
-              gap: 20,
-              marginBottom: 24,
+              gap: 16,
             }}
           >
-            {/* Step 2 Navigation Bar: Back to Goal Picker + Direct Goal Switcher */}
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 10,
-                padding: "10px 14px",
-                borderRadius: 14,
-                background: "rgba(15, 23, 42, 0.85)",
-                border: "1px solid rgba(148, 163, 184, 0.22)",
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedGoal(null);
-                  setHasCompletedInspection(false);
-                  setStatusBanner("");
-                  setErrorMsg("");
-                }}
-                style={{
-                  padding: "6px 13px",
-                  borderRadius: 8,
-                  border: "1px solid rgba(148, 163, 184, 0.35)",
-                  background: "rgba(30, 41, 59, 0.85)",
-                  color: "#e2e8f0",
-                  fontSize: "0.78rem",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
-              >
-                ← やりたいことを選び直す
-              </button>
-
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {(
-                  [
-                    {
-                      id: "hazard",
-                      label: "🚧 街の危険・段差をチェック",
-                    },
-                    {
-                      id: "disaster",
-                      label: "🛟 防災・災害対策を診断",
-                    },
-                    {
-                      id: "map",
-                      label: "🗺️ みんなの安全マップ（Google マップ）",
-                    },
-                  ] as const
-                ).map((g) => {
-                  const active = selectedGoal === g.id;
-                  return (
-                    <button
-                      key={g.id}
-                      type="button"
-                      onClick={() => handlePickGoal(g.id)}
-                      style={{
-                        padding: "6px 12px",
-                        borderRadius: 999,
-                        border: active
-                          ? "1.5px solid #38bdf8"
-                          : "1px solid rgba(148, 163, 184, 0.28)",
-                        background: active
-                          ? "rgba(14, 165, 233, 0.24)"
-                          : "rgba(15, 23, 42, 0.7)",
-                        color: active ? "#ffffff" : "#94a3b8",
-                        fontSize: "0.76rem",
-                        fontWeight: 800,
-                        cursor: "pointer",
-                      }}
-                    >
-                      {g.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Focused Sample Presets Strip for Hazard / Disaster mode */}
-            {(selectedGoal === "hazard" || selectedGoal === "disaster") && (
-              <div
-                style={{
-                  borderRadius: 16,
-                  padding: "14px 18px",
-                  background: "rgba(15, 23, 42, 0.78)",
-                  border: "1px solid rgba(56, 189, 248, 0.24)",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "0.8rem",
-                    fontWeight: 700,
-                    color: "#cbd5e1",
-                    marginBottom: 10,
-                  }}
-                >
-                  💡 手元に写真がない場合も、下のサンプル事例から1クリックでAI診断を試せます：
-                </div>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-                    gap: 10,
-                  }}
-                >
-                  {BUILTIN_SCENARIOS.filter(
-                    (sc) => sc.mode === selectedGoal
-                  ).map((sc) => {
-                    const isSelected = activeScenarioId === sc.id;
-                    const sevStyle = severityColor(sc.severityLevel);
-                    return (
-                      <div
-                        key={sc.id}
-                        style={{
-                          borderRadius: 12,
-                          padding: "11px 13px",
-                          background: isSelected
-                            ? "rgba(14, 165, 233, 0.16)"
-                            : "rgba(15, 23, 42, 0.65)",
-                          border: isSelected
-                            ? "1.5px solid #38bdf8"
-                            : "1px solid rgba(148, 163, 184, 0.22)",
-                          display: "flex",
-                          flexDirection: "column",
-                          justifyContent: "space-between",
-                          gap: 8,
-                        }}
-                      >
-                        <div>
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              gap: 6,
-                              marginBottom: 4,
-                            }}
-                          >
-                            <span
-                              style={{
-                                fontSize: "0.74rem",
-                                fontWeight: 700,
-                                color: "#38bdf8",
-                              }}
-                            >
-                              {sc.badge} · {sc.category}
-                            </span>
-                            <span
-                              style={{
-                                fontSize: "0.7rem",
-                                fontWeight: 700,
-                                padding: "2px 8px",
-                                borderRadius: 999,
-                                background: sevStyle.bg,
-                                border: `1px solid ${sevStyle.border}`,
-                                color: sevStyle.text,
-                              }}
-                            >
-                              {sc.severityLevel}
-                            </span>
-                          </div>
-                          <div
-                            style={{
-                              fontSize: "0.9rem",
-                              fontWeight: 700,
-                              color: "#f8fafc",
-                            }}
-                          >
-                            {sc.shortTitle}
-                          </div>
-                          <div
-                            style={{
-                              fontSize: "0.76rem",
-                              color: "#94a3b8",
-                              marginTop: 2,
-                            }}
-                          >
-                            {sc.subtitle}
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <button
-                            type="button"
-                            onClick={() => void handleSelectScenario(sc, false)}
-                            style={{
-                              flex: 1,
-                              padding: "6px 8px",
-                              borderRadius: 8,
-                              border: "1px solid rgba(148, 163, 184, 0.3)",
-                              background: "rgba(30, 41, 59, 0.85)",
-                              color: "#e2e8f0",
-                              fontSize: "0.75rem",
-                              fontWeight: 600,
-                              cursor: "pointer",
-                            }}
-                          >
-                            📥 フォーム読込
-                          </button>
-                          <button
-                            type="button"
-                            disabled={analyzing}
-                            onClick={() => void handleSelectScenario(sc, true)}
-                            style={{
-                              flex: 1.2,
-                              padding: "6px 8px",
-                              borderRadius: 8,
-                              border: "1px solid rgba(56, 189, 248, 0.45)",
-                              background:
-                                "linear-gradient(135deg, #0284c7 0%, #0d9488 100%)",
-                              color: "#ffffff",
-                              fontSize: "0.75rem",
-                              fontWeight: 700,
-                              cursor: analyzing ? "wait" : "pointer",
-                            }}
-                          >
-                            🔍 1クリックAI診断
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* PANEL 1: Multimodal Photo/Camera Hazard & Barrier-Free Inspector (Only shown for hazard/disaster goals) */}
-            {(selectedGoal === "hazard" || selectedGoal === "disaster") && (
-              <section
-                style={{
-                  borderRadius: 18,
-                  padding: "20px 22px",
-                  background: "rgba(15, 23, 42, 0.82)",
-                  border: "1px solid rgba(148, 163, 184, 0.22)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 16,
-                }}
-              >
             <div
               style={{
                 display: "flex",
@@ -3132,6 +2531,51 @@ export default function MachiEyeLive() {
                       gemini-4-hydrogen
                     </option>
                   </select>
+                  <button
+                    type="button"
+                    onClick={() => void handleSelectScenario(BUILTIN_SCENARIOS[0], false)}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      padding: 0,
+                      color: "#94a3b8",
+                      fontSize: "0.78rem",
+                      textDecoration: "underline",
+                      cursor: "pointer",
+                      marginLeft: 6,
+                    }}
+                  >
+                    例を1つ試す
+                  </button>
+                  {(sourceText || locationText || imagePreview) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveScenarioId("");
+                        setSourceText("");
+                        setLocationText("");
+                        setLatitude("");
+                        setLongitude("");
+                        setImageBase64("");
+                        setImageMimeType("");
+                        setImagePreview("");
+                        setImageName("");
+                        setErrorMsg("");
+                        setStatusBanner("");
+                      }}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        color: "#64748b",
+                        fontSize: "0.78rem",
+                        cursor: "pointer",
+                        marginLeft: 4,
+                      }}
+                    >
+                      クリア
+                    </button>
+                  )}
                 </div>
 
                 <button
@@ -3156,22 +2600,20 @@ export default function MachiEyeLive() {
                 </button>
               </div>
             </form>
-              </section>
-            )}
+          </section>
 
-            {/* PANEL 2: Interactive Community Safety Pin Map (Google Maps + Neighborhood Radar Map) — Only shown when selectedGoal === "map" */}
-            {selectedGoal === "map" && (
-              <section
-                style={{
-                  borderRadius: 18,
-                  padding: "20px 22px",
-                  background: "rgba(15, 23, 42, 0.82)",
-                  border: "1px solid rgba(56, 189, 248, 0.28)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 14,
-                }}
-              >
+          {/* PANEL 2: Interactive Community Safety Pin Map (Google Maps + Neighborhood Radar Map) */}
+          <section
+            style={{
+              borderRadius: 18,
+              padding: "20px 22px",
+              background: "rgba(15, 23, 42, 0.82)",
+              border: "1px solid rgba(56, 189, 248, 0.28)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 14,
+            }}
+          >
             <div
               style={{
                 display: "flex",
@@ -3274,21 +2716,23 @@ export default function MachiEyeLive() {
                   {gpsLoading ? "取得中..." : "📍 現在地を取得 (GPS)"}
                 </button>
 
-                <button
-                  type="button"
-                  onClick={handleResetSeedPins}
-                  style={{
-                    padding: "5px 10px",
-                    borderRadius: 8,
-                    border: "1px solid rgba(148, 163, 184, 0.28)",
-                    background: "rgba(30, 41, 59, 0.7)",
-                    color: "#cbd5e1",
-                    fontSize: "0.73rem",
-                    cursor: "pointer",
-                  }}
-                >
-                  🔄 初期ピン復元
-                </button>
+                {pins.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleResetSeedPins}
+                    style={{
+                      padding: "5px 10px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(148, 163, 184, 0.28)",
+                      background: "rgba(30, 41, 59, 0.7)",
+                      color: "#cbd5e1",
+                      fontSize: "0.73rem",
+                      cursor: "pointer",
+                    }}
+                  >
+                    🗑️ ピンをクリア
+                  </button>
+                )}
               </div>
             </div>
 
@@ -4009,6 +3453,20 @@ export default function MachiEyeLive() {
             </div>
 
             {/* Compact Scrollable Pin List under the Map */}
+            {filteredPins.length === 0 ? (
+              <div
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: 10,
+                  background: "rgba(2, 6, 23, 0.55)",
+                  border: "1px dashed rgba(148, 163, 184, 0.28)",
+                  fontSize: "0.8rem",
+                  color: "#94a3b8",
+                }}
+              >
+                まだ登録された安全ピンはありません。「📍 現在地を取得 (GPS)」や上の写真・状況メモからAI現場解析を実行すると、ここにあなたの街の安全ピンが追加されます。
+              </div>
+            ) : (
             <div
               style={{
                 display: "flex",
@@ -4133,15 +3591,12 @@ export default function MachiEyeLive() {
                 );
               })}
             </div>
-              </section>
             )}
-          </div>
-        )}
+          </section>
+        </div>
 
-        {/* STEP 3 (Progressive Disclosure): Inspection Result + Collapsible <details> for Multilingual Notice & Municipality Report / Save */}
-        {(selectedGoal === "map" ||
-          (selectedGoal !== null && hasCompletedInspection)) &&
-          selectedPin && (
+        {/* Inspection Result + Collapsible <details> for Multilingual Notice & Municipality Report / Save */}
+        {selectedPin && (
             <div
               ref={inspectionCardRef}
               style={{
@@ -4209,28 +3664,6 @@ export default function MachiEyeLive() {
                   </div>
 
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    {selectedGoal !== "map" && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setGmapsCenterOverride(null);
-                          setSelectedGoal("map");
-                          setMapViewMode("gmaps");
-                        }}
-                        style={{
-                          padding: "5px 11px",
-                          borderRadius: 8,
-                          border: "1px solid rgba(192, 132, 252, 0.45)",
-                          background: "rgba(168, 85, 247, 0.18)",
-                          color: "#e9d5ff",
-                          fontSize: "0.76rem",
-                          fontWeight: 800,
-                          cursor: "pointer",
-                        }}
-                      >
-                        🗺️ 安全マップ（Google マップ）でこのピンを見る
-                      </button>
-                    )}
                     <button
                       type="button"
                       onClick={() => handleUpvotePin(selectedPin.id)}

@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { TaskPriority } from "@/types/task";
 
-export type FamilyRole = "ママ" | "パパ" | "子ども" | "祖父母";
+export type FamilyRole = string;
 
 export interface OtayoriEvent {
   date: string;
   title: string;
   assignee: string;
   reason: string;
+  caution?: string;
   isoStart?: string;
   isoEnd?: string;
   location?: string;
@@ -40,6 +41,7 @@ export interface OtayoriAnalysis {
   child_message?: string;
   voice_script?: string;
   medication_allergy_alerts?: string[];
+  schedule_cautions?: string[];
   reply_cushion_message?: string;
   suggested_tasks: OtayoriSuggestedTask[];
 }
@@ -75,6 +77,7 @@ const RESPONSE_SCHEMA = {
           title: { type: "STRING" },
           assignee: { type: "STRING" },
           reason: { type: "STRING" },
+          caution: { type: "STRING" },
           isoStart: { type: "STRING" },
           isoEnd: { type: "STRING" },
           location: { type: "STRING" },
@@ -109,6 +112,10 @@ const RESPONSE_SCHEMA = {
     child_message: { type: "STRING" },
     voice_script: { type: "STRING" },
     medication_allergy_alerts: {
+      type: "ARRAY",
+      items: { type: "STRING" },
+    },
+    schedule_cautions: {
       type: "ARRAY",
       items: { type: "STRING" },
     },
@@ -232,43 +239,141 @@ function inferIsoDates(dateText: string, indexOffset = 0): {
   };
 }
 
-function buildPrompt(sourceText: string, familyRoles: string): string {
+function buildPrompt(
+  sourceText: string,
+  familyRoles: string,
+  customMembers: string[]
+): string {
+  const membersListText =
+    customMembers.length > 0
+      ? `登録されている担当メンバー一覧: ${customMembers.join(" / ")}（※assignee にはこの中から適切なメンバー名を割り当ててください）`
+      : "担当メンバーはまだ未登録のため、assignee にはすべて「未割り当て」を設定してください。";
+
   return [
-    "あなたは共働き・三世代家庭を支える優秀な家族秘書AI「おたよりバトン Ultra」です。",
-    "学校のおたより・保育園プリント・小児科の予防接種案内・自治体の検診通知などの画像やテキストを読み取り、家族全員（ママ・パパ・子ども・祖父母）で負担を分け合える構造化JSONを作成してください。",
+    "あなたは多様な世帯構成を支える優秀な暮らし・予定秘書AI「おたよりバトン Ultra」です。",
+    "学校のおたより・保育園プリント・病院や予防接種の案内・自治体の検診や手続き通知・またはユーザーが追加した予定を読み取り、見落としやうっかりミスを防ぐ構造化JSONを作成してください。",
     "",
     "【出力ルール】",
-    "- title: お知らせのわかりやすい件名（日本語・28文字以内目安）",
-    "- category: 「小学校・行事」「保育園・遠足」「小児科・医療」「自治体・健診」などの分類ラベル",
-    "- summary: 全体像を家族向けに簡潔にまとめた要約（2〜3文）",
-    "- events: 重要な予定・提出締切・集金日・送迎などのリスト（3〜5件）。",
+    "- title: お知らせ・予定のわかりやすい件名（日本語・28文字以内目安）",
+    "- category: 「小学校・行事」「保育園・遠足」「小児科・医療」「自治体・健診」「予定・手続き」などの分類ラベル",
+    "- summary: 全体像を簡潔にまとめた要約（2〜3文）",
+    "- events: 重要な予定・提出締切・集金日・送迎などのリスト（1〜5件）。",
     "  - date: '2026-10-18(日) 08:30〜14:30' のように日付・曜日・時刻がひと目でわかる表記",
     "  - title: 予定または締切の具体的な内容",
-    "  - assignee: 必ず「ママ」「パパ」「子ども」「祖父母」のいずれか1つを選び、家族の役割分担に沿ってバランスよく振り分ける",
-    "  - reason: その担当にした理由や具体的なアクション",
+    `  - assignee: ${membersListText}`,
+    "  - reason: その予定の具体的なアクションや準備メモ",
+    "  - caution: ⚠️ その予定で特に気をつけるべきワンポイント注意点（例：雨天時の朝連絡確認、健診当日の朝食抜き、役所・病院での本人確認書類や母子手帳持参、持ち物への記名など）",
     "  - isoStart / isoEnd: Googleカレンダー登録用の 'YYYYMMDDTHHMMSS' 形式（例: '20261018T083000'）。年が不明な場合は 2026 年とする",
     "  - location: 会場や提出先（例: 'さくら小学校 校庭'）",
     "  - isDeadline: 提出物・予約・集金などの締切なら true、行事当日なら false",
-    "- items_to_bring: 持ち物や準備物の文字列リスト（5〜8点）",
-    "- checklist_items: 家族バトン用チェックリスト（6〜8件）。assignee は「ママ」「パパ」「子ども」「祖父母」のいずれか、category は「持ち物」「提出・集金」「当日準備」のいずれか",
+    "- items_to_bring: 持ち物や準備物の文字列リスト（4〜8点）",
+    `- checklist_items: 持ち物・やることチェックリスト（4〜8件）。assignee は登録メンバー（未登録なら「未割り当て」）、category は「持ち物」「提出・集金」「当日準備」のいずれか`,
     "- cost: 集金・費用の金額と支払期限（該当なしなら「なし（無料）」）",
-    "- grandparent_summary: 祖父母向けの「やさしい日本語の3行要約」（必ず3要素の配列）。専門用語を避け、温かく具体的に「いつ・なにがあるか・お願いしたいこと」を伝える",
+    "- grandparent_summary: シニア・親世代向けの「やさしい日本語の3行要約」（必ず3要素の配列）",
     "- child_message: 子ども本人が読んで自分で準備したくなる、やさしい声かけメッセージ（1〜2文）",
-    "- voice_script: 家事や料理をしながら耳で聞ける、150〜220文字程度の自然な音声読み上げ用ナレーション原稿",
-    "- medication_allergy_alerts: お薬・服薬・食物アレルギー・絶食・検温・熱中症・誤飲注意など、健康・医療・安全に関わる注意点リスト（1〜3件）",
-    "- reply_cushion_message: 園・学校・病院・自治体窓口へそのまま送れる丁寧な返信・連絡・欠席相談クッション文（連絡帳・アプリ・メール貼付用）",
-    "- suggested_tasks: Google カレンダー・スプレッドシート連携用の具体的な家族タスク（4件）。title の先頭に【ママ】【パパ】【子ども】【祖父母】のように担当者を明記し、priority は high / medium / low から選ぶ",
+    "- voice_script: 家事や移動をしながら耳で聞ける、150〜220文字程度の自然な音声読み上げ用ナレーション原稿",
+    "- medication_allergy_alerts: お薬・服薬・食物アレルギー・絶食・検温・熱中症など、健康・医療・安全に関わる注意点リスト（1〜3件）",
+    "- schedule_cautions: ⚠️「この予定でよくある注意点・気をつけること（Gemini アドバイス）」（2〜4件の具体的なアドバイス配列。例：雨天順延時の連絡確認タイミング、健診前の絶食や服薬ルール、役所・病院でのマイナ保険証・母子手帳・受診券の持参、学校行事での全持ち物への記名やおつりなし集金袋の準備など）",
+    "- reply_cushion_message: 園・学校・病院・自治体窓口へそのまま送れる丁寧な返信・連絡・欠席相談クッション文",
+    "- suggested_tasks: Google カレンダー・スプレッドシート連携用の具体的なタスク（2〜4件）。priority は high / medium / low から選ぶ",
     "",
-    familyRoles
-      ? `【家族の役割・予定の目安】\n${familyRoles}`
-      : "【家族の役割・予定の目安】\nママ：朝の準備・連絡帳・お弁当 / パパ：水曜早帰り・提出物や集金・週末の場所取り / 子ども：自分の持ち物・宿題・体操服準備 / 祖父母：金曜のお迎え・行事応援・見守り",
-    sourceText ? `\n【おたより・通知のテキスト】\n${sourceText}` : "",
+    `【世帯の担当メンバー設定】\n${membersListText}`,
+    familyRoles ? `【役割分担・補足メモ】\n${familyRoles}` : "",
+    sourceText ? `\n【おたより・通知・予定のテキスト】\n${sourceText}` : "",
   ]
     .filter(Boolean)
     .join("\n");
 }
 
-function normalizeOtayori(parsed: unknown): OtayoriAnalysis {
+function deriveEventCaution(title: string, summary: string): string {
+  const combined = `${title} ${summary}`;
+  if (/(健診|検診|病院|クリニック|採尿|採便|血液|人間ドック)/.test(combined)) {
+    return "受診券・マイナ保険証（または母子手帳）・事前問診票の持参と、当日の飲食・服薬制限（朝食抜き等）を前夜に必ず確認してください。";
+  }
+  if (/(予防接種|ワクチン|インフル|接種)/.test(combined)) {
+    return "母子健康手帳・予診票・本人確認書類を忘れると接種できない場合があります。来院前の検温も忘れずに行ってください。";
+  }
+  if (/(運動会|遠足|校外学習|公園|屋外|キャンプ)/.test(combined)) {
+    return "雨天時の実施判定時刻・順延日の確認と、水筒・お弁当・レジャーシートなど全ての持ち物への記名を確認してください。";
+  }
+  if (/(集金|費用|円|支払|口座|現金)/.test(combined)) {
+    return "おつりが出ないよう前日までに小銭・千円札を用意し、集金袋や封筒に氏名・金額を明記してください。";
+  }
+  if (/(役所|市役所|区役所|手続き|申請|マイナンバー|届出)/.test(combined)) {
+    return "本人確認書類・印鑑・必要書類の不足がないか確認し、窓口の受付終了時刻に余裕をもって到着するようにしてください。";
+  }
+  if (/(締切|提出|申込|予約)/.test(combined)) {
+    return "提出期限の当日は忘れやすいため、前日の夜に記入・押印を済ませてカバンや連絡袋へ入れておくと安心です。";
+  }
+  return "前日の夜に持ち物と集合時刻・場所を再確認し、当日の天候や交通状況に余裕をもって準備してください。";
+}
+
+function deriveScheduleCautions(
+  title: string,
+  summary: string,
+  events: OtayoriEvent[],
+  customMembers: string[]
+): string[] {
+  const combined = `${title} ${summary} ${events.map((e) => e.title).join(" ")}`;
+  const cautions: string[] = [];
+
+  if (/(運動会|遠足|バス|校外|屋外|体育)/.test(combined)) {
+    cautions.push(
+      "☔ 雨天時の判定・順延ルール確認：当日朝の連絡アプリ配信時刻や、雨天時の持ち物変更（お弁当の要否など）を前日夜に確認しておきましょう。"
+    );
+    cautions.push(
+      "🏷️ 持ち物の記名＆禁止品チェック：水筒・帽子・シート・ビニール袋など全ての持ち物への記名と、お弁当のピックやチョコ・ガム等の禁止ルールに注意してください。"
+    );
+  }
+  if (/(健診|検診|予防接種|ワクチン|小児科|病院|クリニック|医療)/.test(combined)) {
+    cautions.push(
+      "🪪 必須書類の忘れ物防止：母子健康手帳・予診票（事前Web入力または自署）・受診券・マイナ保険証・お薬手帳は1つのポーチに前夜のうちにまとめておきましょう。"
+    );
+    cautions.push(
+      "🌡️ 当日の検温・飲食ルール：出発前の自宅検温（37.5℃未満確認）や、健診時の朝食抜き・常備薬の服用時間ルールを必ず守ってください。"
+    );
+  }
+  if (/(集金|円|費用|支払|提出|締切|申込|予約)/.test(combined)) {
+    cautions.push(
+      "💴 提出締切・集金のうっかり防止：現金集金はおつりのないよう前日までに小銭を用意し、申込票やアンケートは締切前日に記入・封入しておくと安心です。"
+    );
+  }
+  if (cautions.length < 2) {
+    cautions.push(
+      "⏰ 前日夜の最終確認：当日の朝は慌ただしくなりやすいため、前日の夜に持ち物・書類・集合場所をひと通り揃えて玄関先に置いておきましょう。"
+    );
+    cautions.push(
+      "📱 緊急連絡先・変更時の対応：急な体調不良や天候不良の際の連絡方法（アプリ・電話受付時間）を事前に控えておくとスムーズです。"
+    );
+  }
+  if (customMembers.length > 0) {
+    cautions.push(
+      `👥 メンバー間のバトン確認（${customMembers.join("・")}）：誰がどの準備・送迎・提出を担当するか、前日までに声をかけ合って二重買いや見落としを防ぎましょう。`
+    );
+  }
+  return cautions.slice(0, 4);
+}
+
+function pickAssigneeForMemberList(
+  raw: unknown,
+  customMembers: string[],
+  idx = 0
+): string {
+  if (customMembers.length === 0) {
+    return "未割り当て";
+  }
+  const s = String(raw ?? "").trim();
+  const exact = customMembers.find((m) => m === s);
+  if (exact) return exact;
+  const partial = customMembers.find((m) => s.includes(m) || m.includes(s));
+  if (partial) return partial;
+  return customMembers[idx % customMembers.length];
+}
+
+function normalizeOtayori(
+  parsed: unknown,
+  customMembers: string[] = []
+): OtayoriAnalysis {
   if (!parsed || typeof parsed !== "object") {
     throw new Error("AI の出力が有効なオブジェクトではありませんでした。");
   }
@@ -277,21 +382,31 @@ function normalizeOtayori(parsed: unknown): OtayoriAnalysis {
     throw new Error("AI の出力に必須項目（title / summary）が不足しています。");
   }
 
+  const title = obj.title.trim();
+  const summary = obj.summary.trim();
+
   const events: OtayoriEvent[] = Array.isArray(obj.events)
     ? obj.events.map((item, idx) => {
         const e = (item ?? {}) as Record<string, unknown>;
         const dateStr = String(e.date ?? "日程未定");
+        const evTitle = String(e.title ?? "");
+        const evReason = String(e.reason ?? "予定に合わせて準備");
         const inferred = inferIsoDates(dateStr, idx);
         const rawStart = typeof e.isoStart === "string" ? e.isoStart.trim() : "";
         const rawEnd = typeof e.isoEnd === "string" ? e.isoEnd.trim() : "";
+        const rawCaution = typeof e.caution === "string" ? e.caution.trim() : "";
         return {
           date: dateStr,
-          title: String(e.title ?? ""),
-          assignee: normalizeAssignee(e.assignee),
-          reason: String(e.reason ?? "家族の予定に合わせて提案"),
+          title: evTitle,
+          assignee: pickAssigneeForMemberList(e.assignee, customMembers, idx),
+          reason: evReason,
+          caution: rawCaution || deriveEventCaution(evTitle, evReason),
           isoStart: /^\d{8}T\d{6}$/.test(rawStart) ? rawStart : inferred.isoStart,
           isoEnd: /^\d{8}T\d{6}$/.test(rawEnd) ? rawEnd : inferred.isoEnd,
-          location: typeof e.location === "string" && e.location.trim() ? e.location.trim() : "プリント記載の場所",
+          location:
+            typeof e.location === "string" && e.location.trim()
+              ? e.location.trim()
+              : "プリント記載の場所",
           isDeadline: Boolean(e.isDeadline),
         };
       })
@@ -301,7 +416,6 @@ function normalizeOtayori(parsed: unknown): OtayoriAnalysis {
     ? obj.items_to_bring.map((x) => String(x ?? "").trim()).filter(Boolean)
     : [];
 
-  const roleCycle: FamilyRole[] = ["子ども", "ママ", "パパ", "祖父母"];
   const checklist_items: OtayoriChecklistItem[] =
     Array.isArray(obj.checklist_items) && obj.checklist_items.length > 0
       ? obj.checklist_items.map((item, idx) => {
@@ -309,7 +423,7 @@ function normalizeOtayori(parsed: unknown): OtayoriAnalysis {
           return {
             id: typeof c.id === "string" && c.id ? c.id : `chk-${idx + 1}`,
             label: String(c.label ?? ""),
-            assignee: normalizeAssignee(c.assignee),
+            assignee: pickAssigneeForMemberList(c.assignee, customMembers, idx),
             category: normalizeCategory(c.category),
             note: typeof c.note === "string" ? c.note : undefined,
           };
@@ -317,7 +431,7 @@ function normalizeOtayori(parsed: unknown): OtayoriAnalysis {
       : items_to_bring.map((label, idx) => ({
           id: `chk-${idx + 1}`,
           label,
-          assignee: roleCycle[idx % roleCycle.length],
+          assignee: pickAssigneeForMemberList("", customMembers, idx),
           category: "持ち物",
         }));
 
@@ -331,8 +445,8 @@ function normalizeOtayori(parsed: unknown): OtayoriAnalysis {
     rawGrandparent.length > 0
       ? rawGrandparent.slice(0, 3)
       : [
-          `${obj.title}のお知らせが届きました。`,
-          obj.summary,
+          `${title}のお知らせが届きました。`,
+          summary,
           "むりのない範囲で、いつも温かく見守ってくださりありがとうございます。",
         ];
 
@@ -351,9 +465,6 @@ function normalizeOtayori(parsed: unknown): OtayoriAnalysis {
       })
     : [];
 
-  const title = obj.title.trim();
-  const summary = obj.summary.trim();
-
   const child_message =
     typeof obj.child_message === "string" && obj.child_message.trim()
       ? obj.child_message.trim()
@@ -364,7 +475,7 @@ function normalizeOtayori(parsed: unknown): OtayoriAnalysis {
       ? obj.voice_script.trim()
       : `おたよりバトンから「${title}」のまとめをお伝えします。${summary} 持ち物は、${
           items_to_bring.slice(0, 4).join("、") || "特にありません"
-        }です。費用は${cost}です。家族みんなで分担して準備しましょう。`;
+        }です。費用は${cost}です。`;
 
   const rawMedAlerts = Array.isArray(obj.medication_allergy_alerts)
     ? obj.medication_allergy_alerts.map((x) => String(x ?? "").trim()).filter(Boolean)
@@ -376,6 +487,14 @@ function normalizeOtayori(parsed: unknown): OtayoriAnalysis {
           "💊 お薬・アレルギー・体調確認：持参物・昼食メニューや服薬時間の指定がないか前夜に再確認してください。",
         ];
 
+  const rawScheduleCautions = Array.isArray(obj.schedule_cautions)
+    ? obj.schedule_cautions.map((x) => String(x ?? "").trim()).filter(Boolean)
+    : [];
+  const schedule_cautions =
+    rawScheduleCautions.length > 0
+      ? rawScheduleCautions
+      : deriveScheduleCautions(title, summary, events, customMembers);
+
   const reply_cushion_message =
     typeof obj.reply_cushion_message === "string" && obj.reply_cushion_message.trim()
       ? obj.reply_cushion_message.trim()
@@ -386,7 +505,7 @@ function normalizeOtayori(parsed: unknown): OtayoriAnalysis {
     category:
       typeof obj.category === "string" && obj.category.trim()
         ? obj.category.trim()
-        : "暮らし・家族のお知らせ",
+        : "暮らし・予定のお知らせ",
     summary,
     events,
     items_to_bring,
@@ -396,12 +515,16 @@ function normalizeOtayori(parsed: unknown): OtayoriAnalysis {
     child_message,
     voice_script,
     medication_allergy_alerts,
+    schedule_cautions,
     reply_cushion_message,
     suggested_tasks,
   };
 }
 
-function extractJsonObject(raw: string): OtayoriAnalysis {
+function extractJsonObject(
+  raw: string,
+  customMembers: string[] = []
+): OtayoriAnalysis {
   const trimmed = raw.trim();
   let parsed: unknown;
   try {
@@ -415,7 +538,7 @@ function extractJsonObject(raw: string): OtayoriAnalysis {
       throw new Error("AI の出力を JSON として解析できませんでした。");
     }
   }
-  return normalizeOtayori(parsed);
+  return normalizeOtayori(parsed, customMembers);
 }
 
 /**
@@ -1203,6 +1326,32 @@ function buildDynamicTextFallback(
   };
 }
 
+function adaptAnalysisToCustomMembers(
+  base: OtayoriAnalysis,
+  customMembers: string[]
+): OtayoriAnalysis {
+  const events = base.events.map((ev, idx) => ({
+    ...ev,
+    assignee: pickAssigneeForMemberList(ev.assignee, customMembers, idx),
+    caution: ev.caution || deriveEventCaution(ev.title, ev.reason),
+  }));
+  const checklist_items = (base.checklist_items ?? []).map((item, idx) => ({
+    ...item,
+    assignee: pickAssigneeForMemberList(item.assignee, customMembers, idx),
+  }));
+  const schedule_cautions =
+    base.schedule_cautions && base.schedule_cautions.length > 0
+      ? base.schedule_cautions
+      : deriveScheduleCautions(base.title, base.summary, events, customMembers);
+
+  return {
+    ...base,
+    events,
+    checklist_items,
+    schedule_cautions,
+  };
+}
+
 export async function POST(request: NextRequest) {
   let body: Record<string, unknown>;
   try {
@@ -1225,11 +1374,16 @@ export async function POST(request: NextRequest) {
     typeof body.imageMimeType === "string" ? body.imageMimeType.trim() : "";
   const presetId =
     typeof body.presetId === "string" ? body.presetId.trim() : "";
+  const customMembers = Array.isArray(body.customMembers)
+    ? body.customMembers
+        .map((m) => String(m ?? "").trim())
+        .filter(Boolean)
+    : [];
 
   if (!sourceText && !imageBase64 && !presetId) {
     return errorResponse(
       "MISSING_INPUT",
-      "おたよりの画像またはテキストを入力するか、プリセットを選択してください。",
+      "おたよりの画像またはテキストを入力してください。",
       400
     );
   }
@@ -1252,10 +1406,13 @@ export async function POST(request: NextRequest) {
   }
 
   const detectedPreset = detectPresetKey(sourceText, presetId);
-  const getFallback = () =>
-    detectedPreset && !imageBase64
-      ? PRESET_ANALYSES[detectedPreset]
-      : buildDynamicTextFallback(sourceText, Boolean(imageBase64));
+  const getFallback = () => {
+    const raw =
+      detectedPreset && !imageBase64
+        ? PRESET_ANALYSES[detectedPreset]
+        : buildDynamicTextFallback(sourceText, Boolean(imageBase64));
+    return adaptAnalysisToCustomMembers(raw, customMembers);
+  };
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -1266,7 +1423,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const prompt = buildPrompt(sourceText, familyRoles);
+  const prompt = buildPrompt(sourceText, familyRoles, customMembers);
   const parts: Array<Record<string, unknown>> = [{ text: prompt }];
   if (imageBase64 && imageMimeType) {
     parts.push({
@@ -1320,7 +1477,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const analysis = extractJsonObject(rawText);
+    const analysis = extractJsonObject(rawText, customMembers);
     return NextResponse.json({
       analysis,
       usedModel: GEMINI_MODEL,

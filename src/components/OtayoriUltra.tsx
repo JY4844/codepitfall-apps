@@ -823,6 +823,63 @@ function ensureCompactIso(
   };
 }
 
+const MEMBERS_STORAGE_KEY = "otayori_ultra_custom_members_v1";
+const QUICK_MEMBER_PRESETS = ["自分", "パートナー", "子ども", "親・祖父母", "兄弟・同居人"];
+
+function getMemberStyle(name: string): {
+  icon: string;
+  accent: string;
+  bgSoft: string;
+  borderSoft: string;
+} {
+  if (!name || name === "未割り当て") {
+    return {
+      icon: "👤",
+      accent: "#57534e",
+      bgSoft: "#f5f5f4",
+      borderSoft: "#d6d3d1",
+    };
+  }
+  if (/(自分|私|ママ|母|妻)/.test(name)) {
+    return {
+      icon: "🧑",
+      accent: "#e11d48",
+      bgSoft: "#fff1f2",
+      borderSoft: "#fecdd3",
+    };
+  }
+  if (/(パートナー|パパ|父|夫)/.test(name)) {
+    return {
+      icon: "🤝",
+      accent: "#2563eb",
+      bgSoft: "#eff6ff",
+      borderSoft: "#bfdbfe",
+    };
+  }
+  if (/(子|長男|長女|次男|次女|キッズ|児童|本人)/.test(name)) {
+    return {
+      icon: "🧒",
+      accent: "#d97706",
+      bgSoft: "#fffbeb",
+      borderSoft: "#fde68a",
+    };
+  }
+  if (/(親|祖|じい|ばあ|シニア)/.test(name)) {
+    return {
+      icon: "👵",
+      accent: "#16a34a",
+      bgSoft: "#f0fdf4",
+      borderSoft: "#bbf7d0",
+    };
+  }
+  return {
+    icon: "✨",
+    accent: "#7c3aed",
+    bgSoft: "#f5f3ff",
+    borderSoft: "#ddd6fe",
+  };
+}
+
 /**
  * Build a real Google Calendar TEMPLATE deep link
  */
@@ -833,16 +890,17 @@ function buildGoogleCalendarUrl(
   idx: number
 ): string {
   const { start, end } = ensureCompactIso(ev, idx);
-  const role = normalizeRoleKey(ev.assignee);
-  const title = `【${role}】${ev.title}`;
+  const role = ev.assignee || "未割り当て";
+  const title = role !== "未割り当て" ? `【${role}】${ev.title}` : ev.title;
   const detailsLines = [
-    `📄 おたより件名: ${docTitle}`,
-    `👤 家族バトン担当: ${role}`,
-    `💡 担当理由・メモ: ${ev.reason}`,
+    `📄 件名: ${docTitle}`,
+    `👤 担当: ${role}`,
+    `💡 メモ: ${ev.reason}`,
+    ev.caution ? `⚠️ 注意点: ${ev.caution}` : "",
     itemsToBring.length > 0
       ? `🎒 持ち物・準備物: ${itemsToBring.slice(0, 6).join(" / ")}`
       : "",
-    "— おたよりバトン Ultra で自動抽出",
+    "— おたよりバトン Ultra で作成",
   ].filter(Boolean);
 
   const params = new URLSearchParams({
@@ -850,7 +908,7 @@ function buildGoogleCalendarUrl(
     text: title,
     dates: `${start}/${end}`,
     details: detailsLines.join("\n"),
-    location: ev.location || "おたより記載の場所",
+    location: ev.location || "予定記載の場所",
     ctz: "Asia/Tokyo",
   });
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
@@ -880,12 +938,13 @@ function buildIcsContent(analysis: OtayoriAnalysis): string {
 
   analysis.events.forEach((ev, idx) => {
     const { start, end } = ensureCompactIso(ev, idx);
-    const role = normalizeRoleKey(ev.assignee);
-    const summary = `【${role}】${ev.title}`;
+    const role = ev.assignee || "未割り当て";
+    const summary = role !== "未割り当て" ? `【${role}】${ev.title}` : ev.title;
     const desc = [
       `おたより: ${analysis.title}`,
       `担当: ${role}`,
-      `理由: ${ev.reason}`,
+      `メモ: ${ev.reason}`,
+      ev.caution ? `注意点: ${ev.caution}` : "",
       `費用・集金: ${analysis.cost}`,
       analysis.items_to_bring.length > 0
         ? `持ち物: ${analysis.items_to_bring.join("、")}`
@@ -917,112 +976,68 @@ function buildIcsContent(analysis: OtayoriAnalysis): string {
 }
 
 function defaultChecklistForAnalysis(
-  analysis: OtayoriAnalysis
+  analysis: OtayoriAnalysis,
+  members: string[]
 ): PersistedChecklistItem[] {
+  const assignForIndex = (rawAssignee: string | undefined, idx: number) => {
+    if (members.length === 0) return "未割り当て";
+    if (rawAssignee && members.includes(rawAssignee)) return rawAssignee;
+    return members[idx % members.length];
+  };
+
   if (analysis.checklist_items && analysis.checklist_items.length > 0) {
     return analysis.checklist_items.map((item, idx) => ({
       ...item,
       id: item.id || `item-${idx + 1}`,
-      assignee: normalizeRoleKey(item.assignee),
+      assignee: assignForIndex(item.assignee, idx),
       checked: false,
     }));
   }
   return analysis.items_to_bring.map((label, idx) => ({
     id: `bring-${idx + 1}`,
     label,
-    assignee: ROLE_ORDER[idx % ROLE_ORDER.length],
+    assignee: assignForIndex(undefined, idx),
     category: "持ち物",
     checked: false,
   }));
 }
 
-type OtayoriGoalId = "school" | "medical" | "municipal";
-
-interface OtayoriGoalOption {
-  id: OtayoriGoalId;
-  title: string;
-  badge: string;
-  description: string;
-  defaultPresetId: PresetDefinition["id"];
-  presetIds: PresetDefinition["id"][];
-  placeholder: string;
-  accentColor: string;
-  bgSoft: string;
-  borderSoft: string;
-}
-
-const OTAYORI_GOALS: OtayoriGoalOption[] = [
-  {
-    id: "school",
-    title: "🏫 学校・保育園のおたよりを予定＆持ち物にする",
-    badge: "STEP 1 → 学校・保育園プリント",
-    description:
-      "運動会・遠足・行事プリントから、日程・持ち物・家族（ママ・パパ・子ども・祖父母）の担当を自動で整理します。",
-    defaultPresetId: "undokai",
-    presetIds: ["undokai", "ensoku"],
-    placeholder:
-      "学校・保育園プリントの文章や連絡アプリのテキストを貼り付けてください（写真のみでも解析できます）",
-    accentColor: "#ea580c",
-    bgSoft: "#fff7ed",
-    borderSoft: "#fdba74",
-  },
-  {
-    id: "medical",
-    title: "💊 お薬・アレルギー・病院メモを家族へ共有する",
-    badge: "STEP 1 → お薬・アレルギー・病院",
-    description:
-      "予防接種案内・処方薬の説明書・アレルギー表から、服薬ルールや持ち物・見落とし防止メモを作成して家族へ共有します。",
-    defaultPresetId: "vaccine",
-    presetIds: ["vaccine"],
-    placeholder:
-      "予防接種のお知らせ・処方箋メモ・アレルギー注意書きの文章を入力してください（写真のみでも解析できます）",
-    accentColor: "#e11d48",
-    bgSoft: "#fff1f2",
-    borderSoft: "#fda4af",
-  },
-  {
-    id: "municipal",
-    title: "🏛️ 役所・検診・手続きの締切をカレンダーに入れる",
-    badge: "STEP 1 → 役所・検診・手続き",
-    description:
-      "自治体からの健康診査通知や各種申請プリントから、予約・提出の締切日と当日の持ち物を抽出してカレンダーに登録します。",
-    defaultPresetId: "kenshin",
-    presetIds: ["kenshin"],
-    placeholder:
-      "市役所・保健センターからの健診通知や手続き案内の文章を入力してください（写真のみでも解析できます）",
-    accentColor: "#2563eb",
-    bgSoft: "#eff6ff",
-    borderSoft: "#bfdbfe",
-  },
-];
-
 export default function OtayoriUltra() {
-  // Progressive Disclosure state: Step 1 (choose goal) -> Step 2 (input) -> Step 3 (results after analysis)
-  const [selectedGoal, setSelectedGoal] = useState<OtayoriGoalId | null>(null);
-  const [hasAnalyzed, setHasAnalyzed] = useState<boolean>(false);
-  const [extraTab, setExtraTab] = useState<"share" | "family" | "save">("share");
+  // Starts COMPLETELY EMPTY by default (初期状態は情報が入っていない空の状態)
+  const [sourceText, setSourceText] = useState<string>("");
+  const [analysis, setAnalysis] = useState<OtayoriAnalysis | null>(null);
+  const [usedModelLabel, setUsedModelLabel] = useState<string>("gemini-2.5-flash");
+  const [activePresetId, setActivePresetId] = useState<PresetDefinition["id"] | "">("");
 
-  const [activePresetId, setActivePresetId] = useState<PresetDefinition["id"]>("undokai");
-  const [sourceText, setSourceText] = useState<string>(PRESETS[0].sourceText);
-  const [familyRoles, setFamilyRoles] = useState<string>(DEFAULT_FAMILY_ROLES);
+  // Household members: starts empty [] (do NOT hardcode ママ/パパ/子ども/祖父母)
+  const [members, setMembers] = useState<string[]>([]);
+  const [customMemberInput, setCustomMemberInput] = useState<string>("");
+  const [familyRolesNote, setFamilyRolesNote] = useState<string>("");
 
+  // Optional toggles for senior 3-line summary / kid card when no matching member is added
+  const [showSeniorCardManual, setShowSeniorCardManual] = useState<boolean>(false);
+  const [showKidCardManual, setShowKidCardManual] = useState<boolean>(false);
+
+  // Image upload state (starts empty)
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string>("");
   const [imageMimeType, setImageMimeType] = useState<string>("");
   const [imageSourceLabel, setImageSourceLabel] = useState<string>("");
 
-  const [analysis, setAnalysis] = useState<OtayoriAnalysis>(PRESETS[0].defaultAnalysis);
-  const [usedModelLabel, setUsedModelLabel] = useState<string>(
-    "gemini-2.5-flash (プリセット即時ロード済)"
-  );
-
-  const [checklist, setChecklist] = useState<PersistedChecklistItem[]>(() =>
-    defaultChecklistForAnalysis(PRESETS[0].defaultAnalysis)
-  );
-  const [roleFilter, setRoleFilter] = useState<FamilyRole | "ALL">("ALL");
+  // Checklist state (starts empty [])
+  const [checklist, setChecklist] = useState<PersistedChecklistItem[]>([]);
+  const [roleFilter, setRoleFilter] = useState<string>("ALL");
   const [newItemText, setNewItemText] = useState<string>("");
-  const [newItemRole, setNewItemRole] = useState<FamilyRole>("ママ");
+  const [newItemRole, setNewItemRole] = useState<string>("未割り当て");
 
+  // Manual schedule addition state ("＋ 予定を追加")
+  const [showAddEventForm, setShowAddEventForm] = useState<boolean>(false);
+  const [manualEventTitle, setManualEventTitle] = useState<string>("");
+  const [manualEventDate, setManualEventDate] = useState<string>("");
+  const [manualEventNote, setManualEventNote] = useState<string>("");
+  const [manualEventAssignee, setManualEventAssignee] = useState<string>("未割り当て");
+
+  const [extraTab, setExtraTab] = useState<"share" | "family" | "save">("share");
   const [analyzing, setAnalyzing] = useState<boolean>(false);
   const [syncingGas, setSyncingGas] = useState<boolean>(false);
   const [archivingDrive, setArchivingDrive] = useState<boolean>(false);
@@ -1045,54 +1060,85 @@ export default function OtayoriUltra() {
 
   // Web Speech API state
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
-  const [speechRate, setSpeechRate] = useState<number>(1.0);
+  const [speechRate] = useState<number>(1.0);
   const [activeSpeechLabel, setActiveSpeechLabel] = useState<string>("");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
-  const docKey = useMemo(() => {
-    return (analysis.title || activePresetId || "default").trim();
-  }, [analysis.title, activePresetId]);
-
-  // Load persisted checklist & event role overrides from localStorage
+  // Load user's saved custom household members from localStorage (starts [] if none saved)
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (!raw) {
-        setChecklist(defaultChecklistForAnalysis(analysis));
-        return;
-      }
-      const parsed = JSON.parse(raw) as Partial<PersistedBatonState>;
-      const savedChecklist = parsed.checklistByDoc?.[docKey];
-      if (Array.isArray(savedChecklist) && savedChecklist.length > 0) {
-        setChecklist(savedChecklist);
-      } else {
-        setChecklist(defaultChecklistForAnalysis(analysis));
-      }
-
-      const savedAssignees = parsed.eventAssigneesByDoc?.[docKey];
-      if (savedAssignees && typeof savedAssignees === "object") {
-        setAnalysis((prev) => ({
-          ...prev,
-          events: prev.events.map((ev, idx) =>
-            savedAssignees[idx]
-              ? { ...ev, assignee: savedAssignees[idx] }
-              : ev
-          ),
-        }));
+      const saved = window.localStorage.getItem(MEMBERS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const valid = parsed.map((m) => String(m ?? "").trim()).filter(Boolean);
+          setMembers(valid);
+          if (valid.length > 0) {
+            setNewItemRole(valid[0]);
+            setManualEventAssignee(valid[0]);
+          }
+        }
       }
     } catch {
-      setChecklist(defaultChecklistForAnalysis(analysis));
+      // ignore
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docKey]);
+  }, []);
+
+  const persistMembers = useCallback((nextMembers: string[]) => {
+    setMembers(nextMembers);
+    try {
+      window.localStorage.setItem(MEMBERS_STORAGE_KEY, JSON.stringify(nextMembers));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleAddMember = (rawName: string) => {
+    const trimmed = rawName.trim();
+    if (!trimmed) return;
+    if (members.includes(trimmed)) {
+      setCustomMemberInput("");
+      return;
+    }
+    const next = [...members, trimmed];
+    persistMembers(next);
+    setCustomMemberInput("");
+    if (newItemRole === "未割り当て") setNewItemRole(trimmed);
+    if (manualEventAssignee === "未割り当て") setManualEventAssignee(trimmed);
+  };
+
+  const handleRemoveMember = (target: string) => {
+    const next = members.filter((m) => m !== target);
+    persistMembers(next);
+    if (roleFilter === target) setRoleFilter("ALL");
+    if (newItemRole === target) setNewItemRole(next[0] ?? "未割り当て");
+    if (manualEventAssignee === target) setManualEventAssignee(next[0] ?? "未割り当て");
+  };
+
+  const assigneeOptions = useMemo(() => {
+    return ["未割り当て", ...members];
+  }, [members]);
+
+  const hasSeniorMember = useMemo(() => {
+    return members.some((m) => /(親|祖|父|母|じい|ばあ|シニア)/.test(m));
+  }, [members]);
+
+  const hasKidMember = useMemo(() => {
+    return members.some((m) => /(子|長男|長女|次男|次女|キッズ|児童)/.test(m));
+  }, [members]);
+
+  const docKey = useMemo(() => {
+    return (analysis?.title || "custom").trim();
+  }, [analysis?.title]);
 
   const persistState = useCallback(
     (
       nextChecklist: PersistedChecklistItem[],
       nextEvents?: OtayoriEvent[]
     ) => {
+      if (!docKey) return;
       try {
         const raw = window.localStorage.getItem(STORAGE_KEY);
         const parsed: PersistedBatonState = raw
@@ -1107,14 +1153,14 @@ export default function OtayoriUltra() {
         if (nextEvents) {
           const map: Record<number, FamilyRole> = {};
           nextEvents.forEach((ev, i) => {
-            map[i] = normalizeRoleKey(ev.assignee);
+            map[i] = ev.assignee || "未割り当て";
           });
           parsed.eventAssigneesByDoc[docKey] = map;
         }
 
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
       } catch {
-        // Ignore quota errors in private browsing
+        // Ignore quota errors
       }
     },
     [docKey]
@@ -1173,34 +1219,47 @@ export default function OtayoriUltra() {
   }
 
   function handleSpeakFullSummary() {
+    if (!analysis) return;
     const uncheckedItems = checklist.filter((c) => !c.checked);
     const itemsSpeech =
       uncheckedItems.length > 0
         ? `まだ準備していない持ち物・やることは、${uncheckedItems
             .slice(0, 5)
-            .map((c) => `${c.assignee}担当の${c.label}`)
+            .map((c) => `${c.assignee}の${c.label}`)
             .join("、")}、など全${uncheckedItems.length}件です。`
-        : "持ち物チェックリストはすべて完了しています！バッチリです。";
+        : "持ち物チェックリストはすべて完了しています。";
+
+    const cautionsSpeech =
+      analysis.schedule_cautions && analysis.schedule_cautions.length > 0
+        ? `注意点は、${analysis.schedule_cautions.join(" ")}`
+        : "";
 
     const script = [
       analysis.voice_script ||
         `おたよりバトンから「${analysis.title}」のまとめを読み上げます。${analysis.summary}`,
+      cautionsSpeech,
       itemsSpeech,
-    ].join(" ");
+    ]
+      .filter(Boolean)
+      .join(" ");
 
-    speakText(script, "全体まとめ＆未完了の持ち物");
+    speakText(script, "全体まとめ＆注意点・持ち物");
   }
 
   function handleSpeakGrandparent() {
+    if (!analysis) return;
     const script = [
-      `おじいちゃん、おばあちゃんへ。「${analysis.title}」のやさしい3行まとめです。`,
+      `「${analysis.title}」のやさしい3行まとめです。`,
       ...analysis.grandparent_summary,
     ].join(" ");
-    speakText(script, "祖父母向けやさしい3行要約（ゆっくり）", 0.85);
+    speakText(script, "やさしい3行要約（ゆっくり）", 0.85);
   }
 
   function handleSpeakChildItems() {
-    const childItems = checklist.filter((c) => c.assignee === "子ども");
+    if (!analysis) return;
+    const childItems = checklist.filter((c) =>
+      /(子|長男|長女|次男|次女|キッズ|児童)/.test(c.assignee)
+    );
     const listText =
       childItems.length > 0
         ? childItems.map((c) => c.label).join("、")
@@ -1285,146 +1344,39 @@ export default function OtayoriUltra() {
     processImageFile(file, sourceLabel);
   }
 
-  /**
-   * Generates a realistic visual Japanese handout image on an HTML5 Canvas
-   * so judges without a physical school handout can test multimodal base64 image upload in 1 click!
-   */
-  function handleGenerateSimulatedHandoutPhoto() {
-    const currentPreset =
-      PRESETS.find((p) => p.id === activePresetId) ?? PRESETS[0];
-    const canvas = document.createElement("canvas");
-    canvas.width = 760;
-    canvas.height = 540;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    // Warm paper background
-    ctx.fillStyle = "#fffdf9";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Decorative border
-    ctx.strokeStyle = "#d97706";
-    ctx.lineWidth = 4;
-    ctx.strokeRect(18, 18, canvas.width - 36, canvas.height - 36);
-
-    // Header banner
-    ctx.fillStyle = "#ffedd5";
-    ctx.fillRect(34, 34, canvas.width - 68, 64);
-    ctx.fillStyle = "#9a3412";
-    ctx.font = "bold 22px sans-serif";
-    ctx.fillText(currentPreset.issuer, 50, 74);
-
-    // Red school/clinic stamp (Hanko)
-    ctx.strokeStyle = "#dc2626";
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.arc(canvas.width - 78, 66, 24, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.fillStyle = "#dc2626";
-    ctx.font = "bold 13px sans-serif";
-    ctx.fillText("確認済", canvas.width - 98, 71);
-
-    // Body lines
-    ctx.fillStyle = "#1c1917";
-    ctx.font = "15px sans-serif";
-    const lines = currentPreset.sourceText.split(/\r?\n/);
-    let y = 130;
-    lines.slice(0, 12).forEach((line) => {
-      const chunks = line.match(/.{1,42}/g) || [line];
-      chunks.forEach((chunk) => {
-        if (y < 475) {
-          ctx.fillText(chunk, 44, y);
-          y += 26;
-        }
-      });
-    });
-
-    // Cut-off slip line at bottom
-    ctx.setLineDash([6, 6]);
-    ctx.strokeStyle = "#78716c";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(36, 488);
-    ctx.lineTo(canvas.width - 36, 488);
-    ctx.stroke();
-    ctx.fillStyle = "#57534e";
-    ctx.font = "bold 13px sans-serif";
-    ctx.fillText("✂ 切り取り線 ── 提出票・確認欄（保護者記入・押印）", 48, 512);
-
-    const dataUrl = canvas.toDataURL("image/png");
-    const [, base64] = dataUrl.split(",");
-    setImagePreview(dataUrl);
-    setImageBase64(base64 ?? "");
-    setImageMimeType("image/png");
-    setImageSourceLabel(`擬似プリント撮影画像（${currentPreset.label}）`);
+  function handleLoadOneExample() {
+    stopSpeaking();
+    const sample = PRESETS[0];
+    setActivePresetId(sample.id);
+    setSourceText(sample.sourceText);
     setError(null);
     setNotice(
-      `📸 「${currentPreset.label}」のプリント紙面画像（Base64 PNG）を生成してカメラ入力にセットしました！そのまま Gemini Vision 解析を実行できます。`
-    );
-  }
-
-  const activeGoal = OTAYORI_GOALS.find((g) => g.id === selectedGoal) ?? null;
-  const availablePresets = useMemo(() => {
-    if (!activeGoal) return PRESETS;
-    return PRESETS.filter((p) => activeGoal.presetIds.includes(p.id));
-  }, [activeGoal]);
-
-  function handleSelectGoal(goal: OtayoriGoalOption) {
-    stopSpeaking();
-    const defaultPreset =
-      PRESETS.find((p) => p.id === goal.defaultPresetId) ?? PRESETS[0];
-    setSelectedGoal(goal.id);
-    setHasAnalyzed(false);
-    setActivePresetId(defaultPreset.id);
-    setSourceText(defaultPreset.sourceText);
-    setAnalysis(defaultPreset.defaultAnalysis);
-    clearImage();
-    setError(null);
-    setNotice(null);
-  }
-
-  function handleResetGoal() {
-    stopSpeaking();
-    setSelectedGoal(null);
-    setHasAnalyzed(false);
-    clearImage();
-    setError(null);
-    setNotice(null);
-  }
-
-  function handleSelectPreset(preset: PresetDefinition) {
-    stopSpeaking();
-    setActivePresetId(preset.id);
-    setSourceText(preset.sourceText);
-    setAnalysis(preset.defaultAnalysis);
-    setUsedModelLabel("gemini-2.5-flash");
-    setError(null);
-    setNotice(
-      `✨ サンプル「${preset.label}」を入力ボックスにセットしました！「AIでおたよりを解析」ボタンを押すと予定と持ち物を抽出します。`
+      "✨ 例を入力欄にセットしました。「AI でおたよりを解析」を押すと予定・注意点・持ち物を作成します。"
     );
   }
 
   async function handleAnalyze(e?: FormEvent) {
     if (e) e.preventDefault();
+    if (!sourceText.trim() && !imageBase64) {
+      setError("おたよりの写真を選択するか、テキスト・予定を入力してください。");
+      return;
+    }
     stopSpeaking();
     setAnalyzing(true);
     setError(null);
     setNotice(null);
-
-    const currentPreset =
-      PRESETS.find((p) => p.id === activePresetId) ?? PRESETS[0];
-    const textToSend = sourceText.trim() || currentPreset.sourceText;
 
     try {
       const res = await fetch("/api/otayori", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sourceText: textToSend,
-          familyRoles,
+          sourceText: sourceText.trim(),
+          familyRoles: familyRolesNote,
+          customMembers: members,
           imageBase64,
           imageMimeType,
-          presetId: activePresetId,
+          presetId: activePresetId || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -1434,25 +1386,19 @@ export default function OtayoriUltra() {
       if (data.analysis) {
         const nextAnalysis = data.analysis as OtayoriAnalysis;
         setAnalysis(nextAnalysis);
-        const freshChecklist = defaultChecklistForAnalysis(nextAnalysis);
+        const freshChecklist = defaultChecklistForAnalysis(nextAnalysis, members);
         setChecklist(freshChecklist);
         persistState(freshChecklist, nextAnalysis.events);
       }
       if (typeof data.usedModel === "string") {
         setUsedModelLabel(data.usedModel);
       }
-      setHasAnalyzed(true);
       setNotice(
         imageBase64
-          ? "📸 おたより画像とテキストを解析し、カレンダー予定と家族チェックリストを作成しました！"
-          : "✨ おたよりを解析し、カレンダー予定と家族チェックリストを作成しました！"
+          ? "📸 おたより画像とテキストを解析し、予定・Gemini注意点アドバイス・持ち物チェックリストを作成しました！"
+          : "✨ 予定・Gemini注意点アドバイス・持ち物チェックリストを作成しました！"
       );
     } catch (err) {
-      // Fallback to preset defaultAnalysis so Step 3 still works seamlessly
-      setAnalysis(currentPreset.defaultAnalysis);
-      const freshChecklist = defaultChecklistForAnalysis(currentPreset.defaultAnalysis);
-      setChecklist(freshChecklist);
-      setHasAnalyzed(true);
       setError(
         err instanceof Error ? err.message : "解析中にエラーが発生しました。"
       );
@@ -1461,15 +1407,157 @@ export default function OtayoriUltra() {
     }
   }
 
-  function handleCycleEventRole(eventIndex: number) {
+  // Manually add a schedule and have Gemini (/api/otayori) automatically generate schedule_cautions & event cautions
+  async function handleAddManualSchedule(e: FormEvent) {
+    e.preventDefault();
+    const title = manualEventTitle.trim();
+    if (!title) {
+      setError("追加する予定のタイトルを入力してください。");
+      return;
+    }
+    const dateStr = manualEventDate.trim() || "日程未定";
+    const noteStr = manualEventNote.trim() || "手動で追加した予定";
+    const assignee =
+      manualEventAssignee && manualEventAssignee !== "未割り当て"
+        ? manualEventAssignee
+        : members[0] ?? "未割り当て";
+
+    setAnalyzing(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const combinedPromptText = [
+        `【予定追加】${title}`,
+        `日時：${dateStr}`,
+        `担当：${assignee}`,
+        `メモ・補足：${noteStr}`,
+        sourceText.trim() ? `\n【関連メモ】\n${sourceText.trim()}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      const res = await fetch("/api/otayori", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceText: combinedPromptText,
+          familyRoles: familyRolesNote,
+          customMembers: members,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      const generated = data.analysis as OtayoriAnalysis | undefined;
+
+      const { start, end } = ensureCompactIso(
+        { date: dateStr, title, assignee, reason: noteStr },
+        analysis?.events.length ?? 0
+      );
+      const addedCaution =
+        generated?.events?.[0]?.caution ||
+        generated?.schedule_cautions?.[0] ||
+        "前日の夜に持ち物・必要書類・集合時間を再確認しておきましょう。";
+
+      const newEv: OtayoriEvent = {
+        date: dateStr,
+        title,
+        assignee,
+        reason: noteStr,
+        caution: addedCaution,
+        isoStart: start,
+        isoEnd: end,
+        location: generated?.events?.[0]?.location || "予定の場所",
+        isDeadline: /(締切|提出|予約|集金|期限)/.test(`${title} ${noteStr}`),
+      };
+
+      if (!analysis) {
+        const nextAnalysis: OtayoriAnalysis = generated
+          ? {
+              ...generated,
+              title,
+              events: [newEv, ...generated.events.slice(1)],
+            }
+          : {
+              title,
+              category: "予定・メモ",
+              summary: `${dateStr} の「${title}」に関する予定と注意点・準備リストです。`,
+              events: [newEv],
+              items_to_bring: ["必要書類・持ち物の事前確認"],
+              cost: "なし",
+              grandparent_summary: [
+                `${dateStr} に「${title}」の予定があります。`,
+                noteStr,
+                "前日に持ち物と時間を確認しておきましょう。",
+              ],
+              schedule_cautions: [addedCaution],
+              suggested_tasks: [
+                {
+                  title: `【${assignee}】${title}`,
+                  priority: "medium",
+                  memo: `${dateStr} / ${noteStr}`,
+                },
+              ],
+            };
+        setAnalysis(nextAnalysis);
+        const freshChecklist = defaultChecklistForAnalysis(nextAnalysis, members);
+        setChecklist(freshChecklist);
+        persistState(freshChecklist, nextAnalysis.events);
+      } else {
+        const mergedCautions = Array.from(
+          new Set([
+            ...(analysis.schedule_cautions ?? []),
+            ...(generated?.schedule_cautions ?? [addedCaution]),
+          ])
+        ).slice(0, 6);
+        const updatedEvents = [...analysis.events, newEv];
+        const nextAnalysis: OtayoriAnalysis = {
+          ...analysis,
+          events: updatedEvents,
+          schedule_cautions: mergedCautions,
+        };
+        setAnalysis(nextAnalysis);
+        persistState(checklist, updatedEvents);
+      }
+
+      if (typeof data.usedModel === "string") {
+        setUsedModelLabel(data.usedModel);
+      }
+      setManualEventTitle("");
+      setManualEventDate("");
+      setManualEventNote("");
+      setShowAddEventForm(false);
+      setNotice(
+        `📅 予定「${title}」を追加し、Gemini がこの予定で気をつける注意点を自動生成しました！`
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "予定の追加中にエラーが発生しました。"
+      );
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  function handleChangeEventAssignee(eventIndex: number, nextAssignee: string) {
     setAnalysis((prev) => {
+      if (!prev) return prev;
+      const updated = prev.events.map((ev, idx) =>
+        idx === eventIndex ? { ...ev, assignee: nextAssignee } : ev
+      );
+      persistState(checklist, updated);
+      return { ...prev, events: updated };
+    });
+  }
+
+  function handleCycleEventRole(eventIndex: number) {
+    const pool = assigneeOptions;
+    setAnalysis((prev) => {
+      if (!prev) return prev;
       const updated = prev.events.map((ev, idx) => {
         if (idx !== eventIndex) return ev;
-        const next = nextRole(normalizeRoleKey(ev.assignee));
-        return {
-          ...ev,
-          assignee: next,
-        };
+        const curIdx = pool.indexOf(ev.assignee);
+        const next = pool[(curIdx + 1) % pool.length] ?? "未割り当て";
+        return { ...ev, assignee: next };
       });
       persistState(checklist, updated);
       return { ...prev, events: updated };
@@ -1486,7 +1574,7 @@ export default function OtayoriUltra() {
     });
   }
 
-  function handleChangeItemRole(id: string, role: FamilyRole) {
+  function handleChangeItemRole(id: string, role: string) {
     setChecklist((prev) => {
       const next = prev.map((item) =>
         item.id === id ? { ...item, assignee: role } : item
@@ -1503,7 +1591,7 @@ export default function OtayoriUltra() {
     const newItem: PersistedChecklistItem = {
       id: `custom-${Date.now()}`,
       label,
-      assignee: newItemRole,
+      assignee: newItemRole || "未割り当て",
       category: "持ち物",
       checked: false,
     };
@@ -1514,13 +1602,15 @@ export default function OtayoriUltra() {
   }
 
   function handleResetChecklist() {
-    const fresh = defaultChecklistForAnalysis(analysis);
+    if (!analysis) return;
+    const fresh = defaultChecklistForAnalysis(analysis, members);
     setChecklist(fresh);
     persistState(fresh, analysis.events);
-    setNotice("家族バトンのチェックリストを初期状態にリセットしました。");
+    setNotice("チェックリストをリセットしました。");
   }
 
   function handleDownloadIcs() {
+    if (!analysis) return;
     const icsContent = buildIcsContent(analysis);
     const blob = new Blob([icsContent], {
       type: "text/calendar;charset=utf-8",
@@ -1528,35 +1618,53 @@ export default function OtayoriUltra() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `otayori-baton-${activePresetId}.ics`;
+    a.download = `otayori-baton-${activePresetId || "schedule"}.ics`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     setNotice(
-      `📅 家族カレンダー用 .ics ファイル（全 ${analysis.events.length} 件の予定・前日アラーム付き）をダウンロードしました！`
+      `📅 カレンダー用 .ics ファイル（全 ${analysis.events.length} 件の予定・前日アラーム付き）をダウンロードしました！`
     );
   }
 
   const lineGroupSummaryText = useMemo(() => {
+    if (!analysis) return "";
     const lines: string[] = [
       `📣【おたよりバトン】${analysis.title}`,
       `📝 ${analysis.summary}`,
       `💴 費用・集金：${analysis.cost}`,
-      "",
-      "━━━━━━━━━━━━━━",
-      "🔁 家族みんなの担当バトン",
-      "━━━━━━━━━━━━━━",
     ];
 
-    FAMILY_ROLES.forEach((role) => {
-      const roleEvents = analysis.events.filter(
-        (ev) => normalizeRoleKey(ev.assignee) === role.key
+    if (analysis.schedule_cautions && analysis.schedule_cautions.length > 0) {
+      lines.push(
+        "",
+        "⚠️【この予定の注意点・気をつけること】",
+        ...analysis.schedule_cautions.map((c) => `・${c}`)
       );
-      const roleItems = checklist.filter((c) => c.assignee === role.key);
+    }
+
+    lines.push("", "━━━━━━━━━━━━━━", "🔁 予定と持ち物リスト", "━━━━━━━━━━━━━━");
+
+    const groups = Array.from(
+      new Set([
+        ...members,
+        ...analysis.events.map((e) => e.assignee || "未割り当て"),
+        ...checklist.map((c) => c.assignee || "未割り当て"),
+      ])
+    );
+
+    groups.forEach((memberName) => {
+      const roleEvents = analysis.events.filter(
+        (ev) => (ev.assignee || "未割り当て") === memberName
+      );
+      const roleItems = checklist.filter(
+        (c) => (c.assignee || "未割り当て") === memberName
+      );
       if (roleEvents.length === 0 && roleItems.length === 0) return;
 
-      lines.push(`\n${role.icon} 【${role.shortLabel}のバトン】`);
+      const meta = getMemberStyle(memberName);
+      lines.push(`\n${meta.icon} 【${memberName}】`);
       roleEvents.forEach((ev) => {
         lines.push(`・📅 ${ev.date}：${ev.title}`);
       });
@@ -1565,21 +1673,24 @@ export default function OtayoriUltra() {
       });
     });
 
-    lines.push(
-      "",
-      "👵 【おじいちゃん・おばあちゃんへ3行まとめ】",
-      ...analysis.grandparent_summary.map((l, i) => `${i + 1}. ${l}`)
-    );
+    if (hasSeniorMember || showSeniorCardManual) {
+      lines.push(
+        "",
+        "👵 【やさしい3行まとめ】",
+        ...analysis.grandparent_summary.map((l, i) => `${i + 1}. ${l}`)
+      );
+    }
 
     return lines.join("\n");
-  }, [analysis, checklist]);
+  }, [analysis, checklist, members, hasSeniorMember, showSeniorCardManual]);
 
   async function handleCopyLineSummary() {
+    if (!lineGroupSummaryText) return;
     try {
       await navigator.clipboard.writeText(lineGroupSummaryText);
       setCopiedLine(true);
       setShowLinePreview(true);
-      setNotice("💬 LINE 家族グループ用の役割分担まとめをクリップボードにコピーしました！");
+      setNotice("💬 LINE・メッセージ共有用のまとめをクリップボードにコピーしました！");
       setTimeout(() => setCopiedLine(false), 3000);
     } catch {
       setShowLinePreview(true);
@@ -1588,15 +1699,16 @@ export default function OtayoriUltra() {
   }
 
   const replyCushionText = useMemo(() => {
+    if (!analysis) return "";
     const mainEventDate = analysis.events[0]?.date ?? "本日・行事当日";
     if (cushionMode === "absence") {
       return [
         "【園・学校・病院への欠席／日程変更のご連絡】",
         "いつも大変お世話になっております。",
-        `本日（または ${mainEventDate} の「${analysis.title}」）につきまして、今朝から発熱・体調不良が見られるため、大事をとってお休み（または日程変更のご相談）をさせていただきたくご連絡いたしました。`,
+        `本日（または ${mainEventDate} の「${analysis.title}」）につきまして、体調不良が見られるため、大事をとってお休み（または日程変更のご相談）をさせていただきたくご連絡いたしました。`,
         analysis.cost && analysis.cost !== "なし"
-          ? `なお、提出物や費用（${analysis.cost}）につきましては、回復後の登園・来所時または家族経由で改めて提出いたします。`
-          : "なお、必要な提出物や配布プリントにつきましては、回復後の登園・登校時に確認させていただきます。",
+          ? `なお、提出物や費用（${analysis.cost}）につきましては、回復後に改めて提出いたします。`
+          : "なお、必要な提出物や配布プリントにつきましては、次回確認させていただきます。",
         "直前のご連絡となり恐縮ですが、どうぞよろしくお願いいたします。",
       ].join("\n");
     }
@@ -1605,13 +1717,13 @@ export default function OtayoriUltra() {
         analysis.medication_allergy_alerts &&
         analysis.medication_allergy_alerts.length > 0
           ? analysis.medication_allergy_alerts.join(" / ")
-          : "お薬の服用・食物アレルギー配慮";
+          : "お薬の服用・アレルギー配慮";
       return [
-        "【お薬の持参・アレルギー配慮に関するお願い（連絡帳用）】",
+        "【お薬の持参・アレルギー配慮に関するお願い（連絡用）】",
         "いつも温かく見守っていただきありがとうございます。",
         `「${analysis.title}」に関連して、健康・お薬・アレルギー面の確認事項をご連絡いたします。`,
         `・確認メモ：${medNotes}`,
-        "・当日は処方薬（またはお薬手帳・アレルギー対応食）を記名のうえ持参いたします。お忙しいところ恐れ入りますが、ご配慮のほどよろしくお願いいたします。",
+        "・当日は処方薬（またはお薬手帳・対応食）を記名のうえ持参いたします。お忙しいところ恐れ入りますが、ご配慮のほどよろしくお願いいたします。",
       ].join("\n");
     }
     return (
@@ -1623,6 +1735,7 @@ export default function OtayoriUltra() {
   }, [analysis, cushionMode]);
 
   async function handleCopyCushionMessage() {
+    if (!replyCushionText) return;
     try {
       await navigator.clipboard.writeText(replyCushionText);
       setCopiedCushion(true);
@@ -1636,6 +1749,7 @@ export default function OtayoriUltra() {
   }
 
   async function handleCopyGrandmaSummary() {
+    if (!analysis) return;
     const text = [
       `【${analysis.title}（やさしい3行まとめ）】`,
       ...analysis.grandparent_summary.map((line, i) => `${i + 1}. ${line}`),
@@ -1650,6 +1764,7 @@ export default function OtayoriUltra() {
   }
 
   async function handleSyncToGas() {
+    if (!analysis) return;
     setSyncingGas(true);
     setError(null);
     setNotice(null);
@@ -1658,7 +1773,7 @@ export default function OtayoriUltra() {
       analysis.suggested_tasks.length > 0
         ? analysis.suggested_tasks
         : analysis.events.map((ev) => ({
-            title: `【${normalizeRoleKey(ev.assignee)}】${ev.title}`,
+            title: `【${ev.assignee || "未割り当て"}】${ev.title}`,
             priority: "medium" as const,
             memo: `${ev.date} / ${ev.reason}`,
           }));
@@ -1681,7 +1796,7 @@ export default function OtayoriUltra() {
         );
       }
       setNotice(
-        `✓ 家族の Google Workspace へ連携しました（シート追記: ${
+        `✓ Google Workspace へ連携しました（シート追記: ${
           data.addedRows ?? 0
         } 行 / カレンダー登録: ${data.addedEvents ?? 0} 件）。`
       );
@@ -1697,6 +1812,7 @@ export default function OtayoriUltra() {
   }
 
   function handleDownloadLocalMarkdown() {
+    if (!analysis) return;
     const mdContent = [
       `# ${analysis.title}`,
       `- 分類: ${analysis.category}`,
@@ -1711,7 +1827,7 @@ export default function OtayoriUltra() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `otayori-baton-${activePresetId}.md`;
+    a.download = `otayori-baton-${activePresetId || "note"}.md`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -1719,13 +1835,13 @@ export default function OtayoriUltra() {
   }
 
   function handleDownloadLocalJson() {
+    if (!analysis) return;
     const payload = {
       app: "OtayoriBaton Ultra",
       savedAt: new Date().toISOString(),
-      presetId: activePresetId,
+      members,
       analysis,
       checklist,
-      familyRoles,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
       type: "application/json;charset=utf-8",
@@ -1733,7 +1849,7 @@ export default function OtayoriUltra() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `otayori-baton-${activePresetId}.json`;
+    a.download = `otayori-baton-${activePresetId || "note"}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -1741,6 +1857,7 @@ export default function OtayoriUltra() {
   }
 
   function handleSaveToLocalDevice() {
+    if (!analysis) return;
     setArchivingDrive(true);
     setError(null);
     setNotice(null);
@@ -1749,7 +1866,7 @@ export default function OtayoriUltra() {
       handleDownloadLocalMarkdown();
       setDriveArchiveInfo({
         mode: "local-ssd-download",
-        folder: `Downloads/otayori-baton-${activePresetId}.md (.json)`,
+        folder: `Downloads/otayori-baton-${activePresetId || "note"}.md (.json)`,
         message:
           "設定不要・完全無料で PC・スマホのローカルストレージにおたよりまとめを保存しました（下のボタンで .md / .json を個別保存できます）。",
         timestamp: new Date().toISOString(),
@@ -1775,7 +1892,7 @@ export default function OtayoriUltra() {
 
   const filteredChecklist = useMemo(() => {
     if (roleFilter === "ALL") return checklist;
-    return checklist.filter((item) => item.assignee === roleFilter);
+    return checklist.filter((item) => (item.assignee || "未割り当て") === roleFilter);
   }, [checklist, roleFilter]);
 
   return (
@@ -1788,7 +1905,7 @@ export default function OtayoriUltra() {
             </span>
             <span className="ou-brand">おたよりバトン Ultra</span>
             <span className="ou-badge-ai">
-              ✦ Gemini 2.5 Flash Vision + 家族4役バトン
+              ✦ Gemini 2.5 Flash Vision + 予定・注意点・持ち物整理
             </span>
           </div>
           <div className="ou-nav-links">
@@ -1814,977 +1931,1250 @@ export default function OtayoriUltra() {
           <div className="ou-hero-text">
             <div className="ou-tag-row">
               <span className="ou-cat-tag">🏠 暮らしと家族の部門</span>
-              {hasAnalyzed && <span className="ou-model-pill">⚡ {usedModelLabel}</span>}
+              {analysis && <span className="ou-model-pill">⚡ {usedModelLabel}</span>}
             </div>
             <h1 className="ou-main-title">
-              プリント・連絡・お薬メモを、家族の予定＆持ち物バトンへ
+              プリント・連絡・予定メモから、注意点＆持ち物チェックリストを作成
             </h1>
             <p className="ou-subtitle">
-              {selectedGoal === null
-                ? "まずはやりたいことを1つ選んでください。選んだあとに必要な入力だけを表示します。"
-                : !hasAnalyzed
-                ? "写真を添付するかサンプルボタンを押して、「AIでおたよりを解析」を実行してください。"
-                : "抽出された予定のカレンダー登録と、家族の持ち物チェックリストが作成されました。"}
+              あなた自身のプリント写真や文章、または予定を入力すると、Gemini がカレンダー予定・気をつける注意点・持ち物リストを整理します。
             </p>
           </div>
         </header>
 
-        {/* ============================================================
-            STEP 1: INITIAL SCREEN — ONLY 3 BIG GOAL CARDS
-           ============================================================ */}
-        {selectedGoal === null && (
-          <section aria-label="まずはやりたいことを選ぶ" style={{ marginTop: 12 }}>
-            <div className="ou-step-heading" style={{ marginBottom: 16 }}>
-              <span className="ou-step-badge">STEP 1</span>
-              <h2 className="ou-card-title" style={{ fontSize: "1.22rem" }}>
-                まずはやりたいことを選ぶ
-              </h2>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))",
-                gap: 16,
-              }}
+        {/* Feedback Banners */}
+        {error && (
+          <div className="ou-alert-error" role="alert">
+            <span>
+              ⚠️ <strong>確認:</strong> {error}
+            </span>
+            <button
+              type="button"
+              className="ou-alert-close"
+              onClick={() => setError(null)}
+              aria-label="閉じる"
             >
-              {OTAYORI_GOALS.map((goal) => (
-                <button
-                  key={goal.id}
-                  type="button"
-                  onClick={() => handleSelectGoal(goal)}
-                  style={{
-                    textAlign: "left",
-                    background: "#ffffff",
-                    border: `2px solid ${goal.borderSoft}`,
-                    borderRadius: 18,
-                    padding: "22px 20px",
-                    cursor: "pointer",
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "space-between",
-                    gap: 14,
-                    boxShadow: "0 4px 18px rgba(120, 53, 15, 0.06)",
-                    transition: "transform 0.15s ease, box-shadow 0.15s ease",
-                  }}
-                >
-                  <div>
-                    <span
-                      style={{
-                        display: "inline-block",
-                        fontSize: "0.75rem",
-                        fontWeight: 800,
-                        color: goal.accentColor,
-                        background: goal.bgSoft,
-                        border: `1px solid ${goal.borderSoft}`,
-                        padding: "3px 10px",
-                        borderRadius: 999,
-                        marginBottom: 12,
-                      }}
-                    >
-                      {goal.badge}
-                    </span>
-                    <div
-                      style={{
-                        fontSize: "1.18rem",
-                        fontWeight: 800,
-                        color: "#1c1917",
-                        lineHeight: 1.4,
-                        marginBottom: 8,
-                      }}
-                    >
-                      {goal.title}
-                    </div>
-                    <p
-                      style={{
-                        margin: 0,
-                        fontSize: "0.9rem",
-                        color: "#57534e",
-                        lineHeight: 1.6,
-                      }}
-                    >
-                      {goal.description}
-                    </p>
-                  </div>
-
-                  <div
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 6,
-                      fontSize: "0.88rem",
-                      fontWeight: 800,
-                      color: goal.accentColor,
-                    }}
-                  >
-                    <span>この内容で進む →</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </section>
+              ✕
+            </button>
+          </div>
+        )}
+        {notice && (
+          <div className="ou-alert-success" role="status">
+            <span>{notice}</span>
+            <button
+              type="button"
+              className="ou-alert-close"
+              onClick={() => setNotice(null)}
+              aria-label="閉じる"
+            >
+              ✕
+            </button>
+          </div>
         )}
 
-        {/* ============================================================
-            STEP 2: PHOTO UPLOAD / SAMPLE BUTTON & INPUT BOX FOR GOAL
-           ============================================================ */}
-        {selectedGoal !== null && activeGoal && (
-          <div>
-            {/* Back button & current goal banner */}
+        {/* Single Clean Focused Input Card (Starts Completely Empty) */}
+        <section className="ou-card">
+          <div className="ou-card-header">
+            <div className="ou-step-heading">
+              <h2 className="ou-card-title">
+                おたより・プリントの写真 または テキスト・予定を入力
+              </h2>
+            </div>
+            <button
+              type="button"
+              className="ou-btn-secondary"
+              onClick={() => setShowAddEventForm((prev) => !prev)}
+            >
+              {showAddEventForm ? "－ 予定の直接追加を閉じる" : "＋ 予定を直接追加"}
+            </button>
+          </div>
+
+          {/* Inline Custom Household Members Manager (starts empty [], persisted in localStorage) */}
+          <div
+            style={{
+              padding: "12px 14px",
+              borderRadius: 12,
+              background: "#fffaf5",
+              border: "1px solid #efe5db",
+              marginBottom: 16,
+            }}
+          >
             <div
               style={{
                 display: "flex",
                 flexWrap: "wrap",
                 alignItems: "center",
                 justifyContent: "space-between",
-                gap: 12,
-                marginBottom: 16,
-                padding: "12px 16px",
-                background: activeGoal.bgSoft,
-                border: `1.5px solid ${activeGoal.borderSoft}`,
-                borderRadius: 14,
+                gap: 8,
+                marginBottom: 8,
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#44403c" }}>
+                👥 担当メンバー設定（任意・自由に追加／削除できます）
+              </span>
+              <span style={{ fontSize: "0.75rem", color: "#78716c" }}>
+                {members.length === 0
+                  ? "未設定（予定と持ち物は「未割り当て」になります）"
+                  : `登録中: ${members.length}名`}
+              </span>
+            </div>
+
+            {/* Added Member Pills */}
+            {members.length > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 6,
+                  marginBottom: 10,
+                }}
+              >
+                {members.map((m) => {
+                  const st = getMemberStyle(m);
+                  return (
+                    <span
+                      key={m}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        padding: "4px 11px",
+                        borderRadius: 999,
+                        background: st.bgSoft,
+                        border: `1px solid ${st.borderSoft}`,
+                        color: st.accent,
+                        fontSize: "0.78rem",
+                        fontWeight: 800,
+                      }}
+                    >
+                      <span>{st.icon}</span>
+                      <span>{m}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveMember(m)}
+                        aria-label={`${m}を削除`}
+                        style={{
+                          border: "none",
+                          background: "transparent",
+                          color: st.accent,
+                          cursor: "pointer",
+                          fontSize: "0.85rem",
+                          padding: 0,
+                          lineHeight: 1,
+                        }}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Quick Optional Member Chips + Free-text Input */}
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {QUICK_MEMBER_PRESETS.map((presetName) => {
+                  const added = members.includes(presetName);
+                  return (
+                    <button
+                      key={presetName}
+                      type="button"
+                      disabled={added}
+                      onClick={() => handleAddMember(presetName)}
+                      style={{
+                        padding: "4px 10px",
+                        borderRadius: 999,
+                        border: "1px dashed #d6c7b8",
+                        background: added ? "#f5f5f4" : "#ffffff",
+                        color: added ? "#a8a29e" : "#57534e",
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        cursor: added ? "default" : "pointer",
+                      }}
+                    >
+                      {added ? `✓ ${presetName}` : `＋ ${presetName}`}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  flex: 1,
+                  minWidth: 210,
+                }}
+              >
+                <input
+                  type="text"
+                  value={customMemberInput}
+                  onChange={(e) => setCustomMemberInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddMember(customMemberInput);
+                    }
+                  }}
+                  placeholder="カスタム名を追加... (例: 長男、母、シェアメイト)"
+                  className="ou-text-input"
+                  style={{ padding: "5px 10px", fontSize: "0.78rem" }}
+                />
                 <button
                   type="button"
-                  onClick={handleResetGoal}
                   className="ou-btn-secondary"
-                  style={{ fontWeight: 800, background: "#ffffff" }}
+                  style={{ whiteSpace: "nowrap", padding: "5px 10px" }}
+                  onClick={() => handleAddMember(customMemberInput)}
                 >
-                  ← 選び直す
+                  ＋ 担当メンバーを追加
                 </button>
-                <div>
-                  <div style={{ fontSize: "0.75rem", fontWeight: 800, color: activeGoal.accentColor }}>
-                    STEP 2 · 選択中のやりたいこと
-                  </div>
-                  <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#1c1917" }}>
-                    {activeGoal.title}
+              </div>
+            </div>
+          </div>
+
+          {/* Optional Direct Manual Schedule Form ("＋ 予定を追加") */}
+          {showAddEventForm && (
+            <form
+              onSubmit={handleAddManualSchedule}
+              style={{
+                padding: "14px 16px",
+                borderRadius: 12,
+                background: "#fff7ed",
+                border: "1.5px solid #fdba74",
+                marginBottom: 16,
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+              }}
+            >
+              <div style={{ fontSize: "0.84rem", fontWeight: 800, color: "#9a3412" }}>
+                📅 予定を直接追加（Gemini がその予定で気をつける注意点を自動アドバイスします）
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                  gap: 8,
+                }}
+              >
+                <input
+                  type="text"
+                  className="ou-text-input"
+                  placeholder="予定タイトル（例：小学校運動会、歯科検診、市役所手続き）"
+                  value={manualEventTitle}
+                  onChange={(e) => setManualEventTitle(e.target.value)}
+                />
+                <input
+                  type="text"
+                  className="ou-text-input"
+                  placeholder="日時（例：2026-10-18 8:30、来週金曜 16:00）"
+                  value={manualEventDate}
+                  onChange={(e) => setManualEventDate(e.target.value)}
+                />
+                <input
+                  type="text"
+                  className="ou-text-input"
+                  placeholder="場所・メモ（任意：母子手帳持参、お弁当など）"
+                  value={manualEventNote}
+                  onChange={(e) => setManualEventNote(e.target.value)}
+                />
+                <select
+                  aria-label="予定の担当者"
+                  className="ou-add-item-select"
+                  value={manualEventAssignee}
+                  onChange={(e) => setManualEventAssignee(e.target.value)}
+                >
+                  {assigneeOptions.map((opt) => (
+                    <option key={opt} value={opt}>
+                      担当：{opt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                <button
+                  type="submit"
+                  className="ou-btn-primary"
+                  disabled={analyzing}
+                  style={{ padding: "8px 16px", fontSize: "0.84rem" }}
+                >
+                  {analyzing ? "追加・注意点生成中..." : "＋ 予定を追加して注意点を生成"}
+                </button>
+              </div>
+            </form>
+          )}
+
+          <form onSubmit={handleAnalyze} className="ou-input-form">
+            <div className="ou-input-grid">
+              {/* Left Column: Multimodal Camera & Photo Upload */}
+              <div className="ou-field">
+                <div className="ou-label-row">
+                  <label htmlFor="otayori-file-input" className="ou-field-label">
+                    📸 プリント・お薬説明書・通知の写真（任意）
+                  </label>
+                </div>
+
+                <div
+                  className={`ou-dropzone ${imagePreview ? "has-image" : ""}`}
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) processImageFile(file, "ドロップされた画像");
+                  }}
+                >
+                  {imagePreview ? (
+                    <div className="ou-preview-container">
+                      <img
+                        src={imagePreview}
+                        alt="アップロードしたおたよりのプレビュー"
+                        className="ou-preview-img"
+                      />
+                      <div className="ou-preview-caption">
+                        <span>✓ {imageSourceLabel || "おたより画像セット済"}</span>
+                        <button
+                          type="button"
+                          className="ou-clear-img-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            clearImage();
+                          }}
+                        >
+                          画像をクリア
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="ou-dropzone-empty">
+                      <span className="ou-dropzone-icon" aria-hidden="true">
+                        📷
+                      </span>
+                      <span className="ou-dropzone-title">
+                        クリックまたはドラッグ＆ドロップで写真を添付
+                      </span>
+                      <span className="ou-dropzone-sub">
+                        PNG / JPEG / WebP（写真だけでも解析できます）
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Hidden File & Camera Inputs */}
+                <input
+                  ref={fileInputRef}
+                  id="otayori-file-input"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="ou-sr-only"
+                  onChange={(e) => handleImageInputChange(e, "選択した写真")}
+                />
+                <input
+                  ref={cameraInputRef}
+                  id="otayori-camera-input"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="ou-sr-only"
+                  onChange={(e) => handleImageInputChange(e, "カメラ撮影写真")}
+                />
+
+                <div className="ou-camera-btn-row">
+                  <button
+                    type="button"
+                    className="ou-btn-secondary"
+                    onClick={() => cameraInputRef.current?.click()}
+                  >
+                    📸 カメラ撮影
+                  </button>
+                  <button
+                    type="button"
+                    className="ou-btn-secondary"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    🖼️ 写真を選択
+                  </button>
+                </div>
+              </div>
+
+              {/* Right Column: Source Text & Optional Notes */}
+              <div className="ou-field">
+                <label htmlFor="otayori-source-text" className="ou-field-label">
+                  📄 おたより・連絡アプリ・予定メモの文章
+                </label>
+                <textarea
+                  id="otayori-source-text"
+                  rows={7}
+                  className="ou-textarea"
+                  placeholder="学校・園のプリントや病院・役所の案内、連絡アプリの文章をここに貼り付けてください（写真のみでも解析できます）"
+                  value={sourceText}
+                  onChange={(e) => {
+                    setSourceText(e.target.value);
+                    setActivePresetId("");
+                  }}
+                />
+
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    flexWrap: "wrap",
+                    gap: 8,
+                    marginTop: 4,
+                  }}
+                >
+                  <details>
+                    <summary
+                      style={{
+                        fontSize: "0.78rem",
+                        fontWeight: 700,
+                        color: "#78716c",
+                        cursor: "pointer",
+                      }}
+                    >
+                      ⚙️ 担当割り振りの補足メモ（任意）
+                    </summary>
+                    <input
+                      id="otayori-family-roles"
+                      type="text"
+                      className="ou-text-input"
+                      style={{ marginTop: 6 }}
+                      placeholder="例：水曜はパートナーが早帰り、金曜は自分がお迎え など"
+                      value={familyRolesNote}
+                      onChange={(e) => setFamilyRolesNote(e.target.value)}
+                    />
+                  </details>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <button
+                      type="button"
+                      onClick={handleLoadOneExample}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        padding: 0,
+                        color: "#78716c",
+                        fontSize: "0.8rem",
+                        textDecoration: "underline",
+                        cursor: "pointer",
+                      }}
+                    >
+                      例を1つ試す
+                    </button>
+                    {(sourceText || imagePreview || analysis) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          stopSpeaking();
+                          setSourceText("");
+                          setActivePresetId("");
+                          setAnalysis(null);
+                          setChecklist([]);
+                          clearImage();
+                          setError(null);
+                          setNotice(null);
+                        }}
+                        style={{
+                          background: "transparent",
+                          border: "none",
+                          padding: 0,
+                          color: "#a8a29e",
+                          fontSize: "0.8rem",
+                          cursor: "pointer",
+                        }}
+                      >
+                        クリア
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Feedback Banners */}
-            {error && (
-              <div className="ou-alert-error" role="alert">
-                <span>⚠️ <strong>確認:</strong> {error}</span>
-                <button
-                  type="button"
-                  className="ou-alert-close"
-                  onClick={() => setError(null)}
-                  aria-label="閉じる"
-                >
-                  ✕
-                </button>
+            <div className="ou-analyze-bar">
+              <div className="ou-analyze-note">
+                💡 解析すると、予定のGoogleカレンダー登録・⚠️この予定で気をつける注意点・持ち物チェックリストを作成します。
               </div>
-            )}
-            {notice && (
-              <div className="ou-alert-success" role="status">
-                <span>{notice}</span>
-                <button
-                  type="button"
-                  className="ou-alert-close"
-                  onClick={() => setNotice(null)}
-                  aria-label="閉じる"
-                >
-                  ✕
-                </button>
+              <button
+                type="submit"
+                className="ou-btn-primary"
+                disabled={analyzing}
+              >
+                {analyzing ? (
+                  <>
+                    <span className="ou-spinner" aria-hidden="true" />
+                    AI で解析中...
+                  </>
+                ) : (
+                  "✨ AI でおたよりを解析して予定＆持ち物を作成 →"
+                )}
+              </button>
+            </div>
+          </form>
+        </section>
+
+        {/* EXTRACTED RESULTS (SHOWN ONLY AFTER USER ANALYZES OR ADDS A SCHEDULE) */}
+        {analysis && (
+          <section className="ou-result-shell" aria-label="おたより解析結果">
+            {/* Result Hero Banner + Compact Voice Readout */}
+            <div className="ou-result-hero">
+              <div className="ou-hero-badges">
+                <span className="ou-hero-pill">解析結果＆予定・持ち物</span>
+                <span className="ou-hero-pill">
+                  📂 分類：{analysis.category || "お知らせ"}
+                </span>
+                <span className="ou-hero-pill">
+                  💴 費用・集金：{analysis.cost}
+                </span>
               </div>
-            )}
+              <h2 className="ou-result-title">{analysis.title}</h2>
+              <p className="ou-result-summary">{analysis.summary}</p>
 
-            {/* Focused Input Card for the Picked Goal */}
-            <section className="ou-card">
-              <div className="ou-card-header">
-                <div className="ou-step-heading">
-                  <span className="ou-step-badge">STEP 2</span>
-                  <h2 className="ou-card-title">
-                    写真を添付 または テキストを入力して解析する
-                  </h2>
-                </div>
-
-                {/* Goal-specific Sample Buttons */}
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {availablePresets.map((preset) => (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => handleSelectPreset(preset)}
-                      className={
-                        activePresetId === preset.id ? "ou-btn-warm" : "ou-btn-secondary"
-                      }
-                    >
-                      ✨ {preset.icon} {preset.label}（サンプル入力）
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <form onSubmit={handleAnalyze} className="ou-input-form">
-                <div className="ou-input-grid">
-                  {/* Left Column: Multimodal Camera & Photo Upload */}
-                  <div className="ou-field">
-                    <div className="ou-label-row">
-                      <label htmlFor="otayori-file-input" className="ou-field-label">
-                        📸 プリント・お薬説明書・通知の写真（任意）
-                      </label>
-                    </div>
-
-                    <div
-                      className={`ou-dropzone ${imagePreview ? "has-image" : ""}`}
-                      onClick={() => fileInputRef.current?.click()}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        const file = e.dataTransfer.files?.[0];
-                        if (file) processImageFile(file, "ドロップされた画像");
-                      }}
-                    >
-                      {imagePreview ? (
-                        <div className="ou-preview-container">
-                          <img
-                            src={imagePreview}
-                            alt="アップロードしたおたよりのプレビュー"
-                            className="ou-preview-img"
-                          />
-                          <div className="ou-preview-caption">
-                            <span>✓ {imageSourceLabel || "おたより画像セット済"}</span>
-                            <button
-                              type="button"
-                              className="ou-clear-img-btn"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                clearImage();
-                              }}
-                            >
-                              画像をクリア
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="ou-dropzone-empty">
-                          <span className="ou-dropzone-icon" aria-hidden="true">
-                            📷
-                          </span>
-                          <span className="ou-dropzone-title">
-                            クリックまたはドラッグ＆ドロップで写真を添付
-                          </span>
-                          <span className="ou-dropzone-sub">
-                            PNG / JPEG / WebP（写真だけでも解析できます）
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Hidden File & Camera Inputs */}
-                    <input
-                      ref={fileInputRef}
-                      id="otayori-file-input"
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      className="ou-sr-only"
-                      onChange={(e) => handleImageInputChange(e, "選択した写真")}
-                    />
-                    <input
-                      ref={cameraInputRef}
-                      id="otayori-camera-input"
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      className="ou-sr-only"
-                      onChange={(e) => handleImageInputChange(e, "カメラ撮影写真")}
-                    />
-
-                    <div className="ou-camera-btn-row">
-                      <button
-                        type="button"
-                        className="ou-btn-secondary"
-                        onClick={() => cameraInputRef.current?.click()}
-                      >
-                        📸 カメラ撮影
-                      </button>
-                      <button
-                        type="button"
-                        className="ou-btn-secondary"
-                        onClick={() => fileInputRef.current?.click()}
-                      >
-                        🖼️ 写真を選択
-                      </button>
-                      <button
-                        type="button"
-                        className="ou-btn-warm"
-                        onClick={handleGenerateSimulatedHandoutPhoto}
-                      >
-                        🖨️ サンプルプリント画像を添付
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Right Column: Source Text & Optional Family Roles Accordion */}
-                  <div className="ou-field">
-                    <label htmlFor="otayori-source-text" className="ou-field-label">
-                      📄 おたより・メモの文章（自由に編集できます）
-                    </label>
-                    <textarea
-                      id="otayori-source-text"
-                      rows={7}
-                      className="ou-textarea"
-                      placeholder={activeGoal.placeholder}
-                      value={sourceText}
-                      onChange={(e) => setSourceText(e.target.value)}
-                    />
-
-                    <details style={{ marginTop: 6 }}>
-                      <summary
-                        style={{
-                          fontSize: "0.8rem",
-                          fontWeight: 700,
-                          color: "#78716c",
-                          cursor: "pointer",
-                        }}
-                      >
-                        👨‍👩‍👧‍👦 家族の役割・曜日ルールをカスタマイズ（任意）
-                      </summary>
-                      <input
-                        id="otayori-family-roles"
-                        type="text"
-                        className="ou-text-input"
-                        style={{ marginTop: 6 }}
-                        value={familyRoles}
-                        onChange={(e) => setFamilyRoles(e.target.value)}
-                      />
-                    </details>
-                  </div>
-                </div>
-
-                <div className="ou-analyze-bar">
-                  <div className="ou-analyze-note">
-                    💡 解析ボタンを押すと、カレンダー登録リンク・持ち物チェックリスト・共有文が表示されます。
-                  </div>
-                  <button
-                    type="submit"
-                    className="ou-btn-primary"
-                    disabled={analyzing}
-                  >
-                    {analyzing ? (
-                      <>
-                        <span className="ou-spinner" aria-hidden="true" />
-                        AI で解析中...
-                      </>
-                    ) : (
-                      "✨ AI でおたよりを解析して予定＆持ち物を作成 →"
-                    )}
-                  </button>
-                </div>
-              </form>
-            </section>
-
-            {/* ============================================================
-                STEP 3: EXTRACTED RESULTS (SHOWN ONLY AFTER ANALYSIS RUNS)
-               ============================================================ */}
-            {hasAnalyzed && (
-              <section className="ou-result-shell" aria-label="おたより解析結果">
-                {/* Result Hero Banner + Compact Voice Readout */}
-                <div className="ou-result-hero">
-                  <div className="ou-hero-badges">
-                    <span className="ou-hero-pill">STEP 3 · 解析結果＆家族バトン</span>
-                    <span className="ou-hero-pill">
-                      📂 分類：{analysis.category || "家族のお知らせ"}
-                    </span>
-                    <span className="ou-hero-pill">
-                      💴 費用・集金：{analysis.cost}
-                    </span>
-                  </div>
-                  <h2 className="ou-result-title">{analysis.title}</h2>
-                  <p className="ou-result-summary">{analysis.summary}</p>
-
-                  {/* Okusuri & Allergy Auto-Warning Badges */}
-                  {analysis.medication_allergy_alerts &&
-                    analysis.medication_allergy_alerts.length > 0 && (
-                      <div
-                        style={{
-                          marginTop: 14,
-                          background: "#fff1f2",
-                          border: "1.5px solid #fda4af",
-                          borderRadius: 13,
-                          padding: "12px 15px",
-                          color: "#881337",
-                        }}
-                        role="region"
-                        aria-label="お薬・アレルギー・体調注意の自動警告バッジ"
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            fontWeight: 800,
-                            fontSize: "0.86rem",
-                            color: "#be123c",
-                            marginBottom: 6,
-                          }}
-                        >
-                          <span
-                            style={{
-                              background: "#e11d48",
-                              color: "#ffffff",
-                              padding: "2px 9px",
-                              borderRadius: 999,
-                              fontSize: "0.73rem",
-                              fontWeight: 800,
-                            }}
-                          >
-                            💊 お薬・アレルギー・体調注意メモ
-                          </span>
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 5,
-                            fontSize: "0.84rem",
-                            fontWeight: 700,
-                            lineHeight: 1.5,
-                          }}
-                        >
-                          {analysis.medication_allergy_alerts.map((alertText, i) => (
-                            <div key={i}>{alertText}</div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                  {/* Voice Readout Bar */}
+              {/* Gemini Schedule Cautions Banner ("⚠️ この予定でよくある注意点・気をつけること") */}
+              {analysis.schedule_cautions &&
+                analysis.schedule_cautions.length > 0 && (
                   <div
-                    className="ou-voice-dock"
+                    style={{
+                      marginTop: 14,
+                      background: "#fffbeb",
+                      border: "1.5px solid #fcd34d",
+                      borderRadius: 13,
+                      padding: "12px 15px",
+                      color: "#78350f",
+                    }}
                     role="region"
-                    aria-label="音声読み上げコントロール"
+                    aria-label="この予定でよくある注意点・気をつけること（Gemini アドバイス）"
                   >
                     <div
                       style={{
                         display: "flex",
-                        flexWrap: "wrap",
                         alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 10,
+                        gap: 8,
+                        fontWeight: 800,
+                        fontSize: "0.86rem",
+                        color: "#92400e",
+                        marginBottom: 6,
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span aria-hidden="true">{isSpeaking ? "🎙️" : "🔊"}</span>
-                        <span style={{ fontWeight: 800, fontSize: "0.88rem", color: "#9a3412" }}>
-                          音声で読み上げ
-                        </span>
-                        {isSpeaking && (
-                          <span className="ou-speaking-badge">
-                            読み上げ中：{activeSpeechLabel}
-                          </span>
-                        )}
-                      </div>
-                      <div className="ou-voice-controls">
-                        <button
-                          type="button"
-                          className="ou-voice-btn-main"
-                          onClick={isSpeaking ? stopSpeaking : handleSpeakFullSummary}
-                        >
-                          {isSpeaking ? "⏹ 停止" : "🔊 全体＆持ち物を読み上げ"}
-                        </button>
-                        <button
-                          type="button"
-                          className="ou-voice-btn-sub"
-                          onClick={handleSpeakGrandparent}
-                        >
-                          👵 祖父母向け
-                        </button>
-                        <button
-                          type="button"
-                          className="ou-voice-btn-sub"
-                          onClick={handleSpeakChildItems}
-                        >
-                          🧒 子ども向け
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* PRIMARY SECTION 1: Calendar Deep Links + .ics Bulk Download */}
-                <div className="ou-section">
-                  <div className="ou-section-header">
-                    <div>
-                      <h3 className="ou-section-title">
-                        📅 抽出された予定・締切（Googleカレンダー登録 ＆ .ics一括出力）
-                      </h3>
-                      <p className="ou-section-sub">
-                        「Googleカレンダーに追加」で予定作成画面が開きます。担当バッジを押すと担当者を切り替えられます。
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      className="ou-btn-ics"
-                      onClick={handleDownloadIcs}
-                    >
-                      📥 家族カレンダー用 .ics を一括ダウンロード（全{analysis.events.length}件）
-                    </button>
-                  </div>
-
-                  <div className="ou-events-list">
-                    {analysis.events.map((ev, idx) => {
-                      const roleKey = normalizeRoleKey(ev.assignee);
-                      const roleMeta =
-                        FAMILY_ROLES.find((r) => r.key === roleKey) ?? FAMILY_ROLES[0];
-                      const gcalUrl = buildGoogleCalendarUrl(
-                        ev,
-                        analysis.title,
-                        analysis.items_to_bring,
-                        idx
-                      );
-
-                      return (
-                        <div
-                          key={idx}
-                          className={`ou-event-card ${ev.isDeadline ? "is-deadline" : ""}`}
-                        >
-                          <div className="ou-event-left">
-                            <div className="ou-event-meta-row">
-                              <span className="ou-event-date">🗓️ {ev.date}</span>
-                              {ev.isDeadline && (
-                                <span className="ou-deadline-badge">⏰ 提出・予約締切</span>
-                              )}
-                              {ev.location && (
-                                <span className="ou-event-location">📍 {ev.location}</span>
-                              )}
-                            </div>
-                            <div className="ou-event-title">{ev.title}</div>
-                            <div className="ou-event-reason">💡 {ev.reason}</div>
-                          </div>
-
-                          <div className="ou-event-actions">
-                            <button
-                              type="button"
-                              onClick={() => handleCycleEventRole(idx)}
-                              className="ou-role-switch-btn"
-                              style={{
-                                background: roleMeta.bgSoft,
-                                color: roleMeta.accent,
-                                borderColor: roleMeta.borderSoft,
-                              }}
-                              title="クリックして担当メンバーを切り替え"
-                            >
-                              <span>{roleMeta.icon}</span>
-                              <span>担当：{roleMeta.shortLabel}</span>
-                              <span className="ou-switch-hint">🔁 切替</span>
-                            </button>
-
-                            <a
-                              href={gcalUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="ou-gcal-link"
-                            >
-                              📅 Googleカレンダーに追加 ↗
-                            </a>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* PRIMARY SECTION 2: Family Baton Checklist */}
-                <div className="ou-section">
-                  <div className="ou-section-header">
-                    <div>
-                      <h3 className="ou-section-title">
-                        🔁 家族の持ち物・やることチェックリスト（自動保存）
-                      </h3>
-                      <p className="ou-section-sub">
-                        持ち物や準備を <strong>ママ / パパ / 子ども / 祖父母</strong> に割り振ってチェックできます。
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      className="ou-btn-ghost"
-                      onClick={handleResetChecklist}
-                    >
-                      ↺ リセット
-                    </button>
-                  </div>
-
-                  {/* Progress Bar */}
-                  <div className="ou-progress-box">
-                    <div className="ou-progress-top">
-                      <span className="ou-progress-label">
-                        🏃 準備の達成度：<strong>{completedCount}</strong> / {totalCount} 件完了
+                      <span
+                        style={{
+                          background: "#d97706",
+                          color: "#ffffff",
+                          padding: "2px 9px",
+                          borderRadius: 999,
+                          fontSize: "0.73rem",
+                          fontWeight: 800,
+                        }}
+                      >
+                        ⚠️ この予定でよくある注意点・気をつけること（Gemini アドバイス）
                       </span>
-                      <span className="ou-progress-pct">{progressPercent}%</span>
                     </div>
                     <div
-                      className="ou-progress-track"
-                      role="progressbar"
-                      aria-valuenow={progressPercent}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 5,
+                        fontSize: "0.84rem",
+                        fontWeight: 700,
+                        lineHeight: 1.5,
+                      }}
                     >
-                      <div
-                        className="ou-progress-fill"
-                        style={{ width: `${progressPercent}%` }}
-                      />
+                      {analysis.schedule_cautions.map((cautionText, i) => (
+                        <div key={i}>・{cautionText}</div>
+                      ))}
                     </div>
                   </div>
+                )}
 
-                  {/* Role Filter Tabs */}
-                  <div className="ou-filter-tabs" role="tablist" aria-label="担当者で絞り込み">
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={roleFilter === "ALL"}
-                      className={`ou-filter-tab ${roleFilter === "ALL" ? "is-active" : ""}`}
-                      onClick={() => setRoleFilter("ALL")}
-                    >
-                      すべて ({checklist.length})
-                    </button>
-                    {FAMILY_ROLES.map((role) => {
-                      const count = checklist.filter((c) => c.assignee === role.key).length;
-                      const active = roleFilter === role.key;
-                      return (
-                        <button
-                          key={role.key}
-                          type="button"
-                          role="tab"
-                          aria-selected={active}
-                          className={`ou-filter-tab ${active ? "is-active" : ""}`}
-                          onClick={() => setRoleFilter(role.key)}
-                        >
-                          {role.icon} {role.shortLabel} ({count})
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Interactive Checklist Items */}
-                  <div className="ou-checklist-grid">
-                    {filteredChecklist.map((item) => {
-                      const roleMeta =
-                        FAMILY_ROLES.find((r) => r.key === item.assignee) ??
-                        FAMILY_ROLES[0];
-                      return (
-                        <div
-                          key={item.id}
-                          className={`ou-check-row ${item.checked ? "is-checked" : ""}`}
-                        >
-                          <label className="ou-check-label">
-                            <input
-                              type="checkbox"
-                              checked={item.checked}
-                              onChange={() => handleToggleCheckItem(item.id)}
-                              className="ou-checkbox"
-                            />
-                            <div className="ou-check-text-group">
-                              <span className="ou-check-title">{item.label}</span>
-                              <div className="ou-check-tags">
-                                <span className="ou-cat-mini">{item.category}</span>
-                                {item.note && (
-                                  <span className="ou-note-mini">メモ：{item.note}</span>
-                                )}
-                              </div>
-                            </div>
-                          </label>
-
-                          <div
-                            className="ou-role-pills"
-                            role="group"
-                            aria-label={`${item.label}の担当者選択`}
-                          >
-                            {FAMILY_ROLES.map((r) => {
-                              const selected = item.assignee === r.key;
-                              return (
-                                <button
-                                  key={r.key}
-                                  type="button"
-                                  onClick={() => handleChangeItemRole(item.id, r.key)}
-                                  className={`ou-mini-role-btn ${
-                                    selected ? "is-selected" : ""
-                                  }`}
-                                  style={
-                                    selected
-                                      ? {
-                                          background: roleMeta.bgSoft,
-                                          color: roleMeta.accent,
-                                          borderColor: roleMeta.accent,
-                                        }
-                                      : undefined
-                                  }
-                                  title={`${r.shortLabel}に割り当てる`}
-                                >
-                                  {r.icon} {r.shortLabel}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Add Custom Item Form */}
-                  <form onSubmit={handleAddChecklistItem} className="ou-add-item-form">
-                    <input
-                      type="text"
-                      className="ou-add-item-input"
-                      placeholder="+ 持ち物・やることを追加（例：替えの靴下、保険証）"
-                      value={newItemText}
-                      onChange={(e) => setNewItemText(e.target.value)}
-                    />
-                    <select
-                      aria-label="追加項目の担当者"
-                      className="ou-add-item-select"
-                      value={newItemRole}
-                      onChange={(e) => setNewItemRole(e.target.value as FamilyRole)}
-                    >
-                      {FAMILY_ROLES.map((r) => (
-                        <option key={r.key} value={r.key}>
-                          担当：{r.icon} {r.shortLabel}
-                        </option>
-                      ))}
-                    </select>
-                    <button type="submit" className="ou-btn-secondary">
-                      ＋ 追加
-                    </button>
-                  </form>
-                </div>
-
-                {/* SECONDARY EXTRAS: NEATLY TUCKED IN TABS */}
-                <div className="ou-section">
+              {/* Okusuri & Allergy Auto-Warning Badges */}
+              {analysis.medication_allergy_alerts &&
+                analysis.medication_allergy_alerts.length > 0 && (
                   <div
                     style={{
-                      borderTop: "1px solid #efe5db",
-                      paddingTop: 20,
+                      marginTop: 10,
+                      background: "#fff1f2",
+                      border: "1.5px solid #fda4af",
+                      borderRadius: 13,
+                      padding: "12px 15px",
+                      color: "#881337",
+                    }}
+                    role="region"
+                    aria-label="お薬・アレルギー・体調注意の自動警告バッジ"
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        fontWeight: 800,
+                        fontSize: "0.86rem",
+                        color: "#be123c",
+                        marginBottom: 6,
+                      }}
+                    >
+                      <span
+                        style={{
+                          background: "#e11d48",
+                          color: "#ffffff",
+                          padding: "2px 9px",
+                          borderRadius: 999,
+                          fontSize: "0.73rem",
+                          fontWeight: 800,
+                        }}
+                      >
+                        💊 お薬・アレルギー・体調注意メモ
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 5,
+                        fontSize: "0.84rem",
+                        fontWeight: 700,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      {analysis.medication_allergy_alerts.map((alertText, i) => (
+                        <div key={i}>{alertText}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              {/* Voice Readout Bar */}
+              <div
+                className="ou-voice-dock"
+                role="region"
+                aria-label="音声読み上げコントロール"
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span aria-hidden="true">{isSpeaking ? "🎙️" : "🔊"}</span>
+                    <span style={{ fontWeight: 800, fontSize: "0.88rem", color: "#9a3412" }}>
+                      音声で読み上げ
+                    </span>
+                    {isSpeaking && (
+                      <span className="ou-speaking-badge">
+                        読み上げ中：{activeSpeechLabel}
+                      </span>
+                    )}
+                  </div>
+                  <div className="ou-voice-controls">
+                    <button
+                      type="button"
+                      className="ou-voice-btn-main"
+                      onClick={isSpeaking ? stopSpeaking : handleSpeakFullSummary}
+                    >
+                      {isSpeaking ? "⏹ 停止" : "🔊 全体＆注意点・持ち物を読み上げ"}
+                    </button>
+                    {(hasSeniorMember || showSeniorCardManual) && (
+                      <button
+                        type="button"
+                        className="ou-voice-btn-sub"
+                        onClick={handleSpeakGrandparent}
+                      >
+                        👵 シニア・親向け
+                      </button>
+                    )}
+                    {(hasKidMember || showKidCardManual) && (
+                      <button
+                        type="button"
+                        className="ou-voice-btn-sub"
+                        onClick={handleSpeakChildItems}
+                      >
+                        🧒 子ども向け
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* PRIMARY SECTION 1: Calendar Deep Links + .ics Bulk Download + Manual Add */}
+            <div className="ou-section">
+              <div className="ou-section-header">
+                <div>
+                  <h3 className="ou-section-title">
+                    📅 予定・締切リスト（Googleカレンダー登録 ＆ .ics一括出力）
+                  </h3>
+                  <p className="ou-section-sub">
+                    「Googleカレンダーに追加」で予定作成画面が開きます。各予定の注意点アドバイスも自動表示されます。
+                  </p>
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="ou-btn-secondary"
+                    onClick={() => setShowAddEventForm((prev) => !prev)}
+                  >
+                    ＋ 予定を追加
+                  </button>
+                  <button
+                    type="button"
+                    className="ou-btn-ics"
+                    onClick={handleDownloadIcs}
+                  >
+                    📥 カレンダー用 .ics を一括ダウンロード（全{analysis.events.length}件）
+                  </button>
+                </div>
+              </div>
+
+              <div className="ou-events-list">
+                {analysis.events.map((ev, idx) => {
+                  const assigneeName = ev.assignee || "未割り当て";
+                  const roleMeta = getMemberStyle(assigneeName);
+                  const gcalUrl = buildGoogleCalendarUrl(
+                    ev,
+                    analysis.title,
+                    analysis.items_to_bring,
+                    idx
+                  );
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`ou-event-card ${ev.isDeadline ? "is-deadline" : ""}`}
+                    >
+                      <div className="ou-event-left">
+                        <div className="ou-event-meta-row">
+                          <span className="ou-event-date">🗓️ {ev.date}</span>
+                          {ev.isDeadline && (
+                            <span className="ou-deadline-badge">⏰ 提出・予約締切</span>
+                          )}
+                          {ev.location && (
+                            <span className="ou-event-location">📍 {ev.location}</span>
+                          )}
+                        </div>
+                        <div className="ou-event-title">{ev.title}</div>
+                        <div className="ou-event-reason">💡 {ev.reason}</div>
+                        {ev.caution && (
+                          <div
+                            style={{
+                              marginTop: 5,
+                              fontSize: "0.78rem",
+                              fontWeight: 700,
+                              color: "#b45309",
+                              background: "#fffbeb",
+                              border: "1px solid #fde68a",
+                              borderRadius: 7,
+                              padding: "4px 8px",
+                            }}
+                          >
+                            ⚠️ 注意点：{ev.caution}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="ou-event-actions">
+                        {members.length > 0 ? (
+                          <select
+                            aria-label={`${ev.title}の担当者`}
+                            value={assigneeOptions.includes(assigneeName) ? assigneeName : "未割り当て"}
+                            onChange={(e) => handleChangeEventAssignee(idx, e.target.value)}
+                            className="ou-role-switch-btn"
+                            style={{
+                              background: roleMeta.bgSoft,
+                              color: roleMeta.accent,
+                              borderColor: roleMeta.borderSoft,
+                            }}
+                          >
+                            {assigneeOptions.map((opt) => (
+                              <option key={opt} value={opt}>
+                                担当：{opt}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleCycleEventRole(idx)}
+                            className="ou-role-switch-btn"
+                            style={{
+                              background: roleMeta.bgSoft,
+                              color: roleMeta.accent,
+                              borderColor: roleMeta.borderSoft,
+                            }}
+                          >
+                            <span>{roleMeta.icon}</span>
+                            <span>担当：{assigneeName}</span>
+                          </button>
+                        )}
+
+                        <a
+                          href={gcalUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ou-gcal-link"
+                        >
+                          📅 Googleカレンダーに追加 ↗
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* PRIMARY SECTION 2: Checklist */}
+            <div className="ou-section">
+              <div className="ou-section-header">
+                <div>
+                  <h3 className="ou-section-title">
+                    🔁 持ち物・やることチェックリスト（自動保存）
+                  </h3>
+                  <p className="ou-section-sub">
+                    {members.length > 0
+                      ? `登録したメンバー（${members.join(" / ")}）に担当を割り振ってチェックできます。`
+                      : "上の「＋ 担当メンバーを追加」からメンバーを登録すると、担当者ごとに割り振れます。"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="ou-btn-ghost"
+                  onClick={handleResetChecklist}
+                >
+                  ↺ リセット
+                </button>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="ou-progress-box">
+                <div className="ou-progress-top">
+                  <span className="ou-progress-label">
+                    🏃 準備の達成度：<strong>{completedCount}</strong> / {totalCount} 件完了
+                  </span>
+                  <span className="ou-progress-pct">{progressPercent}%</span>
+                </div>
+                <div
+                  className="ou-progress-track"
+                  role="progressbar"
+                  aria-valuenow={progressPercent}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                >
+                  <div
+                    className="ou-progress-fill"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Dynamic Role Filter Tabs */}
+              {members.length > 0 && (
+                <div className="ou-filter-tabs" role="tablist" aria-label="担当者で絞り込み">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={roleFilter === "ALL"}
+                    className={`ou-filter-tab ${roleFilter === "ALL" ? "is-active" : ""}`}
+                    onClick={() => setRoleFilter("ALL")}
+                  >
+                    すべて ({checklist.length})
+                  </button>
+                  {assigneeOptions.map((memberName) => {
+                    const count = checklist.filter(
+                      (c) => (c.assignee || "未割り当て") === memberName
+                    ).length;
+                    const active = roleFilter === memberName;
+                    const st = getMemberStyle(memberName);
+                    return (
+                      <button
+                        key={memberName}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        className={`ou-filter-tab ${active ? "is-active" : ""}`}
+                        onClick={() => setRoleFilter(memberName)}
+                      >
+                        {st.icon} {memberName} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Interactive Checklist Items */}
+              <div className="ou-checklist-grid">
+                {filteredChecklist.map((item) => {
+                  const assigneeName = item.assignee || "未割り当て";
+                  const roleMeta = getMemberStyle(assigneeName);
+                  return (
+                    <div
+                      key={item.id}
+                      className={`ou-check-row ${item.checked ? "is-checked" : ""}`}
+                    >
+                      <label className="ou-check-label">
+                        <input
+                          type="checkbox"
+                          checked={item.checked}
+                          onChange={() => handleToggleCheckItem(item.id)}
+                          className="ou-checkbox"
+                        />
+                        <div className="ou-check-text-group">
+                          <span className="ou-check-title">{item.label}</span>
+                          <div className="ou-check-tags">
+                            <span className="ou-cat-mini">{item.category}</span>
+                            {item.note && (
+                              <span className="ou-note-mini">メモ：{item.note}</span>
+                            )}
+                          </div>
+                        </div>
+                      </label>
+
+                      <div
+                        className="ou-role-pills"
+                        role="group"
+                        aria-label={`${item.label}の担当者選択`}
+                      >
+                        <select
+                          aria-label={`${item.label}の担当者`}
+                          value={assigneeOptions.includes(assigneeName) ? assigneeName : "未割り当て"}
+                          onChange={(e) => handleChangeItemRole(item.id, e.target.value)}
+                          className="ou-add-item-select"
+                          style={{
+                            background: roleMeta.bgSoft,
+                            color: roleMeta.accent,
+                            borderColor: roleMeta.borderSoft,
+                            fontWeight: 800,
+                            fontSize: "0.76rem",
+                            padding: "4px 10px",
+                          }}
+                        >
+                          {assigneeOptions.map((opt) => (
+                            <option key={opt} value={opt}>
+                              担当：{opt}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Add Custom Item Form */}
+              <form onSubmit={handleAddChecklistItem} className="ou-add-item-form">
+                <input
+                  type="text"
+                  className="ou-add-item-input"
+                  placeholder="+ 持ち物・やることを追加（例：替えの靴下、保険証）"
+                  value={newItemText}
+                  onChange={(e) => setNewItemText(e.target.value)}
+                />
+                <select
+                  aria-label="追加項目の担当者"
+                  className="ou-add-item-select"
+                  value={assigneeOptions.includes(newItemRole) ? newItemRole : "未割り当て"}
+                  onChange={(e) => setNewItemRole(e.target.value)}
+                >
+                  {assigneeOptions.map((opt) => (
+                    <option key={opt} value={opt}>
+                      担当：{opt}
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" className="ou-btn-secondary">
+                  ＋ 追加
+                </button>
+              </form>
+            </div>
+
+            {/* SECONDARY EXTRAS: NEATLY TUCKED IN TABS */}
+            <div className="ou-section">
+              <div
+                style={{
+                  borderTop: "1px solid #efe5db",
+                  paddingTop: 20,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "0.88rem",
+                    fontWeight: 800,
+                    color: "#57534e",
+                    marginBottom: 10,
+                  }}
+                >
+                  🗂️ 便利な共有・返信・世代別カード・保存メニュー（タブで切り替え）
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 8,
+                    marginBottom: 14,
+                  }}
+                  role="tablist"
+                  aria-label="追加機能タブ"
+                >
+                  {(
+                    [
+                      {
+                        id: "share",
+                        label: "✉️ 返信クッション文 ＆ 💬 LINE共有",
+                      },
+                      {
+                        id: "family",
+                        label: "👵 シニア向け3行まとめ ＆ 🧒 子ども準備カード",
+                      },
+                      {
+                        id: "save",
+                        label: "💾 PC・スマホ保存 (.md / .json) ＆ 📊 シート連携",
+                      },
+                    ] as const
+                  ).map((tab) => {
+                    const active = extraTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        onClick={() => setExtraTab(tab.id)}
+                        style={{
+                          padding: "8px 14px",
+                          borderRadius: 10,
+                          border: active
+                            ? "1.5px solid #ea580c"
+                            : "1px solid #e7ddd3",
+                          background: active ? "#fff7ed" : "#ffffff",
+                          color: active ? "#9a3412" : "#57534e",
+                          fontSize: "0.83rem",
+                          fontWeight: 800,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* TAB 1: Reply Cushion & LINE Share */}
+                {extraTab === "share" && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 14,
                     }}
                   >
                     <div
                       style={{
-                        fontSize: "0.88rem",
-                        fontWeight: 800,
-                        color: "#57534e",
-                        marginBottom: 10,
+                        background: "#fffbeb",
+                        border: "1.5px solid #fcd34d",
+                        borderRadius: 13,
+                        padding: "14px 16px",
                       }}
                     >
-                      🗂️ 便利な共有・返信・世代別カード・保存メニュー（タブで切り替え）
-                    </div>
-
-                    <div
-                      style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: 8,
-                        marginBottom: 14,
-                      }}
-                      role="tablist"
-                      aria-label="追加機能タブ"
-                    >
-                      {(
-                        [
-                          {
-                            id: "share",
-                            label: "✉️ 返信クッション文 ＆ 💬 LINE共有",
-                          },
-                          {
-                            id: "family",
-                            label: "👵 祖父母3行まとめ ＆ 🧒 子どもカード",
-                          },
-                          {
-                            id: "save",
-                            label: "💾 PC・スマホ保存 (.md / .json) ＆ 📊 シート連携",
-                          },
-                        ] as const
-                      ).map((tab) => {
-                        const active = extraTab === tab.id;
-                        return (
-                          <button
-                            key={tab.id}
-                            type="button"
-                            role="tab"
-                            aria-selected={active}
-                            onClick={() => setExtraTab(tab.id)}
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          flexWrap: "wrap",
+                          gap: 10,
+                          marginBottom: 10,
+                        }}
+                      >
+                        <div>
+                          <div
                             style={{
-                              padding: "8px 14px",
-                              borderRadius: 10,
-                              border: active
-                                ? "1.5px solid #ea580c"
-                                : "1px solid #e7ddd3",
-                              background: active ? "#fff7ed" : "#ffffff",
-                              color: active ? "#9a3412" : "#57534e",
-                              fontSize: "0.83rem",
+                              fontSize: "0.88rem",
+                              fontWeight: 800,
+                              color: "#92400e",
+                            }}
+                          >
+                            ✉️ 園・学校・病院・窓口への欠席・返信クッション文
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "0.77rem",
+                              color: "#78716c",
+                              marginTop: 2,
+                            }}
+                          >
+                            連絡帳アプリやメールへそのまま貼れる丁寧な返信文です
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {(
+                            [
+                              { id: "confirm", label: "✅ 参加・確認返信" },
+                              { id: "absence", label: "🤒 欠席・体調不良連絡" },
+                              { id: "allergy", label: "💊 与薬・アレルギー相談" },
+                            ] as const
+                          ).map((tab) => (
+                            <button
+                              key={tab.id}
+                              type="button"
+                              onClick={() => {
+                                setCushionMode(tab.id);
+                                setShowCushionPreview(true);
+                              }}
+                              style={{
+                                padding: "5px 10px",
+                                borderRadius: 999,
+                                border:
+                                  cushionMode === tab.id
+                                    ? "1.5px solid #d97706"
+                                    : "1px solid #e7ddd3",
+                                background:
+                                  cushionMode === tab.id ? "#fef3c7" : "#ffffff",
+                                color:
+                                  cushionMode === tab.id ? "#92400e" : "#57534e",
+                                fontSize: "0.75rem",
+                                fontWeight: 800,
+                                cursor: "pointer",
+                              }}
+                            >
+                              {tab.label}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={handleCopyCushionMessage}
+                            style={{
+                              padding: "5px 12px",
+                              borderRadius: 8,
+                              border: "none",
+                              background: copiedCushion ? "#16a34a" : "#d97706",
+                              color: "#ffffff",
+                              fontSize: "0.77rem",
                               fontWeight: 800,
                               cursor: "pointer",
                             }}
                           >
-                            {tab.label}
+                            {copiedCushion
+                              ? "✓ コピー済！"
+                              : "📋 クッション文をコピー"}
                           </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* TAB 1: Reply Cushion & LINE Share */}
-                    {extraTab === "share" && (
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 14,
-                        }}
-                      >
-                        <div
+                        </div>
+                      </div>
+                      {showCushionPreview && (
+                        <pre
                           style={{
-                            background: "#fffbeb",
-                            border: "1.5px solid #fcd34d",
-                            borderRadius: 13,
-                            padding: "14px 16px",
+                            margin: 0,
+                            whiteSpace: "pre-wrap",
+                            fontFamily: "inherit",
+                            fontSize: "0.82rem",
+                            background: "#ffffff",
+                            padding: "10px 12px",
+                            borderRadius: 9,
+                            border: "1px solid #fde68a",
+                            color: "#1c1917",
+                            lineHeight: 1.55,
                           }}
                         >
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              flexWrap: "wrap",
-                              gap: 10,
-                              marginBottom: 10,
-                            }}
-                          >
-                            <div>
-                              <div
-                                style={{
-                                  fontSize: "0.88rem",
-                                  fontWeight: 800,
-                                  color: "#92400e",
-                                }}
-                              >
-                                ✉️ 園・学校・病院・窓口への欠席・返信クッション文
-                              </div>
-                              <div
-                                style={{
-                                  fontSize: "0.77rem",
-                                  color: "#78716c",
-                                  marginTop: 2,
-                                }}
-                              >
-                                連絡帳アプリやメールへそのまま貼れる丁寧な返信文です
-                              </div>
-                            </div>
-                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                              {(
-                                [
-                                  { id: "confirm", label: "✅ 参加・確認返信" },
-                                  { id: "absence", label: "🤒 欠席・体調不良連絡" },
-                                  { id: "allergy", label: "💊 与薬・アレルギー相談" },
-                                ] as const
-                              ).map((tab) => (
-                                <button
-                                  key={tab.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setCushionMode(tab.id);
-                                    setShowCushionPreview(true);
-                                  }}
-                                  style={{
-                                    padding: "5px 10px",
-                                    borderRadius: 999,
-                                    border:
-                                      cushionMode === tab.id
-                                        ? "1.5px solid #d97706"
-                                        : "1px solid #e7ddd3",
-                                    background:
-                                      cushionMode === tab.id ? "#fef3c7" : "#ffffff",
-                                    color:
-                                      cushionMode === tab.id ? "#92400e" : "#57534e",
-                                    fontSize: "0.75rem",
-                                    fontWeight: 800,
-                                    cursor: "pointer",
-                                  }}
-                                >
-                                  {tab.label}
-                                </button>
-                              ))}
-                              <button
-                                type="button"
-                                onClick={handleCopyCushionMessage}
-                                style={{
-                                  padding: "5px 12px",
-                                  borderRadius: 8,
-                                  border: "none",
-                                  background: copiedCushion ? "#16a34a" : "#d97706",
-                                  color: "#ffffff",
-                                  fontSize: "0.77rem",
-                                  fontWeight: 800,
-                                  cursor: "pointer",
-                                }}
-                              >
-                                {copiedCushion
-                                  ? "✓ コピー済！"
-                                  : "📋 クッション文をコピー"}
-                              </button>
-                            </div>
-                          </div>
-                          {showCushionPreview && (
-                            <pre
-                              style={{
-                                margin: 0,
-                                whiteSpace: "pre-wrap",
-                                fontFamily: "inherit",
-                                fontSize: "0.82rem",
-                                background: "#ffffff",
-                                padding: "10px 12px",
-                                borderRadius: 9,
-                                border: "1px solid #fde68a",
-                                color: "#1c1917",
-                                lineHeight: 1.55,
-                              }}
-                            >
-                              {replyCushionText}
-                            </pre>
-                          )}
-                        </div>
+                          {replyCushionText}
+                        </pre>
+                      )}
+                    </div>
 
-                        <div className="ou-line-box" style={{ marginTop: 0 }}>
-                          <div className="ou-line-box-head">
-                            <span>💬 LINE 家族グループ共有テキスト</span>
-                            <button
-                              type="button"
-                              className="ou-btn-line-sm"
-                              onClick={handleCopyLineSummary}
-                            >
-                              {copiedLine
-                                ? "✓ コピーしました"
-                                : "📋 LINE用まとめをコピー"}
-                            </button>
-                          </div>
-                          <details open={showLinePreview}>
-                            <summary
-                              style={{
-                                fontSize: "0.8rem",
-                                fontWeight: 700,
-                                color: "#166534",
-                                cursor: "pointer",
-                                marginBottom: 6,
-                              }}
-                            >
-                              LINE共有テキストの中身を確認する
-                            </summary>
-                            <pre className="ou-line-pre">{lineGroupSummaryText}</pre>
-                          </details>
+                    <div className="ou-line-box" style={{ marginTop: 0 }}>
+                      <div className="ou-line-box-head">
+                        <span>💬 LINE・メッセージ共有テキスト</span>
+                        <button
+                          type="button"
+                          className="ou-btn-line-sm"
+                          onClick={handleCopyLineSummary}
+                        >
+                          {copiedLine
+                            ? "✓ コピーしました"
+                            : "📋 LINE用まとめをコピー"}
+                        </button>
+                      </div>
+                      <details open={showLinePreview}>
+                        <summary
+                          style={{
+                            fontSize: "0.8rem",
+                            fontWeight: 700,
+                            color: "#166534",
+                            cursor: "pointer",
+                            marginBottom: 6,
+                          }}
+                        >
+                          LINE共有テキストの中身を確認する
+                        </summary>
+                        <pre className="ou-line-pre">{lineGroupSummaryText}</pre>
+                      </details>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 2: Household-Adaptive Senior 3-Line Summary & Child Card */}
+                {extraTab === "family" && (
+                  <div>
+                    {!hasSeniorMember && !hasKidMember && (
+                      <div
+                        style={{
+                          padding: "12px 14px",
+                          borderRadius: 12,
+                          background: "#fffaf5",
+                          border: "1px dashed #d6c7b8",
+                          marginBottom: 12,
+                          display: "flex",
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 10,
+                          fontSize: "0.82rem",
+                          color: "#57534e",
+                        }}
+                      >
+                        <span>
+                          💡 世帯メンバーに「親・祖父母」や「子ども」を追加すると自動表示されます（下のボタンで手動表示もできます）：
+                        </span>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <button
+                            type="button"
+                            className="ou-btn-secondary"
+                            onClick={() => setShowSeniorCardManual((prev) => !prev)}
+                          >
+                            {showSeniorCardManual
+                              ? "👵 大文字3行まとめを隠す"
+                              : "👵 大文字3行まとめ（シニア向け）を表示"}
+                          </button>
+                          <button
+                            type="button"
+                            className="ou-btn-secondary"
+                            onClick={() => setShowKidCardManual((prev) => !prev)}
+                          >
+                            {showKidCardManual
+                              ? "🧒 子ども向け準備カードを隠す"
+                              : "🧒 子ども向け準備カードを表示"}
+                          </button>
                         </div>
                       </div>
                     )}
 
-                    {/* TAB 2: Grandparent 3-Line Summary & Child Card */}
-                    {extraTab === "family" && (
-                      <div className="ou-generation-grid">
+                    <div className="ou-generation-grid">
+                      {(hasSeniorMember || showSeniorCardManual) && (
                         <div className="ou-grandma-card">
                           <div className="ou-grandma-header">
                             <h3 className="ou-grandma-title">
                               <span aria-hidden="true">👵</span>
-                              祖父母向け やさしい大きな文字の3行要約
+                              大文字3行まとめ（シニア・親・祖父母向け）
                             </h3>
                             <div className="ou-grandma-actions">
                               <button
@@ -2812,12 +3202,14 @@ export default function OtayoriUltra() {
                             ))}
                           </ol>
                         </div>
+                      )}
 
+                      {(hasKidMember || showKidCardManual) && (
                         <div className="ou-child-card">
                           <div className="ou-child-header">
                             <h3 className="ou-child-title">
                               <span aria-hidden="true">🧒</span>
-                              じぶんでできる！子どもバトン応援カード
+                              じぶんでできる！子ども向け準備カード
                             </h3>
                             <button
                               type="button"
@@ -2833,7 +3225,11 @@ export default function OtayoriUltra() {
                           </p>
                           <div className="ou-child-items">
                             {checklist
-                              .filter((c) => c.assignee === "子ども")
+                              .filter((c) =>
+                                /(子|長男|長女|次男|次女|キッズ|児童)/.test(
+                                  c.assignee
+                                )
+                              )
                               .map((item) => (
                                 <button
                                   key={item.id}
@@ -2851,83 +3247,83 @@ export default function OtayoriUltra() {
                               ))}
                           </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
+                  </div>
+                )}
 
-                    {/* TAB 3: Local Save (.md / .json) & GAS Sync */}
-                    {extraTab === "save" && (
-                      <div className="ou-bottom-dock" style={{ margin: 0 }}>
-                        <div className="ou-dock-left">
-                          <span className="ou-dock-title">
-                            💾 カレンダー・PC／スマホへのファイル保存 ＆ Google シート連携
+                {/* TAB 3: Local Save (.md / .json) & GAS Sync */}
+                {extraTab === "save" && (
+                  <div className="ou-bottom-dock" style={{ margin: 0 }}>
+                    <div className="ou-dock-left">
+                      <span className="ou-dock-title">
+                        💾 カレンダー・PC／スマホへのファイル保存 ＆ Google シート連携
+                      </span>
+                    </div>
+                    <div className="ou-dock-actions">
+                      <button
+                        type="button"
+                        className="ou-btn-ics"
+                        onClick={handleDownloadIcs}
+                      >
+                        📥 カレンダー用 .ics をダウンロード
+                      </button>
+                      <button
+                        type="button"
+                        className="ou-btn-drive"
+                        disabled={archivingDrive}
+                        onClick={handleSaveToLocalDevice}
+                      >
+                        {archivingDrive
+                          ? "💾 保存中..."
+                          : "💾 PC・スマホに保存 (.md)"}
+                      </button>
+                      <button
+                        type="button"
+                        className="ou-btn-secondary"
+                        onClick={handleDownloadLocalJson}
+                      >
+                        📦 JSON (.json) で保存
+                      </button>
+                      <button
+                        type="button"
+                        className="ou-btn-secondary"
+                        disabled={syncingGas}
+                        onClick={handleSyncToGas}
+                      >
+                        {syncingGas
+                          ? "GAS 送信中..."
+                          : "📊 Google シート連携 (GAS)"}
+                      </button>
+                    </div>
+
+                    {driveArchiveInfo && (
+                      <div className="ou-drive-status" role="status">
+                        <div className="ou-drive-status-head">
+                          <span>
+                            💾{" "}
+                            <strong>
+                              PC・スマホへのローカル保存完了 (
+                              {driveArchiveInfo.mode})
+                            </strong>
+                          </span>
+                          <span className="ou-drive-folder">
+                            📁 保存ファイル:{" "}
+                            <code>{driveArchiveInfo.folder}</code>
                           </span>
                         </div>
-                        <div className="ou-dock-actions">
-                          <button
-                            type="button"
-                            className="ou-btn-ics"
-                            onClick={handleDownloadIcs}
-                          >
-                            📥 カレンダー用 .ics をダウンロード
-                          </button>
-                          <button
-                            type="button"
-                            className="ou-btn-drive"
-                            disabled={archivingDrive}
-                            onClick={handleSaveToLocalDevice}
-                          >
-                            {archivingDrive
-                              ? "💾 保存中..."
-                              : "💾 PC・スマホに保存 (.md)"}
-                          </button>
-                          <button
-                            type="button"
-                            className="ou-btn-secondary"
-                            onClick={handleDownloadLocalJson}
-                          >
-                            📦 JSON (.json) で保存
-                          </button>
-                          <button
-                            type="button"
-                            className="ou-btn-secondary"
-                            disabled={syncingGas}
-                            onClick={handleSyncToGas}
-                          >
-                            {syncingGas
-                              ? "GAS 送信中..."
-                              : "📊 Google シート連携 (GAS)"}
-                          </button>
-                        </div>
-
-                        {driveArchiveInfo && (
-                          <div className="ou-drive-status" role="status">
-                            <div className="ou-drive-status-head">
-                              <span>
-                                💾{" "}
-                                <strong>
-                                  PC・スマホへのローカル保存完了 (
-                                  {driveArchiveInfo.mode})
-                                </strong>
-                              </span>
-                              <span className="ou-drive-folder">
-                                📁 保存ファイル:{" "}
-                                <code>{driveArchiveInfo.folder}</code>
-                              </span>
-                            </div>
-                            {driveArchiveInfo.message && (
-                              <p className="ou-drive-msg">
-                                {driveArchiveInfo.message}
-                              </p>
-                            )}
-                          </div>
+                        {driveArchiveInfo.message && (
+                          <p className="ou-drive-msg">
+                            {driveArchiveInfo.message}
+                          </p>
                         )}
                       </div>
                     )}
                   </div>
-                </div>
-              </section>
-            )}
-          </div>
+                )}
+              </div>
+            </div>
+          </section>
         )}
       </main>
 

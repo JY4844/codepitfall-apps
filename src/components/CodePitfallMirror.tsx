@@ -8,45 +8,9 @@ import type {
   PersonalMistake,
 } from "@/app/api/codemistake/route";
 
-const STORAGE_KEY = "codepitfall_personal_dna_v1";
+const STORAGE_KEY = "codepitfall_personal_dna_v2";
 
-const DEFAULT_HABITS: PersonalMistake[] = [
-  {
-    id: "h1",
-    pattern: "fetch / 非同期処理の await 忘れ",
-    category: "Async",
-    severity: "high",
-    hits: 7,
-  },
-  {
-    id: "h2",
-    pattern: "import パス大文字小文字ミス・パッケージ未導入・EPERMロック",
-    category: "Env",
-    severity: "high",
-    hits: 4,
-  },
-  {
-    id: "h3",
-    pattern: "Next.js の 'use client' 宣言忘れ＆初期描画 Hydration ズレ",
-    category: "Hydration",
-    severity: "high",
-    hits: 5,
-  },
-  {
-    id: "h4",
-    pattern: "作業前・push前の git pull 忘れによる push rejected",
-    category: "Git",
-    severity: "medium",
-    hits: 3,
-  },
-  {
-    id: "h5",
-    pattern: "response.ok を確認せずに .json() してしまう",
-    category: "API",
-    severity: "high",
-    hits: 4,
-  },
-];
+const DEFAULT_HABITS: PersonalMistake[] = [];
 
 interface ErrorPreset {
   id: string;
@@ -266,14 +230,10 @@ const TASK_TEMPLATES: Record<string, ChecklistItem[]> = {
 
 export default function CodePitfallMirror() {
   const [habits, setHabits] = useState<PersonalMistake[]>(DEFAULT_HABITS);
-  const [errorLog, setErrorLog] = useState<string>(ERROR_PRESETS[0].errorLog);
-  const [optionalCode, setOptionalCode] = useState<string>(
-    ERROR_PRESETS[0].optionalCode
-  );
+  const [errorLog, setErrorLog] = useState<string>("");
+  const [optionalCode, setOptionalCode] = useState<string>("");
   const [showCodeBox, setShowCodeBox] = useState<boolean>(false);
-  const [activePresetId, setActivePresetId] = useState<string>(
-    ERROR_PRESETS[0].id
-  );
+  const [activePresetId, setActivePresetId] = useState<string>("");
   const [taskType, setTaskType] = useState<string>(ERROR_PRESETS[0].taskType);
 
   const [loading, setLoading] = useState<boolean>(false);
@@ -333,41 +293,27 @@ export default function CodePitfallMirror() {
     []
   );
 
-  // Initial load from localStorage and run initial diagnosis
+  // Initial load of user's own saved Personal DNA from localStorage (starts empty by default)
   useEffect(() => {
-    let initialHabits = DEFAULT_HABITS;
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          initialHabits = parsed;
+        if (Array.isArray(parsed)) {
           setHabits(parsed);
         }
       }
     } catch {
       // Ignore
     }
-    void runDiagnosis(
-      ERROR_PRESETS[0].errorLog,
-      ERROR_PRESETS[0].optionalCode,
-      ERROR_PRESETS[0].taskType,
-      initialHabits
-    );
-  }, [runDiagnosis]);
+  }, []);
 
-  // 1-Click Preset Selection
+  // Optional 1-Click Example Loader (only if user clicks "例を1つ試す")
   const handleSelectPreset = (preset: ErrorPreset) => {
     setActivePresetId(preset.id);
     setErrorLog(preset.errorLog);
     setOptionalCode(preset.optionalCode);
     setTaskType(preset.taskType);
-    void runDiagnosis(
-      preset.errorLog,
-      preset.optionalCode,
-      preset.taskType,
-      habits
-    );
   };
 
   // 1-Click Paste from Clipboard & Immediate Diagnosis
@@ -815,53 +761,6 @@ export default function CodePitfallMirror() {
             </button>
           </div>
 
-          {/* 4 Instant Realistic Error Presets */}
-          <div style={{ marginBottom: 12 }}>
-            <div
-              style={{
-                fontSize: 11.5,
-                fontWeight: 700,
-                color: "#64748b",
-                marginBottom: 6,
-              }}
-            >
-              ⚡ ワンクリックで試せるよくあるエラー例（4選）：
-            </div>
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 8,
-              }}
-            >
-              {ERROR_PRESETS.map((preset) => {
-                const active = activePresetId === preset.id;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => handleSelectPreset(preset)}
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: 999,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      border: active
-                        ? "1.5px solid #2563eb"
-                        : "1px solid #cbd5e1",
-                      background: active ? "#eff6ff" : "#f8fafc",
-                      color: active ? "#1d4ed8" : "#334155",
-                      transition: "all 0.15s ease",
-                    }}
-                  >
-                    {preset.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
           {/* Error Paste Textarea */}
           <textarea
             id="error-paste-box"
@@ -871,7 +770,7 @@ export default function CodePitfallMirror() {
               setActivePresetId("");
             }}
             onKeyDown={(e) => {
-              if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+              if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && errorLog.trim()) {
                 e.preventDefault();
                 void runDiagnosis(errorLog, optionalCode, taskType, habits);
               }
@@ -895,7 +794,7 @@ export default function CodePitfallMirror() {
             }}
           />
 
-          {/* Optional Collapsed Toggle for Code Context + Primary Diagnose CTA */}
+          {/* Optional Collapsed Toggle for Code Context + Subtle Example Link + Primary Diagnose CTA */}
           <div
             style={{
               marginTop: 12,
@@ -906,24 +805,64 @@ export default function CodePitfallMirror() {
               gap: 12,
             }}
           >
-            <button
-              type="button"
-              onClick={() => setShowCodeBox((prev) => !prev)}
-              style={{
-                background: "transparent",
-                border: "1px dashed #94a3b8",
-                color: "#475569",
-                padding: "7px 12px",
-                borderRadius: 8,
-                fontSize: 12.5,
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              {showCodeBox
-                ? "－ 該当コード欄を閉じる"
-                : "＋ 該当コードを添える（任意）"}
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => setShowCodeBox((prev) => !prev)}
+                style={{
+                  background: "transparent",
+                  border: "1px dashed #94a3b8",
+                  color: "#475569",
+                  padding: "7px 12px",
+                  borderRadius: 8,
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                {showCodeBox
+                  ? "－ 該当コード欄を閉じる"
+                  : "＋ 該当コードを添える（任意）"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSelectPreset(ERROR_PRESETS[0])}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  padding: 0,
+                  color: "#64748b",
+                  fontSize: 12,
+                  textDecoration: "underline",
+                  cursor: "pointer",
+                }}
+              >
+                {activePresetId ? "✓ 例を入力中" : "例を1つ試す"}
+              </button>
+
+              {errorLog && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorLog("");
+                    setOptionalCode("");
+                    setActivePresetId("");
+                    setResult(null);
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    padding: 0,
+                    color: "#94a3b8",
+                    fontSize: 12,
+                    cursor: "pointer",
+                  }}
+                >
+                  クリア
+                </button>
+              )}
+            </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ fontSize: 11.5, color: "#64748b" }}>
@@ -934,17 +873,17 @@ export default function CodePitfallMirror() {
                 onClick={() =>
                   void runDiagnosis(errorLog, optionalCode, taskType, habits)
                 }
-                disabled={loading}
+                disabled={loading || !errorLog.trim()}
                 style={{
                   padding: "10px 20px",
                   borderRadius: 10,
                   border: "none",
-                  background: "#2563eb",
+                  background: !errorLog.trim() ? "#94a3b8" : "#2563eb",
                   color: "#ffffff",
                   fontWeight: 800,
                   fontSize: 14,
-                  cursor: loading ? "wait" : "pointer",
-                  boxShadow: "0 2px 8px rgba(37, 99, 235, 0.25)",
+                  cursor: loading ? "wait" : !errorLog.trim() ? "not-allowed" : "pointer",
+                  boxShadow: !errorLog.trim() ? "none" : "0 2px 8px rgba(37, 99, 235, 0.25)",
                 }}
               >
                 {loading ? "診断中..." : "🔍 原因と直し方を即診断する"}
@@ -1750,55 +1689,70 @@ export default function CodePitfallMirror() {
           </div>
 
           {/* Compact Habit Pills */}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {habits.map((h) => (
-              <div
-                key={h.id}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "6px 12px",
-                  borderRadius: 999,
-                  background: "#f8fafc",
-                  border: "1px solid #e2e8f0",
-                  fontSize: 12,
-                }}
-              >
-                <span style={{ fontWeight: 700, color: "#1e293b" }}>
-                  {h.pattern}
-                </span>
-                <span
+          {habits.length === 0 ? (
+            <div
+              style={{
+                fontSize: 12.5,
+                color: "#64748b",
+                padding: "10px 12px",
+                borderRadius: 10,
+                background: "#f8fafc",
+                border: "1px dashed #cbd5e1",
+              }}
+            >
+              まだ記憶されたクセDNAはありません。エラー診断後の「＋ 自分のクセDNAに記憶」または上の入力欄から、あなた自身のミス傾向を追加できます。
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {habits.map((h) => (
+                <div
+                  key={h.id}
                   style={{
-                    fontSize: 11,
-                    fontWeight: 800,
-                    color: "#b45309",
-                    background: "#fef3c7",
-                    padding: "1px 7px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "6px 12px",
                     borderRadius: 999,
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    fontSize: 12,
                   }}
                 >
-                  {h.hits}回
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteHabit(h.id)}
-                  title="削除"
-                  style={{
-                    border: "none",
-                    background: "transparent",
-                    color: "#94a3b8",
-                    cursor: "pointer",
-                    fontSize: 13,
-                    padding: 0,
-                    lineHeight: 1,
-                  }}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
+                  <span style={{ fontWeight: 700, color: "#1e293b" }}>
+                    {h.pattern}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: "#b45309",
+                      background: "#fef3c7",
+                      padding: "1px 7px",
+                      borderRadius: 999,
+                    }}
+                  >
+                    {h.hits}回
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteHabit(h.id)}
+                    title="削除"
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      color: "#94a3b8",
+                      cursor: "pointer",
+                      fontSize: 13,
+                      padding: 0,
+                      lineHeight: 1,
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* Footer with Open Source notice & 1-click Feedback Link */}
