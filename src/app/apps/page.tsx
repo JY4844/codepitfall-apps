@@ -89,7 +89,7 @@ export default function AppsPortalPage() {
             Google AI Challenge 2026 — 37 Apps Showcase
           </span>
           <a
-            href="https://github.com/JY4844/google-ai-challenge-2026"
+            href="https://github.com/kotae-lab/google-ai-challenge-2026"
             target="_blank"
             rel="noreferrer"
             style={{

@@ -42,7 +42,7 @@ export default function GitBridge() {
 
   function loadSample() {
     if (mode === "learn_repo") {
-      setRepoUrl("https://github.com/JY4844/google-ai-challenge-2026");
+      setRepoUrl("https://github.com/kotae-lab/google-ai-challenge-2026");
       setProjectNote("Next.js と Gemini API をどう連携しているか初心者向けに順番に学びたい");
     } else {
       setProjectNote(
