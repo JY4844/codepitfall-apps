@@ -60,7 +60,12 @@ export type ShowcaseAppId =
   | "souji"
   | "report"
   | "merukari"
-  | "eiyou";
+  | "eiyou"
+  | "kankon"
+  | "reizouko"
+  | "meeting"
+  | "bicycle"
+  | "hobby";
 
 export interface ShowcaseAppConfig {
   id: ShowcaseAppId;
@@ -1518,5 +1523,125 @@ export const SHOWCASE_APPS: Record<ShowcaseAppId, ShowcaseAppConfig> = {
     gasPrefix: "[栄養AI]",
     systemInstruction:
       "あなたは忙しい社会人に自炊を強要せず、コンビニや外食でも現実的に栄養バランスを整える管理栄養アドバイスアシスタントです（持病や食事制限がある方は医師・管理栄養士の指導を優先するよう案内してください）。食事メモから、alert_level (high/medium/low)、alert_title（現在不足している栄養素と午後の眠気リスク）、alert_message（罪悪感ゼロで整える1品プラスのコツ）、items（タンパク質・食物繊維・ビタミンを補うコンビニちょい足し候補3点）、checklist（食べる順番・水分補給・間食の選び方チェック）、copyable_draft（そのままコンビニでカゴに入れられる今日のちょい足しメモ）、suggested_tasks（水分補給・夕食バランス調整タスク）を日本語で構造化してください。",
+  },
+  kankon: {
+    id: "kankon",
+    name: "冠婚葬祭・ご祝儀＆マナー即確認ナビ AI",
+    category: "暮らし・家族部門",
+    tagline: "急な結婚式・お通夜・法要で「金額相場・表書き・服装・NGマナー」を10秒で即確認",
+    subtitle:
+      "「ご祝儀いくら包めばいい？袱紗の包み方は？」の直前パニックを解消。Gemini 3.8 Flash が関係性に合った相場と持ち物チェックを整理します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 冠婚葬祭マナー",
+    accentColor: "#6366f1",
+    accentSoft: "#eef2ff",
+    inputLabel: "参列する行事・相手との関係性・自分の立場・気になるマナー",
+    inputPlaceholder: "例: 会社の同僚の結婚式に参列。新札の準備やご祝儀袋の書き方、ネクタイの色が不安...",
+    sampleText:
+      "大学時代の友人の結婚式に参列予定（披露宴あり）。相場は3万円で良いか、ご祝儀袋の中袋の住所金額の書き方、黒スーツに合わせるネクタイ・靴のNGマナーと前日準備リストを確認したい。",
+    sampleLocation: "参列前日の夕方準備",
+    showLocationInput: true,
+    submitLabel: "金額相場・表書き・持ち物＆NGマナーを確認",
+    section1Title: "1. 関係性に合った金額相場＆書き方・服装3ポイント",
+    section2Title: "2. 前日〜当日朝の持ち物＆新札・袱紗チェック",
+    section3Title: "3. そのまま書けるお祝い・お悔やみメッセージ文例",
+    gasPrefix: "[冠婚葬祭AI]",
+    systemInstruction:
+      "あなたは日本の冠婚葬祭マナーに精通し、急な参列でも恥をかかないよう優しく案内するマナーコンシェルジュです。行事と関係性から、alert_level (high/medium/low)、alert_title（絶対に避けたいNGマナー・準備忘れ）、alert_message（地域差や宗派差がある場合の確認ポイント）、items（金額相場・表書き/中袋・服装マナー3点）、checklist（新札/旧札・筆ペン・袱紗・数珠/招待状チェック）、copyable_draft（芳名帳やメッセージカード・電報に使える丁寧な文例）、suggested_tasks（銀行新札両替・クリーニング受取タスク）を日本語で構造化してください。",
+  },
+  reizouko: {
+    id: "reizouko",
+    name: "冷凍保存＆賞味期限レスキューガイド AI",
+    category: "暮らし・家族部門",
+    tagline: "買いすぎた肉・野菜・パンを「一番おいしく長持ちさせる冷凍手順＋解凍調理法」に即変換",
+    subtitle:
+      "「気づいたら野菜室でシナシナ…」をゼロに。Gemini 3.8 Flash が食材別の正しい下処理と、冷凍のまま使える時短レシピを提案します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 食品ロス削減冷凍術",
+    accentColor: "#06b6d4",
+    accentSoft: "#ecfeff",
+    inputLabel: "余りそうな食材・状態・冷凍庫の空き具合",
+    inputPlaceholder: "例: 特売で買った豚バラ500g、使いかけのキャベツ半分、もやし1袋、食パン4枚...",
+    sampleText:
+      "まとめ買いした鶏もも肉2枚、使いかけの長ねぎ1本、きのこ3パック、食パン半分が今週中に食べ切れなさそう。味を落とさず冷凍保存する方法と、忙しい平日に凍ったまま調理するアイデアを知りたい。",
+    sampleLocation: "週末の食材下処理タイム",
+    showLocationInput: true,
+    submitLabel: "食材別の最適冷凍手順＆時短解凍レシピを生成",
+    section1Title: "1. おいしさを保つ食材別冷凍テクニック3選",
+    section2Title: "2. 冷凍焼け・食中毒を防ぐ保存チェックリスト",
+    section3Title: "3. 冷凍袋に油性ペンで書く日付＆使い切りメモ",
+    gasPrefix: "[冷凍レスキューAI]",
+    systemInstruction:
+      "あなたは家庭の食品ロスをなくす冷凍保存・下味冷凍のスペシャリストです。余りそうな食材から、alert_level (high/medium/low)、alert_title（今すぐ冷凍すべき傷みやすい食材）、alert_message（冷凍焼けを防ぎ旨みをアップさせるコツ）、items（食材別の切り方・下味・冷凍のまま調理レシピ3点）、checklist（水気拭き取り・空気抜き・金属トレイ急速冷凍・日付記入チェック）、copyable_draft（冷凍庫ドアに貼れる在庫＆消費目安リスト）、suggested_tasks（2週間後の冷凍庫使い切り日タスク）を日本語で構造化してください。",
+  },
+  meeting: {
+    id: "meeting",
+    name: "ダラダラ会議防止・アジェンダ設計コーチ AI",
+    category: "シゴト・学び部門",
+    tagline: "会議の目的メモから「30分で決めるべき論点・タイム配分・事前共有文」を一発作成",
+    subtitle:
+      "「結局何も決まらず1時間終わった…」を撲滅。Gemini 3.8 Flash が決めること中心のアジェンダと進行スクリプトを作ります。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 会議生産性アップ",
+    accentColor: "#4f46e5",
+    accentSoft: "#eef2ff",
+    inputLabel: "会議のテーマ・参加人数・持ち時間・決めたいゴール",
+    inputPlaceholder: "例: 週次プロジェクト定例30分、5人参加。進捗共有だけで終わりがちで課題解決が進まない...",
+    sampleText:
+      "新機能リリースの打ち合わせ45分（開発3名・営業2名）。毎回「状況報告」だけで30分以上潰れてしまい、リリース日や担当割り振りが決まらない。事前に論点を絞って45分で結論を出す設計にしたい。",
+    sampleLocation: "会議招集メール送信前",
+    showLocationInput: true,
+    submitLabel: "結論が出るタイム配分＆事前共有文を生成",
+    section1Title: "1. 持ち時間で必ず決着をつける進行設計3ステップ",
+    section2Title: "2. 開始前・終了5分前のファシリテーションチェック",
+    section3Title: "3. カレンダー招待にそのまま貼れる事前アジェンダ文",
+    gasPrefix: "[会議設計AI]",
+    systemInstruction:
+      "あなたはムダな会議をなくし短時間で意思決定へ導くファシリテーションの専門家です。会議テーマと持ち時間から、alert_level (high/medium/low)、alert_title（この会議がダラダラ長引く最大の原因）、alert_message（報告を非同期にして意思決定に時間を使うコツ）、items（導入・論点討議・ネクストアクション確定のタイム配分3点）、checklist（事前資料共有・決定者明確化・終了5分前まとめチェック）、copyable_draft（GoogleカレンダーやSlackにそのまま貼れる事前アジェンダ＆事前確認依頼文）、suggested_tasks（前日アジェンダ送付・議事録共有タスク）を日本語で構造化してください。",
+  },
+  bicycle: {
+    id: "bicycle",
+    name: "自転車ルール・安全点検＆保険確認ナビ AI",
+    category: "まちと地球の未来部門",
+    tagline: "通勤・通学・子乗せ自転車の利用シーンに合わせて、交通ルール注意点と安全点検を即チェック",
+    subtitle:
+      "「青切符・ヘルメット・自転車保険、うちは大丈夫？」をサクッと確認。Gemini 3.8 Flash が安全な毎日を守る点検リストを作ります。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 交通安全サポート",
+    accentColor: "#059669",
+    accentSoft: "#ecfdf5",
+    inputLabel: "自転車の主な用途（通勤・通学・子ども送迎など）・気になる点",
+    inputPlaceholder: "例: 電動アシスト自転車で毎日保育園送迎。タイヤ空気圧や保険加入の確認をしたい...",
+    sampleText:
+      "電動アシスト自転車で駅まで片道15分の通勤＋雨の日の利用あり。スマホホルダー利用やイヤホン、夜間ライト、自治体の自転車保険加入義務をクリアしているか、点検すべき項目をまとめて確認したい。",
+    sampleLocation: "週末の自転車安全点検",
+    showLocationInput: true,
+    submitLabel: "交通ルール注意点＆安全点検チェックを生成",
+    section1Title: "1. 違反・事故を防ぐ重要ルール＆運転ポイント3選",
+    section2Title: "2. 乗る前・月1回の安全整備＆保険確認チェック",
+    section3Title: "3. 家族みんなで確認できる自転車安全メモ",
+    gasPrefix: "[自転車安全AI]",
+    systemInstruction:
+      "あなたは地域の交通事故ゼロを目指す交通安全・自転車整備アドバイザーです（最新の道路交通法・自治体条例は警察庁や自治体公式情報を確認するよう案内してください）。利用シーンから、alert_level (high/medium/low)、alert_title（特に注意すべき違反リスク・ヒヤリハット）、alert_message（ヘルメット着用と賠償責任保険の重要性）、items（ながら運転/傘さし/夜間走行など3つの安全対策）、checklist（ブレーキ・タイヤ空気圧・ライト・ヘルメット・個人賠償責任保険チェック）、copyable_draft（家族や中学生の子どもと共有できる自転車安全約束メモ）、suggested_tasks（月1回タイヤ空気入れ・保険証券確認タスク）を日本語で構造化してください。",
+  },
+  hobby: {
+    id: "hobby",
+    name: "三日坊主防止・1日5分習慣化コーチ AI",
+    category: "暮らし・家族部門",
+    tagline: "続けたい習慣（運動・英語・日記・読書）を「絶対に挫折しない1日5分トリガー設計」へ分解",
+    subtitle:
+      "「いつも3日で終わってしまう…」を科学的に突破。Gemini 3.8 Flash が既存習慣にくっつける超ハードル低い継続プランを作ります。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 1日5分習慣化",
+    accentColor: "#f97316",
+    accentSoft: "#fff7ed",
+    inputLabel: "続けたいこと・いつも挫折するパターン・1日の生活リズム",
+    inputPlaceholder: "例: 毎日筋トレと英語シャドーイングを続けたいが、仕事で疲れて夜やらずに寝てしまう...",
+    sampleText:
+      "毎晩ストレッチ15分と英語アプリ15分を習慣にしたいが、残業で疲れて帰るとソファでスマホを見てそのまま寝てしまい、毎回3日で途切れる。絶対に途切れない仕組みに変えたい。",
+    sampleLocation: "今日から始める1日5分習慣",
+    showLocationInput: true,
+    submitLabel: "三日坊主を防ぐ超低ハードル習慣プランを生成",
+    section1Title: "1. 意志力に頼らない継続トリガー設計3ステップ",
+    section2Title: "2. 疲れた日でも「0にしない」最低ラインチェック",
+    section3Title: "3. デスクやスマホメモに貼る1日5分マイルール",
+    gasPrefix: "[習慣化AI]",
+    systemInstruction:
+      "あなたは行動科学（イフゼンプランニング・スモールステップ）に基づき三日坊主を防ぐ習慣化コーチです。続けたいことと挫折パターンから、alert_level (high/medium/low)、alert_title（毎回途切れてしまう最大のボトルネック）、alert_message（完璧主義を捨てて「1分やれば勝ち」にするコツ）、items（既存行動トリガー・環境仕込み・疲れた日のミニ版3点）、checklist（道具の出しっぱなし・通知設定・週1ご褒美チェック）、copyable_draft（そのままメモや壁に貼れる「もし〇〇したら△△を1分やる」宣言カード）、suggested_tasks（毎日トリガー通知・7日後達成振り返りタスク）を日本語で構造化してください。",
   },
 };
