@@ -65,7 +65,12 @@ export type ShowcaseAppId =
   | "reizouko"
   | "meeting"
   | "bicycle"
-  | "hobby";
+  | "hobby"
+  | "kyujitsu"
+  | "bousaipet"
+  | "gakuchika"
+  | "denwa"
+  | "kaimono";
 
 export interface ShowcaseAppConfig {
   id: ShowcaseAppId;
@@ -1643,5 +1648,125 @@ export const SHOWCASE_APPS: Record<ShowcaseAppId, ShowcaseAppConfig> = {
     gasPrefix: "[習慣化AI]",
     systemInstruction:
       "あなたは行動科学（イフゼンプランニング・スモールステップ）に基づき三日坊主を防ぐ習慣化コーチです。続けたいことと挫折パターンから、alert_level (high/medium/low)、alert_title（毎回途切れてしまう最大のボトルネック）、alert_message（完璧主義を捨てて「1分やれば勝ち」にするコツ）、items（既存行動トリガー・環境仕込み・疲れた日のミニ版3点）、checklist（道具の出しっぱなし・通知設定・週1ご褒美チェック）、copyable_draft（そのままメモや壁に貼れる「もし〇〇したら△△を1分やる」宣言カード）、suggested_tasks（毎日トリガー通知・7日後達成振り返りタスク）を日本語で構造化してください。",
+  },
+  kyujitsu: {
+    id: "kyujitsu",
+    name: "雨の日・休日のお出かけ即決プランナー AI",
+    category: "暮らし・家族部門",
+    tagline: "「今日どこ行く？」の朝の迷いを10秒で解消。天候・年齢・予算に合った室内＆近場プランを3案提案",
+    subtitle:
+      "雨や猛暑で公園に行けない休日も焦らない。Gemini 3.8 Flash が年齢別の遊び場アイデアと混雑回避タイムラインを作ります。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 休日お出かけ即決",
+    accentColor: "#0ea5e9",
+    accentSoft: "#f0f9ff",
+    inputLabel: "家族構成（子どもの年齢など）・エリア・予算・天気や移動手段",
+    inputPlaceholder: "例: 5歳と2歳、雨の日、車で30分圏内。予算3,000円以内で半日遊べる場所のアイデア...",
+    sampleText:
+      "朝から雨の日曜日。小学1年生と年少の子ども2人、車移動可、予算は昼食込みで5,000円以内。混雑を避けて午前中から夕方まで無理なく楽しめる室内お出かけ案と持ち物を整理したい。",
+    sampleLocation: "雨の日曜朝8:30のリビング",
+    showLocationInput: true,
+    submitLabel: "雨の日でも楽しめるお出かけ3案＆段取りを生成",
+    section1Title: "1. 年齢＆天気に合ったお出かけジャンル3案",
+    section2Title: "2. 混雑回避＆雨の日持ち物チェックリスト",
+    section3Title: "3. 家族LINEに貼って即決できる今日の予定表",
+    gasPrefix: "[休日お出かけAI]",
+    systemInstruction:
+      "あなたは週末の「今日どこ行く？」問題を10秒で解決するファミリーお出かけプランナーです。家族構成・天気・予算・移動手段から、alert_level (high/medium/low)、alert_title（雨天・混雑・昼食難民など最大の注意点）、alert_message（子どもが飽きずに親も疲れないコツ）、items（公共科学館/図書館/屋内広場など予算に合った3案と動き方）、checklist（着替え・タオル・事前予約・駐車場確認チェック）、copyable_draft（家族LINEにそのまま送れるタイムスケジュール案）、suggested_tasks（事前WEB予約・出発前トイレ声かけタスク）を日本語で構造化してください。",
+  },
+  bousaipet: {
+    id: "bousaipet",
+    name: "ペット同行避難・防災カルテ整理 AI",
+    category: "まちと地球の未来部門",
+    tagline: "犬・猫など大切なペットと安全に避難するための自治体確認事項と持ち出し袋を1分で整備",
+    subtitle:
+      "「ペット連れで避難所に入れるの？」の不安を事前準備で解消。Gemini 3.8 Flash が種別・持病に合わせた同行避難カルテを作成します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + ペット防災サポート",
+    accentColor: "#14b8a6",
+    accentSoft: "#f0fdfa",
+    inputLabel: "ペットの種類・体重・性格・持病や食べているフード",
+    inputPlaceholder: "例: 柴犬10kg・8歳。怖がりなので他の犬と一緒だと吠える。療法食を食べている...",
+    sampleText:
+      "室内飼いの猫2匹（4kg・5歳と3歳）。大きな音が苦手でキャリーに入るのを嫌がる。マンション住まいなので、在宅避難と同行避難の両方に備えて必要な備蓄と迷子対策を整理したい。",
+    sampleLocation: "自宅＆自治体指定避難所確認",
+    showLocationInput: true,
+    submitLabel: "ペット同行避難カルテ＆防災袋リストを生成",
+    section1Title: "1. 性格・住居に合わせた避難＆訓練3ステップ",
+    section2Title: "2. ワクチン証明・迷子札・常備薬チェック",
+    section3Title: "3. 緊急時に預け先・隣人へ渡せるペット連絡カード",
+    gasPrefix: "[ペット防災AI]",
+    systemInstruction:
+      "あなたはペットの命と飼い主の安心を守るペット防災・同行避難アドバイザーです（避難所の受け入れルールは必ずお住まいの自治体公式案内を確認するよう明記してください）。ペット情報から、alert_level (high/medium/low)、alert_title（この子が避難時に最もストレスや危険を受けやすい点）、alert_message（平時のキャリー慣れとマイクロチップ/迷子対策のコツ）、items（在宅避難・同行避難・事前訓練の3ステップ）、checklist（フード7日分・折りたたみトイレ・ワクチン接種証明・写真付き連絡カードチェック）、copyable_draft（キャリーに貼れる緊急時ペット引き継ぎ連絡カード）、suggested_tasks（自治体ペット避難ルール確認・フード賞味期限更新タスク）を日本語で構造化してください。",
+  },
+  gakuchika: {
+    id: "gakuchika",
+    name: "ガクチカ・自己PR 400字ES構成コーチ AI",
+    category: "シゴト・学び部門",
+    tagline: "バラバラなバイト・ゼミ・開発経験を「結論→課題→工夫→成果」の400字ESへ一発構造化",
+    subtitle:
+      "「書きたいことはあるのに400字にまとまらない…」を解決。Gemini 3.8 Flash が採用担当者に刺さる骨子と面接対策ポイントを作成します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 就活ES構成支援",
+    accentColor: "#4f46e5",
+    accentSoft: "#eef2ff",
+    inputLabel: "取り組んだ経験メモ・苦労したこと・工夫・結果や学び",
+    inputPlaceholder: "例: カフェのバイトで新人定着率を上げるためマニュアルを作り直した...",
+    sampleText:
+      "大学のプログラミングサークルで、新入生が環境構築でつまずいて辞めてしまう課題があった。Dockerと手順動画を作ってオンボーディング会を開いたら、夏まで残る新入生が昨年の2倍になった。400字のESにまとめたい。",
+    sampleLocation: "就活ES締切前の下書き作成",
+    showLocationInput: true,
+    submitLabel: "400字ESドラフト＆面接深掘り対策を生成",
+    section1Title: "1. 採用担当者に伝わるアピール強化ポイント3点",
+    section2Title: "2. 提出前の文字数・具体性・誤字チェック",
+    section3Title: "3. そのまま調整して使える 350〜400字 ES ドラフト",
+    gasPrefix: "[就活ES AI]",
+    systemInstruction:
+      "あなたは大学生のポテンシャルと再現性を引き出す就活ES・自己PRコーチです。経験メモから、alert_level (high/medium/low)、alert_title（面接で「なぜその工夫をしたのか」と深掘りされやすい点）、alert_message（エピソードの数字や主体性を際立たせるコツ）、items（結論・課題分析・工夫と再現性の磨き方3点）、checklist（一文の長さ・主語明確化・380〜400字収まりチェック）、copyable_draft（そのままES下書きとして使える結論ファーストの約380字ドラフト）、suggested_tasks（OB訪問・ES提出締切リマインドタスク）を日本語で構造化してください。",
+  },
+  denwa: {
+    id: "denwa",
+    name: "電話苦手さん用・30秒通話台本メーカー AI",
+    category: "暮らし・家族部門",
+    tagline: "役所・病院・カスタマーサポートへ電話する前の緊張をゼロにする「そのまま読める会話台本」を作成",
+    subtitle:
+      "「電話をかける前に何分も躊躇してしまう…」を解消。Gemini 3.8 Flash が名乗り・要件・想定質問への返しを1枚の台本にします。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 通話ハードル解消",
+    accentColor: "#ec4899",
+    accentSoft: "#fdf2f8",
+    inputLabel: "かけたい相手先・用件・手元にある情報・不安な点",
+    inputPlaceholder: "例: 歯医者の予約変更と、保険証が切り替わったことを電話で伝えたい...",
+    sampleText:
+      "インターネット回線の解約と違約金確認のためにサポートセンターへ電話したい。引き止められた時の断り方と、返却物の確認、通話が終わる前に絶対聞いておくべき項目を台本にしてほしい。",
+    sampleLocation: "発信ボタンを押す直前のデスク",
+    showLocationInput: true,
+    submitLabel: "そのまま読める30秒通話台本＆確認リストを生成",
+    section1Title: "1. 会話の主導権を握る3つの想定返しフレーズ",
+    section2Title: "2. 発信前に机へ並べておく手元資料チェック",
+    section3Title: "3. 画面を見ながらそのまま読める会話台本",
+    gasPrefix: "[電話台本AI]",
+    systemInstruction:
+      "あなたは電話に強い緊張や苦手意識を持つ人を優しくサポートする通話台本コーチです。相手先と用件から、alert_level (high/medium/low)、alert_title（通話中に確認し忘れやすい重要項目）、alert_message（早口にならず落ち着いて終話するコツ）、items（導入名乗り・引き止め/質問への返し・クロージング確認3点）、checklist（契約者番号・メモ帳とペン・本人確認書類チェック）、copyable_draft（画面を見ながらそのまま音読できる自然な会話台本）、suggested_tasks（窓口営業時間内リマインドタスク）を日本語で構造化してください。",
+  },
+  kaimono: {
+    id: "kaimono",
+    name: "ネット通販・失敗＆サクラレビュー見抜き AI",
+    category: "暮らし・家族部門",
+    tagline: "買う前に商品の気になる点やレビュー傾向を入れて「サイズ違い・返品不可・維持費」の落とし穴を事前診断",
+    subtitle:
+      "「安かったのに届いたら失敗した…」を防止。Gemini 3.8 Flash が購入ボタンを押す前に確認すべき5項目をチェックします。",
+    badgeText: "✦ Google Gemini 3.8 Flash + スマート買い物ガード",
+    accentColor: "#f59e0b",
+    accentSoft: "#fffbeb",
+    inputLabel: "購入を検討中の商品名・価格・気になるレビュー・利用目的",
+    inputPlaceholder: "例: 通販で1.5万円のロボット掃除機を検討中。星5が多いが日本語が不自然なレビューもある...",
+    sampleText:
+      "ネット通販で9,800円の小型除湿機を検討中。星4.8でレビュー数は多いが、最近似たような文面の高評価が並んでいる気がする。部屋の広さに対する能力や電気代、フィルター交換コストなど失敗しない確認点を整理したい。",
+    sampleLocation: "通販カートに入れる直前",
+    showLocationInput: true,
+    submitLabel: "買い物失敗リスク診断＆購入前チェックを生成",
+    section1Title: "1. レビュー・スペックで見抜く注意点3ポイント",
+    section2Title: "2. カート確定前の返品条件・サイズ・維持費チェック",
+    section3Title: "3. 比較メモ・家族相談にそのまま送れる検討サマリー",
+    gasPrefix: "[買い物ガードAI]",
+    systemInstruction:
+      "あなたはネット通販での衝動買いや粗悪品・サイズミスを防ぐ消費者目線の買い物アドバイザーです。検討中の商品情報から、alert_level (high/medium/low)、alert_title（最も注意すべき失敗リスク・維持費の落とし穴）、alert_message（星の数だけでなく低評価レビューや公式スペックを見るコツ）、items（レビュー信頼性・適応能力/サイズ・ランニングコスト3点）、checklist（販売元/発送元・返品特約・設置寸法・PSE等安全表示チェック）、copyable_draft（購入前に自分や家族で最終確認する検討サマリーメモ）、suggested_tasks（他店価格比較・24時間クールダウン検討タスク）を日本語で構造化してください。",
   },
 };
