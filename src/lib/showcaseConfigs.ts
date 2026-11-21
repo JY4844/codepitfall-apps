@@ -40,7 +40,12 @@ export type ShowcaseAppId =
   | "tenpu"
   | "packing"
   | "byoinmemo"
-  | "hoshosho";
+  | "hoshosho"
+  | "kafun"
+  | "denki"
+  | "gift"
+  | "shaken"
+  | "kakeibo";
 
 export interface ShowcaseAppConfig {
   id: ShowcaseAppId;
@@ -1018,5 +1023,125 @@ export const SHOWCASE_APPS: Record<ShowcaseAppId, ShowcaseAppConfig> = {
     gasPrefix: "[保証修理AI]",
     systemInstruction:
       "あなたは家電故障時の保証書探しや修理窓口への問い合わせ負担を減らすサポート整理アシスタントです（分解や危険な自己修理はせず公式サポートを利用するよう案内してください）。入力内容から、alert_level (high/medium/low)、alert_title（メーカー保証と量販店延長保証の切り分けポイント）、alert_message（無償修理や交換の可能性を逃さないコツ）、items（型番・シリアル確認場所、延長保証確認、見積り確認の3点）、checklist（購入日レシート・型番写真・エラーコード動画チェック）、copyable_draft（修理受付フォームやサポートチャットにそのまま貼れる症状説明テンプレート）、suggested_tasks（保証書写真保存・サポート連絡のカレンダー登録タスク）を日本語で構造化してください。",
+  },
+  kafun: {
+    id: "kafun",
+    name: "花粉・気象病コンディション予報コーチ AI",
+    category: "暮らし・家族部門",
+    tagline: "低気圧頭痛や花粉・寒暖差による不調メモから、今日の過ごし方と持ち物対策を即提案",
+    subtitle:
+      "「天気が崩れる前に頭が重い」「花粉で集中できない」を先回りケア。Gemini 3.8 Flash が体調ログに合わせた1日の負担軽減プランを作成します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 気象コンディション支援",
+    accentColor: "#14b8a6",
+    accentSoft: "#f0fdfa",
+    inputLabel: "今日の天気・体調の違和感・予定している外出や仕事",
+    inputPlaceholder: "例: 午後から雨予報でこめかみが重い。夕方に大事な打ち合わせがある...",
+    sampleText:
+      "明日から急に気温が8℃下がり雨予報。低気圧が来ると決まって午後に偏頭痛とだるさが出る。明日は出社して15時からプレゼンがあるので、朝から悪化を防ぐ過ごし方と持ち物対策を整理したい。",
+    sampleLocation: "出社日・会議前のセルフケア",
+    showLocationInput: true,
+    submitLabel: "気象不調の先回りケアプランを生成",
+    section1Title: "1. 悪化を防ぐ時間帯別セルフケア3ステップ",
+    section2Title: "2. 朝のバッグに入れるお守り持ち物チェック",
+    section3Title: "3. 周囲へ無理なく共有できる体調配慮メモ",
+    gasPrefix: "[気象ケアAI]",
+    systemInstruction:
+      "あなたは低気圧・寒暖差・花粉による体調ゆらぎに寄り添うセルフケアコーチです（強い症状や持病がある場合は医療機関へ相談するよう案内してください）。入力内容から、alert_level (high/medium/low)、alert_title（不調が出やすい時間帯と注意点）、alert_message（無理をせず乗り切るためのひと言）、items（朝・昼・夕方の負担軽減アクション3点）、checklist（水分・防寒・常備品チェック）、copyable_draft（必要時にチームへ丁寧に共有できる在宅・休憩相談メッセージ案）、suggested_tasks（前夜就寝・休憩リマインドタスク）を日本語で構造化してください。",
+  },
+  denki: {
+    id: "denki",
+    name: "電気代・光熱費ムダ発見＆プラン見直し AI",
+    category: "まちと地球の未来部門",
+    tagline: "毎月の電気・ガス明細メモから「急増の原因」と家族で無理なくできる節電アクションを特定",
+    subtitle:
+      "「先月より急に電気代が高い！」をスッキリ解明。Gemini 3.8 Flash が家電の使い方見直しと電力プラン確認チェックリストを自動作成します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 省エネ家計ナビ",
+    accentColor: "#16a34a",
+    accentSoft: "#f0fdf4",
+    inputLabel: "電気・ガス料金の推移、世帯人数、よく使う家電",
+    inputPlaceholder: "例: 2人暮らしで電気代が先月1.2万円から今月1.8万円に急増。エアコンと浴室乾燥機を毎日使用...",
+    sampleText:
+      "3人家族・2LDKマンション。今月の電気代が19,800円で先月より5,500円アップ。在宅ワークで日中エアコンをつけっぱなし、夜間に食洗機と洗濯乾燥機を回している。契約アンペアは40A。",
+    sampleLocation: "自宅マンション・電力プラン見直し",
+    showLocationInput: true,
+    submitLabel: "電気代急増の原因分析＆節電プランを作成",
+    section1Title: "1. 効果が大きい順に並んだ省エネアクション3選",
+    section2Title: "2. 電力プラン・契約アンペア見直しチェック",
+    section3Title: "3. 家族LINEに貼って協力しやすい節電ルールメモ",
+    gasPrefix: "[省エネAI]",
+    systemInstruction:
+      "あなたは我慢やストレスを強いることなく光熱費とCO2を削減する省エネアドバイザーです。入力された光熱費・家電利用状況から、alert_level (high/medium/low)、alert_title（最も電気代を押し上げている要因）、alert_message（無理なく続けられる削減見込みのポイント）、items（空調・乾燥機・待機電力など効果の高い改善策3点）、checklist（契約アンペア・時間帯別プラン・フィルター掃除チェック）、copyable_draft（家族で気持ちよく共有できるやさしい省エネ協力メモ）、suggested_tasks（来月検針日比較・フィルター掃除タスク）を日本語で構造化してください。",
+  },
+  gift: {
+    id: "gift",
+    name: "手土産・お祝いギフト失敗ゼロ相談 AI",
+    category: "暮らし・家族部門",
+    tagline: "相手の年代・家族構成・アレルギー・予算から「外さないギフト案＋のし・メッセージ文」を提案",
+    subtitle:
+      "「毎回何を持っていけばいいか迷う」「のしの表書きが分からない」を解決。Gemini 3.8 Flash がマナー込みで最短選定します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 贈りものコンシェルジュ",
+    accentColor: "#db2777",
+    accentSoft: "#fdf2f8",
+    inputLabel: "渡す相手・シーン・予算・避けたいもの（甘い物苦手など）",
+    inputPlaceholder: "例: 取引先への挨拶、予算3,000円、日持ちして個包装のものがいい...",
+    sampleText:
+      "義実家への年末挨拶の手土産。60代の両親で甘いものは少し控えめ、お茶や和食が好き。予算は4,000円前後で、駅ナカやデパ地下で買えて常温で持ち運べるものを探している。",
+    sampleLocation: "駅デパ地下・手土産購入前",
+    showLocationInput: true,
+    submitLabel: "外さないギフト3案＆のし・挨拶文を作成",
+    section1Title: "1. 相手に喜ばれる厳選ギフトジャンル3案",
+    section2Title: "2. 購入時ののし・紙袋・賞味期限チェック",
+    section3Title: "3. 渡すとき・メッセージカードに使える一言案",
+    gasPrefix: "[ギフトAI]",
+    systemInstruction:
+      "あなたは冠婚葬祭からビジネス手土産まで精通するギフトコンシェルジュです。相手属性・シーン・予算・NG条件から、alert_level (high/medium/low)、alert_title（マナー・持ち運び・日持ちの注意点）、alert_message（相手に気を遣わせない選び方のコツ）、items（具体的なギフト候補ジャンルと選定理由3点）、checklist（のし表書き・紙袋・常温/冷蔵・賞味期限チェック）、copyable_draft（添えるメッセージカードや渡す際のスマートな挨拶フレーズ）、suggested_tasks（購入予約・持参リマインドタスク）を日本語で構造化してください。",
+  },
+  shaken: {
+    id: "shaken",
+    name: "車検・自動車メンテ見積りチェック AI",
+    category: "暮らし・家族部門",
+    tagline: "車検見積りの専門用語を噛み砕き「必須整備」と「今回見送れる推奨整備」をわかりやすく仕分け",
+    subtitle:
+      "「言われるがまま高額になった」を防ぐカーメンテ相談役。Gemini 3.8 Flash が見積り項目の優先度とお店への確認質問を整理します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + カーライフ家計ガード",
+    accentColor: "#2563eb",
+    accentSoft: "#eff6ff",
+    inputLabel: "車検見積りの内容・車種年式・走行距離・気になっている項目",
+    inputPlaceholder: "例: 5年目のコンパクトカー、走行3.5万km。見積りが14万円でエアコン洗浄や添加剤が入っている...",
+    sampleText:
+      "初度登録から5年目のハイブリッド車、走行距離38,000km。ディーラー車検見積りが総額15.2万円。法定費用以外に「下回り防錆塗装 18,000円」「燃料添加剤 4,500円」「バッテリー交換 32,000円」「エアコンフィルター 6,000円」が入っている。",
+    sampleLocation: "車検見積り比較・整備工場相談前",
+    showLocationInput: true,
+    submitLabel: "必須 vs 任意項目を仕分け＆確認質問を作成",
+    section1Title: "1. 必須整備と今回相談できる項目の整理",
+    section2Title: "2. 相見積り・入庫前の確認チェックリスト",
+    section3Title: "3. 整備担当者へ角を立てず相談できる質問メモ",
+    gasPrefix: "[車検AI]",
+    systemInstruction:
+      "あなたは専門用語の多い車検見積りを一般ドライバーにわかりやすく解説するカーメンテアドバイザーです（保安基準や安全に関わる整備は必ず整備士の判断を尊重するよう案内してください）。見積り内容から、alert_level (high/medium/low)、alert_title（費用が大きく動く注目項目）、alert_message（安全を保ちつつ納得して選ぶためのポイント）、items（法定必須・安全優先・今回見送り検討の3区分整理）、checklist（交換履歴・バッテリー電圧測定値・代車/割引条件チェック）、copyable_draft（整備担当者へ丁寧に優先度や必要性を確認できる質問トークメモ）、suggested_tasks（車検満了日・相見積り予約タスク）を日本語で構造化してください。",
+  },
+  kakeibo: {
+    id: "kakeibo",
+    name: "固定費・カード明細スッキリ見直し AI",
+    category: "暮らし・家族部門",
+    tagline: "クレジットカード明細の気になる引き落としを棚卸しし、月5,000円〜の固定費削減プランを作成",
+    subtitle:
+      "家計簿が続かない人でも「明細のコピペだけ」で見直し完了。Gemini 3.8 Flash が通信費・保険・サブスクの優先見直し順を提案します。",
+    badgeText: "✦ Google Gemini 3.8 Flash + 固定費スリム化",
+    accentColor: "#059669",
+    accentSoft: "#ecfdf5",
+    inputLabel: "毎月の固定費・カード明細の気になる項目（カード番号等は伏せて入力）",
+    inputPlaceholder: "例: スマホ代8,500円、動画サブスク3つで3,800円、使ってないジム月8,000円...",
+    sampleText:
+      "毎月の引き落とし：大手キャリアスマホ 9,200円、光回線 5,800円、動画・音楽サブスク合計 4,200円、月1回しか行けていないジム 7,800円、よく分からないクラウド容量課金 400円。無理なく月1万円ほど浮かせたい。",
+    sampleLocation: "月末の固定費棚卸し",
+    showLocationInput: true,
+    submitLabel: "固定費の優先見直し順＆削減額試算を生成",
+    section1Title: "1. 満足度を落とさず効く固定費見直し3ステップ",
+    section2Title: "2. 解約・プラン変更前の違約金＆引き継ぎチェック",
+    section3Title: "3. 1か月で実行する家計スリム化宣言メモ",
+    gasPrefix: "[固定費AI]",
+    systemInstruction:
+      "あなたは日々の節約疲れを防ぎ、インパクトの大きい固定費からスマートに見直す家計アドバイザーです。入力された固定費メモから、alert_level (high/medium/low)、alert_title（今すぐ見直すと最も効果が大きい固定費）、alert_message（生活満足度を下げずに年間数万円浮かすコツ）、items（通信費・ジム/サブスク・プラン見直しの優先順位3点）、checklist（解約締日・MNP/メールアドレス引き継ぎ・データ移行チェック）、copyable_draft（今月中にやる固定費見直しアクション宣言メモ）、suggested_tasks（更新日前の解約・プラン変更カレンダー登録タスク）を日本語で構造化してください。",
   },
 };
