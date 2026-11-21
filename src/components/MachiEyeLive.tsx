@@ -26,6 +26,13 @@ export interface MachiEyeTask {
   memo: string;
 }
 
+export interface MachiEyeMultilingualNotice {
+  ja: string;
+  en: string;
+  zh: string;
+  ko: string;
+}
+
 export interface MachiEyeAnalysis {
   title: string;
   category: MachiEyeCategory;
@@ -38,6 +45,8 @@ export interface MachiEyeAnalysis {
   eco_disaster_impact: string;
   suggested_fix: string;
   recommended_action: string;
+  safe_detour_advice?: string;
+  multilingual_notices?: MachiEyeMultilingualNotice;
   report_draft: string;
   privacy_check: MachiEyePrivacyCheck;
   suggested_tasks: MachiEyeTask[];
@@ -62,6 +71,7 @@ export interface CommunitySafetyPin {
 
 interface ScenarioPreset {
   id: string;
+  mode: "hazard" | "disaster";
   badge: string;
   shortTitle: string;
   subtitle: string;
@@ -76,7 +86,7 @@ interface ScenarioPreset {
   initialAnalysis: MachiEyeAnalysis;
 }
 
-const STORAGE_KEY = "machieye_live_community_pins_v2";
+const STORAGE_KEY = "machieye_live_community_pins_v3";
 const ACCEPTED_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_IMAGE_DIM = 1600;
@@ -93,7 +103,8 @@ const SEVERITY_LIST: MachiEyeSeverityLevel[] = ["緊急", "注意", "改善提�
 const BUILTIN_SCENARIOS: ScenarioPreset[] = [
   {
     id: "tactile-block",
-    badge: "🦯 シナリオ1",
+    mode: "hazard",
+    badge: "🦯 日常点検1",
     shortTitle: "点字ブロック破損・障害物",
     subtitle: "視覚障がい導線の剥離と放置物リスク",
     category: "バリアフリー",
@@ -125,6 +136,14 @@ const BUILTIN_SCENARIOS: ScenarioPreset[] = [
         "破損した点字ブロック（JIS T 9251準拠・高視認性イエロー）の緊急張り替え補修、および誘導ブロック左右60cm以内の放置物撤去・駐輪禁止路面標示の設置を要望します。",
       recommended_action:
         "剥がれたブロック片で通行人がつまずかないよう周囲から見守るとともに、視覚障がいのある方が通行される際は声かけサポートを行ってください。",
+      safe_detour_advice:
+        "♿ バリアフリー迂回・安全アドバイス：破損した点字ブロックおよび放置自転車を避け、駅南口エレベーター横のフラットな屋根付き歩道（幅員3.5m・スロープ完備）へ迂回してください。",
+      multilingual_notices: {
+        ja: "【ちゅうい】横断歩道のまえの 点字ブロックが こわれています。車いす・ベビーカー・目の不自由なかたは、南口エレベーター横の フラットな通路を とおってください。",
+        en: "[CAUTION] Tactile paving ahead is damaged and blocked. Wheelchair, stroller, and visually impaired users: please use the step-free covered walkway next to the South Exit Elevator.",
+        zh: "【注意】前方人行横道盲道破损且有障碍物。轮椅、婴儿车及视障人士请绕行南口电梯旁的无障碍平坦通道。",
+        ko: "【주의】앞쪽 횡단보도 점자블록이 파손되어 있습니다. 휠체어·유모차·시각장애인분들은 남쪽 출구 엘리베이터 옆 평탄한 우회 통로를 이용해 주세요.",
+      },
       report_draft: [
         "【自治体通報・地域インフラ改善要望書】",
         "宛先: 都市整備部 道路維持課 ・ 福祉部 障がい福祉課 御中",
@@ -174,9 +193,10 @@ const BUILTIN_SCENARIOS: ScenarioPreset[] = [
   },
   {
     id: "flood-gutter",
-    badge: "🌧️ シナリオ2",
-    shortTitle: "冠水・側溝詰まりリスク",
-    subtitle: "雨水桝85%閉塞による内水氾濫とプラ流出",
+    mode: "disaster",
+    badge: "🌧️ 防災診断1",
+    shortTitle: "豪雨冠水・側溝詰まりリスク",
+    subtitle: "雨水桝85%閉塞による内水氾濫と高台迂回ルート",
     category: "防災・冠水",
     severityLevel: "緊急",
     locationText: "第一小学校 北門前の通学路（低地アンダーパス手前）",
@@ -207,6 +227,14 @@ const BUILTIN_SCENARIOS: ScenarioPreset[] = [
         "高圧洗浄車・吸引車による雨水桝の緊急浚渫（しゅんせつ）清掃、および落ち葉が流入しにくい細目ノンスリップ型グレーチング蓋への交換を要望します。",
       recommended_action:
         "増水時や大雨警報発令時は側溝周辺に近づかず、水没した歩道は迂回してください。無理な単独清掃は控え、行政出動または複数名での地域清掃を待ってください。",
+      safe_detour_advice:
+        "🌊 バリアフリー迂回・安全アドバイス：大雨・増水時は低地アンダーパス手前の歩道を避け、高台側の「さくら通り歩道（標高＋4.2m・段差なし）」を通って第一小学校・避難所へ向かってください。",
+      multilingual_notices: {
+        ja: "【大雨・冠水ちゅうい】この道は 大雨のときに 水がたまります。車いす・ベビーカーのかたは、高台側の「さくら通り」を とおってください。",
+        en: "[FLOOD RISK] Street drains ahead are clogged; road floods during heavy rain. Wheelchair & stroller users: please detour via the higher-ground Sakura Street sidewalk.",
+        zh: "【积水警告】前方排水沟堵塞，暴雨时易积水淹没台阶。轮椅及婴儿车使用者请绕行高地一侧的樱花大道人行道。",
+        ko: "【침수 주의】앞쪽 배수구가 막혀 호우 시 도로가 침수됩니다. 휠체어·유모차 이용자는 고지대인 사쿠라 거리 보도로 우회해 주세요.",
+      },
       report_draft: [
         "【自治体通報・地域インフラ改善要望書】",
         "宛先: 建設部 下水道河川管理課 ・ 防災危機管理課 御中",
@@ -256,7 +284,8 @@ const BUILTIN_SCENARIOS: ScenarioPreset[] = [
   },
   {
     id: "stroller-step",
-    badge: "👶 シナリオ3",
+    mode: "hazard",
+    badge: "👶 日常点検2",
     shortTitle: "ベビーカー段差＆スロープ不足",
     subtitle: "縁石4.5cm段差・急勾配のバリアフリー改善",
     category: "バリアフリー",
@@ -288,6 +317,14 @@ const BUILTIN_SCENARIOS: ScenarioPreset[] = [
         "道路移動等円滑化基準に基づき、歩道切り下げ部の段差を2cm以下（すりつけ勾配5%以下）へ改修し、滑り止め舗装および視覚障がい者誘導用ブロックの連続配置を要望します。",
       recommended_action:
         "段差乗り越え時はベビーカーや車椅子のキャスターを斜めに進入させず、介助者がいる場合は前輪を軽く浮かせて慎重に通行してください。",
+      safe_detour_advice:
+        "👶 バリアフリー迂回・安全アドバイス：正面横断歩道の4.5cm段差を避け、西側30mの「図書館正面ロータリー緩勾配スロープ（段差0cm・手すり付き・日陰ベンチあり）」から安全に入館できます。",
+      multilingual_notices: {
+        ja: "【段差ちゅうい】ここの歩道は 4.5cmの段差と 急な坂があります。車いす・ベビーカーのかたは、30mひだりの「図書館正面スロープ」を つかってください。",
+        en: "[STEP HAZARD] High 4.5cm curb and steep slope ahead. Wheelchair and stroller users: please use the step-free gentle ramp 30m west at the Library Main Entrance.",
+        zh: "【台阶注意】此处人行道有4.5厘米路缘台阶且坡度较陡。轮椅及婴儿车请走西侧30米图书馆正门平缓坡道。",
+        ko: "【단차 주의】이곳 보도에 4.5cm 턱과 급경사가 있습니다. 휠체어·유모차 이용자는 서쪽 30m 도서관 정문 완만한 경사로를 이용해 주세요.",
+      },
       report_draft: [
         "【自治体通報・地域インフラ改善要望書】",
         "宛先: 都市整備部 バリアフリー推進課 ・ 道路建設課 御中",
@@ -337,7 +374,8 @@ const BUILTIN_SCENARIOS: ScenarioPreset[] = [
   },
   {
     id: "school-blind-curve",
-    badge: "🚸 シナリオ4",
+    mode: "hazard",
+    badge: "🚸 日常点検3",
     shortTitle: "通学路の夜道・死角カーブ",
     subtitle: "見通し不良L字路・街路灯球切れ・白線摩耗",
     category: "通学路安全",
@@ -370,6 +408,14 @@ const BUILTIN_SCENARIOS: ScenarioPreset[] = [
         "高輝度LED防犯灯への更新と遮蔽枝の剪定、広角2面カーブミラーの新設、および通学路グリーンベルト（カラー舗装）と「減速・学童注意」路面標示の再塗装を要望します。",
       recommended_action:
         "夕暮れ・夜間通行時は反射材やライトを必ず点灯し、カーブ手前で一時停止して対向車・自転車の接近を確認してください。",
+      safe_detour_advice:
+        "🚸 バリアフリー迂回・安全アドバイス：夜間・夕暮れ時や雨天時は見通し不良のL字路を避け、LED照明とガードレール付歩道が整備された「緑が丘本通り（東側1本隣）」へ迂回してください。",
+      multilingual_notices: {
+        ja: "【見とおし注意】このカーブは 車や自転車が 見えにくく、夜は暗くなります。夕方や夜は、となりの明るい「緑が丘本通り」を とおってください。",
+        en: "[BLIND CURVE] Sharp corner with limited visibility and dim lighting. At night or with strollers/wheelchairs, please use the well-lit Midorigaoka Main Street one block east.",
+        zh: "【盲区注意】前方急转弯视线受阻且夜间照明不足。傍晚及夜间请绕行东侧相邻、配有护栏和明亮路灯的绿丘主街。",
+        ko: "【사각지대 주의】이 커브길은 시야가 좁고 야간에 어둡습니다. 저녁·야간에는 동쪽 옆길인 밝은 미도리가오카 본거리를 이용해 주세요.",
+      },
       report_draft: [
         "【自治体通報・地域インフラ改善要望書】",
         "宛先: 教育委員会 学校安全課 ・ 建設部 交通安全対策課 御中",
@@ -417,6 +463,188 @@ const BUILTIN_SCENARIOS: ScenarioPreset[] = [
       ],
     },
   },
+  {
+    id: "typhoon-outage",
+    mode: "disaster",
+    badge: "🛟 防災診断2",
+    shortTitle: "地震・台風・停電断水＆危険塀回避",
+    subtitle: "老朽ブロック塀倒壊リスクと非常用電源・給水避難所",
+    category: "防災・冠水",
+    severityLevel: "緊急",
+    locationText: "中央地区 指定避難所（第一小学校）周辺・旧道ブロック塀沿い",
+    latitude: "35.683450",
+    longitude: "139.768120",
+    mapX: 60,
+    mapY: 36,
+    sourceText:
+      "避難所へ向かう旧道沿いにひび割れて傾いた老朽ブロック塀があり、地震や大型台風時に倒壊して車椅子・高齢者の避難路を塞ぐ危険があります。また長期停電・断水時に備えた非常用電源・給水拠点・マンホールトイレへのバリアフリー誘導が必要です。",
+    initialAnalysis: {
+      title: "台風・地震時の老朽ブロック塀倒壊・停電断水リスクおよび福祉避難ルート点検",
+      category: "防災・冠水",
+      severity: 5,
+      severity_level: "緊急",
+      hazard_score: 94,
+      department: "防災危機管理課 ・ 都市整備部 建築指導課 ・ 水道局",
+      affected_groups: [
+        "在宅医療・電源依存世帯",
+        "高齢者・要配慮者",
+        "乳幼児・子育て世帯",
+        "外国人住民",
+      ],
+      barrier_free_assessment:
+        "避難所へ続く旧道沿いに傾いた老朽ブロック塀と狭隘区間があり、地震・暴風時に車椅子やシルバーカーの避難導線が寸断される恐れがあります。",
+      eco_disaster_impact:
+        "台風・大規模地震に伴う停電・断水発生時、エレベーター停止や給水拠点までの移動困難、ブロック塀倒壊による二次被害リスクが極めて高い状態です。",
+      suggested_fix:
+        "危険ブロック塀の除却助成・ネット固定、指定避難所（第一小学校・中央公民館）への非常用電源・マンホールトイレ・給水拠点案内標識の多言語設置を要望します。",
+      recommended_action:
+        "暴風・地震発生前にモバイルバッテリー充電・飲料水（1人1日3L×3日分）・常備薬・携帯トイレを確保し、ブロック塀や増水河川から離れた広域避難路を選択してください。",
+      safe_detour_advice:
+        "🛟 バリアフリー迂回・防災アドバイス：地震・台風時は老朽ブロック塀のある狭い路地を避け、電線地中化・スロープ完備の「中央大通り→第一小学校体育館（非常用電源・多目的トイレ・給水栓あり）」ルートで早期避難してください。",
+      multilingual_notices: {
+        ja: "【防災・ひなん案内】台風や地震のときは、ブロック塀のちかくを とおらないでください。車いす・お年寄り・外国のかたは「第一小学校（非常用電源・お水あり）」へ ひなんしてください。",
+        en: "[DISASTER EVACUATION] Stay away from old concrete walls during earthquakes or typhoons. Step-free shelter with emergency power & water is available at Dai-ichi Elementary School.",
+        zh: "【防灾避难指南】台风或地震时请远离老旧围墙。轮椅使用者及居民请沿中央大道前往“第一小学避难所”（配备应急电源、饮用水及无障碍卫生间）。",
+        ko: "【방재·대피 안내】태풍·지진 시 오래된 블록담 근처를 피해 주세요. 휠체어 이용자 및 주민분들은 비상전원과 급수대가 있는 ‘제1초등학교 대피소’로 이동해 주세요.",
+      },
+      report_draft: [
+        "【自治体通報・地域インフラ改善要望書】",
+        "宛先: 防災危機管理課 ・ 都市整備部 建築指導課 ・ 水道局 御中",
+        "件名: 【緊急・防災・冠水】台風・地震時の老朽ブロック塀倒壊・停電断水リスクおよび福祉避難ルート点検",
+        "",
+        "1. 発生場所・位置情報",
+        "・場所・目印: 中央地区 指定避難所（第一小学校）周辺・旧道ブロック塀沿い",
+        "・GPS座標: 北緯 35.683450 / 東経 139.768120",
+        "・AI ハザードスコア: 94 / 100（緊急度区分: 緊急）",
+        "",
+        "2. 影響を受ける住民・通行者",
+        "・対象グループ: 在宅医療・電源依存世帯、高齢者・要配慮者、乳幼児・子育て世帯、外国人住民",
+        "",
+        "3. 現場の状況・バリアフリー／防災評価",
+        "・バリアフリー・通行影響: 旧道沿いに傾いた老朽ブロック塀があり、地震・暴風時に車椅子や高齢者の避難導線が寸断される恐れがあります。",
+        "・防災・環境リスク: 停電・断水時の給水拠点アクセス困難およびブロック塀倒壊による二次被害リスクがあります。",
+        "",
+        "4. 要望する改善措置・修繕内容",
+        "・危険ブロック塀の安全対策および指定避難所への非常用電源・給水拠点の多言語バリアフリー誘導標識設置を要望します。",
+      ].join("\n"),
+      privacy_check: {
+        has_face: false,
+        has_license_plate: false,
+        has_nameplate: false,
+        warning_message:
+          "顔・ナンバープレート・表札の映り込みは検出されませんでした。コミュニティ安全マップへそのまま公開可能です。",
+      },
+      suggested_tasks: [
+        {
+          title: "停電・断水時の非常用電源・給水ステーション位置の家族共有",
+          priority: "high",
+          memo: "モバイルバッテリー満充電・水3日分・携帯トイレ・常備薬お薬手帳を確認",
+        },
+        {
+          title: "車椅子・ベビーカーで通れるブロック塀回避ルートの実地確認",
+          priority: "high",
+          memo: "夜間停電時でも通行可能な幅員3m以上の幹線歩道をマップに固定",
+        },
+      ],
+      detected_tags: [
+        "#台風停電断水対策",
+        "#危険ブロック塀回避",
+        "#福祉避難所ルート",
+        "#多言語防災案内",
+      ],
+    },
+  },
+  {
+    id: "pet-heatwave-evac",
+    mode: "disaster",
+    badge: "🐾 防災診断3",
+    shortTitle: "猛暑日陰ルート＆ペット同行避難",
+    subtitle: "照り返し50℃回避クールシェア＆ペット避難区画",
+    category: "防災・冠水",
+    severityLevel: "注意",
+    locationText: "ひまわり公園〜中央図書館 クールシェア＆ペット同行避難導線",
+    latitude: "35.679510",
+    longitude: "139.765120",
+    mapX: 48,
+    mapY: 62,
+    sourceText:
+      "駅から避難所・公園へ至る南側歩道に街路樹や日よけがなく、夏季の路面温度が50℃近くに達するため、ベビーカー・車椅子・高齢者の熱中症リスクや、災害時のペット同行避難スペース・給水スポットの案内不足が課題となっています。",
+    initialAnalysis: {
+      title: "猛暑・災害時の日陰不足ルートおよびペット同行避難・給水クールスポット整備要望",
+      category: "防災・冠水",
+      severity: 4,
+      severity_level: "注意",
+      hazard_score: 86,
+      department: "環境部 気候変動対策課 ・ 防災危機管理課 ・ 動物愛護センター",
+      affected_groups: [
+        "高齢者・乳幼児（ベビーカー）",
+        "ペット飼育世帯（同行避難者）",
+        "屋外歩行者・車椅子ユーザー",
+        "訪日外国人旅行者",
+      ],
+      barrier_free_assessment:
+        "南側歩道に街路樹や日よけがなく、夏季の路面温度が50℃近くに達するため、地面に近いベビーカー・車椅子・ペットの熱中症リスクが深刻です。",
+      eco_disaster_impact:
+        "猛暑日の熱中症救急搬送リスクに加え、災害時にペット同行避難スペースや給水・冷房シェルター案内が不足していると避難遅れや車中泊事故につながります。",
+      suggested_fix:
+        "遮熱性舗装・街路樹グリーンインフラおよびミスト付クールシェアベンチの整備、ならびに避難所における「ペット同行避難専用区画・給水スポット」の明示を要望します。",
+      recommended_action:
+        "猛暑時間帯は直射日光下のアスファルト通行を避けて北側の日陰歩道・公共クールシェア施設（図書館等）を経由し、ペット用飲料水・ケージ・迷子札を常備してください。",
+      safe_detour_advice:
+        "🌳 バリアフリー迂回・猛暑＆ペット避難アドバイス：直射日光の照り返しが強い南側大通りを避け、並木日陰とミスト給水所がある「ひまわり公園北側遊歩道→市立図書館クールシェアロビー（ペット同行避難受付は東側屋根付きテラス）」へ迂回してください。",
+      multilingual_notices: {
+        ja: "【熱中症・ペット避難案内】この道は 日かげが 少なく暑くなります。お年寄り・ベビーカー・ペット連れのかたは、木かげのある「ひまわり公園ルート」と「図書館クールスポット」を つかってください。",
+        en: "[HEATWAVE & PET SHELTER] High pavement heat ahead. Elderly, stroller users, and pet owners: please take the shaded Himawari Park path. Pet-friendly evacuation area is at the East Covered Terrace.",
+        zh: "【防暑及宠物避难指南】前方路段缺乏遮阴且地表高温。老人、婴儿车及携宠居民请走树荫凉爽的向日葵公园步道，宠物同行避难区设在东侧有顶露台。",
+        ko: "【폭염·반려동물 대피 안내】이 길은 그늘이 적어 노면 온도가 높습니다. 노약자·유모차·반려동물 동반 시 그늘진 히마와리 공원 산책로와 도서관 쿨링쉼터(동쪽 테라스 반려동물 구역)를 이용해 주세요.",
+      },
+      report_draft: [
+        "【自治体通報・地域インフラ改善要望書】",
+        "宛先: 環境部 気候変動対策課 ・ 防災危機管理課 ・ 動物愛護センター 御中",
+        "件名: 【注意・防災・冠水】猛暑・災害時の日陰不足ルートおよびペット同行避難・給水クールスポット整備要望",
+        "",
+        "1. 発生場所・位置情報",
+        "・場所・目印: ひまわり公園〜中央図書館 クールシェア＆ペット同行避難導線",
+        "・GPS座標: 北緯 35.679510 / 東経 139.765120",
+        "・AI ハザードスコア: 86 / 100（緊急度区分: 注意）",
+        "",
+        "2. 影響を受ける住民・通行者",
+        "・対象グループ: 高齢者・乳幼児（ベビーカー）、ペット飼育世帯（同行避難者）、車椅子ユーザー、訪日外国人",
+        "",
+        "3. 現場の状況・バリアフリー／防災評価",
+        "・バリアフリー・通行影響: 日陰不足により路面温度が上昇し、地面に近いベビーカー・車椅子・ペットの通行危険が高まっています。",
+        "・防災・環境リスク: 災害時のペット同行避難区画および給水クールスポット案内が必要です。",
+        "",
+        "4. 要望する改善措置・修繕内容",
+        "・並木日陰ルート・ミスト給水ベンチの整備および避難所でのペット同行避難専用区画の明示を要望します。",
+      ].join("\n"),
+      privacy_check: {
+        has_face: false,
+        has_license_plate: false,
+        has_nameplate: false,
+        warning_message:
+          "顔・ナンバープレート・表札の映り込みは検出されませんでした。コミュニティ安全マップへそのまま公開可能です。",
+      },
+      suggested_tasks: [
+        {
+          title: "ペット同行避難バッグ（水・フード5日分・ケージ・ワクチン証）の点検",
+          priority: "high",
+          memo: "避難所東側テラスのペット専用受付ルールを家族で共有",
+        },
+        {
+          title: "ベビーカー・車椅子向け日陰ルート＆給水クールスポットのマップ登録",
+          priority: "medium",
+          memo: "MachiCool日陰導線として地域マップにピン共有",
+        },
+      ],
+      detected_tags: [
+        "#猛暑クールシェアルート",
+        "#ペット同行避難対応",
+        "#ベビーカー照り返し対策",
+        "#グリーンインフラ要望",
+      ],
+    },
+  },
 ];
 
 const EXTRA_SEED_PINS: CommunitySafetyPin[] = [
@@ -454,6 +682,14 @@ const EXTRA_SEED_PINS: CommunitySafetyPin[] = [
         "常温合材による即時仮復旧（穴埋め）および路盤調査のうえ加熱アスファルト合材による本復旧舗装を要望します。",
       recommended_action:
         "夜間や雨天時は水たまりの下に陥没が隠れているため、端から1m以上離れて横断してください。",
+      safe_detour_advice:
+        "♿ バリアフリー迂回・安全アドバイス：交差点東口の水たまり・陥没穴を避け、アーケード屋根付きの西口フラット横断歩道から安全に商店街へ入れます。",
+      multilingual_notices: {
+        ja: "【陥没ちゅうい】歩道の境目に 穴（深さ5cm）があります。車いす・シルバーカーのかたは、アーケード西口のフラットな横断歩道を とおってください。",
+        en: "[POTHOLE CAUTION] 5cm deep asphalt pothole at the curb edge. Wheelchair and stroller users: please cross via the covered West Arcade crosswalk.",
+        zh: "【路面凹陷注意】人行道交界处有5厘米深坑洞。轮椅及推车使用者请绕行西口有顶拱廊平坦人行横道。",
+        ko: "【노면 함몰 주의】보도 경계에 깊이 5cm 포트홀이 있습니다. 휠체어·유모차 이용자는 아케이드 서쪽 평탄한 횡단보도를 이용해 주세요.",
+      },
       report_draft: [
         "【自治体通報・地域インフラ改善要望書】",
         "宛先: 建設部 道路維持課 御中",
@@ -841,6 +1077,13 @@ export default function MachiEyeLive() {
     "standard" | "urgent" | "barrierfree"
   >("standard");
   const [copiedReport, setCopiedReport] = useState<boolean>(false);
+  const [scenarioModeFilter, setScenarioModeFilter] = useState<
+    "all" | "hazard" | "disaster"
+  >("all");
+  const [multilingualLang, setMultilingualLang] = useState<
+    "all" | "ja" | "en" | "zh" | "ko"
+  >("all");
+  const [copiedMultilingual, setCopiedMultilingual] = useState<boolean>(false);
   const [gasSyncing, setGasSyncing] = useState<boolean>(false);
   const [gasMessage, setGasMessage] = useState<string>("");
   const [gasError, setGasError] = useState<string>("");
@@ -1415,7 +1658,21 @@ export default function MachiEyeLive() {
                 background: "rgba(30, 41, 59, 0.7)",
               }}
             >
-              📘 GapTutor（はたらく・まなぶ）
+              🏠 ホーム
+            </Link>
+            <Link
+              href="/codemistake"
+              style={{
+                color: "#cbd5e1",
+                textDecoration: "none",
+                fontSize: "0.84rem",
+                fontWeight: 600,
+                padding: "6px 12px",
+                borderRadius: 8,
+                background: "rgba(30, 41, 59, 0.7)",
+              }}
+            >
+              🪞 CodePitfall（開発・学習）
             </Link>
             <Link
               href="/otayori"
@@ -1429,10 +1686,10 @@ export default function MachiEyeLive() {
                 background: "rgba(30, 41, 59, 0.7)",
               }}
             >
-              📮 おたよりバトン（暮らしと家族）
+              🍊 おたよりバトン（暮らしと家族）
             </Link>
             <Link
-              href="/guardian"
+              href="/gitbridge"
               style={{
                 color: "#cbd5e1",
                 textDecoration: "none",
@@ -1443,7 +1700,7 @@ export default function MachiEyeLive() {
                 background: "rgba(30, 41, 59, 0.7)",
               }}
             >
-              🛡️ CodeGuardian（開発支援）
+              🌉 GitBridge
             </Link>
           </div>
           <span
@@ -1457,7 +1714,7 @@ export default function MachiEyeLive() {
               borderRadius: 999,
             }}
           >
-            🌏 まちと地球の未来部門 フラッグシップ
+            🌏 まちと地球の未来部門 フラッグシップ（日常危険チェック × 防災・災害対策）
           </span>
         </nav>
 
@@ -1534,7 +1791,7 @@ export default function MachiEyeLive() {
                     color: "#94a3b8",
                   }}
                 >
-                  街の危険箇所・バリアフリー課題を写真1枚でAI検診。地域安全レーダーマップと自治体提出レポートを1クリック生成
+                  日常の「街の危険・バリアフリー課題」から「防災・停電断水・ペット同行避難・猛暑対策」まで写真1枚でAI診断。迂回アドバイス＆4言語注意カード＆自治体通報書を1クリック生成
                 </p>
               </div>
             </div>
@@ -1641,11 +1898,42 @@ export default function MachiEyeLive() {
                   color: "#cbd5e1",
                 }}
               >
-                ⚡ 審査員向け1クリック実証シナリオ（クリックで模擬カメラ画像＋現場データを即時解析＆マップ選択）:
+                ⚡ 1クリック実証シナリオ切替（日常の危険チェック ＆ 防災・災害対策診断）:
               </span>
-              <span style={{ fontSize: "0.76rem", color: "#94a3b8" }}>
-                Gemini Vision API + Deterministic Civic Engine デュアル対応
-              </span>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {(
+                  [
+                    { id: "all", label: "🌐 すべて表示 (6)" },
+                    { id: "hazard", label: "🚧 街の危険チェック（日常バリアフリー・夜道）" },
+                    { id: "disaster", label: "🛟 防災・災害対策診断（豪雨・停電断水・ペット避難）" },
+                  ] as const
+                ).map((m) => {
+                  const active = scenarioModeFilter === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setScenarioModeFilter(m.id)}
+                      style={{
+                        padding: "5px 11px",
+                        borderRadius: 999,
+                        border: active
+                          ? "1.5px solid #38bdf8"
+                          : "1px solid rgba(148, 163, 184, 0.3)",
+                        background: active
+                          ? "rgba(14, 165, 233, 0.25)"
+                          : "rgba(15, 23, 42, 0.7)",
+                        color: active ? "#7dd3fc" : "#cbd5e1",
+                        fontSize: "0.75rem",
+                        fontWeight: 800,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {m.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             <div
               style={{
@@ -1654,7 +1942,10 @@ export default function MachiEyeLive() {
                 gap: 10,
               }}
             >
-              {BUILTIN_SCENARIOS.map((sc) => {
+              {BUILTIN_SCENARIOS.filter(
+                (sc) =>
+                  scenarioModeFilter === "all" || sc.mode === scenarioModeFilter
+              ).map((sc) => {
                 const isSelected = activeScenarioId === sc.id;
                 const sevStyle = severityColor(sc.severityLevel);
                 return (
@@ -3256,6 +3547,173 @@ export default function MachiEyeLive() {
                     {selectedPin.analysis.suggested_fix}
                   </p>
                 </div>
+
+                {/* Synthesized BarrierFree & MachiCool & Disaster: Safe Detour & Evacuation Advice */}
+                <div
+                  style={{
+                    padding: "12px 14px",
+                    borderRadius: 12,
+                    background: "rgba(14, 165, 233, 0.14)",
+                    border: "1.5px solid rgba(56, 189, 248, 0.45)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "0.78rem",
+                      fontWeight: 800,
+                      color: "#38bdf8",
+                      marginBottom: 4,
+                    }}
+                  >
+                    ♿ バリアフリー迂回・日陰・防災安全アドバイス（車椅子・ベビーカー・高齢者向け）
+                  </div>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: "0.85rem",
+                      fontWeight: 700,
+                      color: "#f0f9ff",
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {selectedPin.analysis.safe_detour_advice ||
+                      selectedPin.analysis.recommended_action}
+                  </p>
+                </div>
+
+                {/* Synthesized Inbound: 1-Click Multilingual Safety & Detour Notice Card (JA / EN / ZH / KO) */}
+                {(() => {
+                  const notices = selectedPin.analysis.multilingual_notices ?? {
+                    ja: `【やさしい日本語】「${selectedPin.analysis.title}」に注意してください。車いす・ベビーカーのかたは安全なルートへ迂回してください。`,
+                    en: `[SAFETY NOTICE] Caution: ${selectedPin.analysis.title}. Wheelchair and stroller users: please take a step-free safe detour.`,
+                    zh: `【安全提示】注意：${selectedPin.analysis.title}。轮椅及婴儿车使用者请绕行平坦安全的无障碍通道。`,
+                    ko: `【안전 안내】주의: ${selectedPin.analysis.title}. 휠체어·유모차 이용자는 안전한 우회로를 이용해 주세요.`,
+                  };
+                  const cardText =
+                    multilingualLang === "all"
+                      ? [
+                          `🇯🇵 [やさしい日本語] ${notices.ja}`,
+                          `🇺🇸 [English] ${notices.en}`,
+                          `🇨🇳 [中文] ${notices.zh}`,
+                          `🇰🇷 [한국어] ${notices.ko}`,
+                        ].join("\n")
+                      : notices[multilingualLang];
+
+                  return (
+                    <div
+                      style={{
+                        padding: "13px 15px",
+                        borderRadius: 12,
+                        background: "rgba(30, 41, 59, 0.85)",
+                        border: "1px solid rgba(168, 85, 247, 0.45)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 8,
+                          marginBottom: 8,
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "0.78rem",
+                            fontWeight: 800,
+                            color: "#e9d5ff",
+                          }}
+                        >
+                          🌐 多言語あんしん注意カード（日 / 英 / 中 / 韓 1クリック切替＆コピー）
+                        </div>
+                        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                          {(
+                            [
+                              { id: "all", label: "4言語すべて" },
+                              { id: "ja", label: "🇯🇵 やさしい日本語" },
+                              { id: "en", label: "🇺🇸 EN" },
+                              { id: "zh", label: "🇨🇳 中文" },
+                              { id: "ko", label: "🇰🇷 한국어" },
+                            ] as const
+                          ).map((lang) => (
+                            <button
+                              key={lang.id}
+                              type="button"
+                              onClick={() => setMultilingualLang(lang.id)}
+                              style={{
+                                padding: "3px 9px",
+                                borderRadius: 999,
+                                border:
+                                  multilingualLang === lang.id
+                                    ? "1px solid #c084fc"
+                                    : "1px solid rgba(148, 163, 184, 0.3)",
+                                background:
+                                  multilingualLang === lang.id
+                                    ? "rgba(168, 85, 247, 0.28)"
+                                    : "rgba(15, 23, 42, 0.75)",
+                                color:
+                                  multilingualLang === lang.id
+                                    ? "#f3e8ff"
+                                    : "#cbd5e1",
+                                fontSize: "0.72rem",
+                                fontWeight: 700,
+                                cursor: "pointer",
+                              }}
+                            >
+                              {lang.label}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(cardText);
+                                setCopiedMultilingual(true);
+                                setTimeout(
+                                  () => setCopiedMultilingual(false),
+                                  2500
+                                );
+                              } catch {
+                                // ignore
+                              }
+                            }}
+                            style={{
+                              padding: "3px 10px",
+                              borderRadius: 7,
+                              border: "1px solid rgba(52, 211, 153, 0.45)",
+                              background: copiedMultilingual
+                                ? "rgba(16, 185, 129, 0.3)"
+                                : "rgba(16, 185, 129, 0.16)",
+                              color: "#6ee7b7",
+                              fontSize: "0.72rem",
+                              fontWeight: 800,
+                              cursor: "pointer",
+                            }}
+                          >
+                            {copiedMultilingual ? "✓ コピー済" : "📋 注意文をコピー"}
+                          </button>
+                        </div>
+                      </div>
+                      <pre
+                        style={{
+                          margin: 0,
+                          whiteSpace: "pre-wrap",
+                          fontFamily: "inherit",
+                          fontSize: "0.8rem",
+                          lineHeight: 1.55,
+                          color: "#f8fafc",
+                          background: "rgba(2, 6, 23, 0.65)",
+                          padding: "9px 11px",
+                          borderRadius: 8,
+                          border: "1px solid rgba(148, 163, 184, 0.2)",
+                        }}
+                      >
+                        {cardText}
+                      </pre>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Privacy Guard Check */}

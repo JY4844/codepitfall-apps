@@ -281,6 +281,8 @@ export default function CodePitfallMirror() {
 
   const [copiedPrompt, setCopiedPrompt] = useState<boolean>(false);
   const [copiedCmd, setCopiedCmd] = useState<boolean>(false);
+  const [copiedSoftQuestion, setCopiedSoftQuestion] = useState<boolean>(false);
+  const [copiedReadmeMemo, setCopiedReadmeMemo] = useState<boolean>(false);
   const [showPromptPreview, setShowPromptPreview] = useState<boolean>(false);
   const [pasteStatus, setPasteStatus] = useState<string>("");
   const [dnaStatus, setDnaStatus] = useState<string>("");
@@ -408,6 +410,65 @@ export default function CodePitfallMirror() {
       await navigator.clipboard.writeText(cmd);
       setCopiedCmd(true);
       setTimeout(() => setCopiedCmd(false), 2500);
+    } catch {
+      // Ignore
+    }
+  };
+
+  // 1-Click Polite Slack/GitHub Question for Team / Senior (SoftMail synthesis)
+  const handleCopySoftQuestion = async () => {
+    if (!result) return;
+    const firstErrorLine = (errorLog.split("\n")[0] || "").trim();
+    const triedSteps = result.fixSteps
+      .map((s) => `・[${s.where}] ${s.instruction}`)
+      .join("\n");
+    const msg = [
+      "お疲れ様です！開発中にお手すきの際にご教示いただきたい点があります🙇‍♂️",
+      "",
+      `■ 発生している事象（${taskType}）`,
+      `\`${firstErrorLine || "エラー発生"}\``,
+      "",
+      "■ 自分で確認・試したこと",
+      `・原因の仮説：${result.quickCause}`,
+      triedSteps,
+      "",
+      "上記を確認したのですが、認識違いや他に確認すべき箇所があればアドバイスいただけますと幸いです。よろしくお願いいたします！",
+    ].join("\n");
+    try {
+      await navigator.clipboard.writeText(msg);
+      setCopiedSoftQuestion(true);
+      setDnaStatus("💬 チーム・先輩へ角の立たない質問文（Slack / GitHub Issue用）をコピーしました！");
+      setTimeout(() => {
+        setCopiedSoftQuestion(false);
+        setDnaStatus("");
+      }, 3000);
+    } catch {
+      // Ignore
+    }
+  };
+
+  // 1-Click 3-Line README Troubleshooting Note (Hikitsugi synthesis)
+  const handleCopyReadmeMemo = async () => {
+    if (!result) return;
+    const firstErrorLine = (errorLog.split("\n")[0] || "").trim();
+    const mainFix = result.fixSteps[0]?.instruction || result.quickCause;
+    const cmdInfo = result.terminalCommand
+      ? `（コマンド: \`${result.terminalCommand}\`）`
+      : "";
+    const memo = [
+      `### 🛠 トラブルシューティング追記（${result.category} / ${taskType}）`,
+      `- **症状**: \`${firstErrorLine || "エラー発生"}\``,
+      `- **原因**: ${result.quickCause}`,
+      `- **解決手順**: ${mainFix}${cmdInfo}`,
+    ].join("\n");
+    try {
+      await navigator.clipboard.writeText(memo);
+      setCopiedReadmeMemo(true);
+      setDnaStatus("📖 チーム引き継ぎ・README 追記用3行トラブルシューティングメモをコピーしました！");
+      setTimeout(() => {
+        setCopiedReadmeMemo(false);
+        setDnaStatus("");
+      }, 3000);
     } catch {
       // Ignore
     }
@@ -1301,6 +1362,58 @@ export default function CodePitfallMirror() {
                 </button>
               </div>
 
+              {/* Synthesized Team Collaboration 1-Click Copy Buttons (SoftMail + Hikitsugi) */}
+              <div
+                style={{
+                  marginTop: 10,
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 10,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={handleCopySoftQuestion}
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: 9,
+                    border: copiedSoftQuestion
+                      ? "1px solid #86efac"
+                      : "1px solid #cbd5e1",
+                    background: copiedSoftQuestion ? "#f0fdf4" : "#f8fafc",
+                    color: copiedSoftQuestion ? "#166534" : "#334155",
+                    fontSize: 12.5,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  {copiedSoftQuestion
+                    ? "✓ 質問文をコピー済（Slack / GitHub に貼れます）"
+                    : "💬 チーム・先輩へ角の立たない質問文をコピー"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCopyReadmeMemo}
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: 9,
+                    border: copiedReadmeMemo
+                      ? "1px solid #86efac"
+                      : "1px solid #cbd5e1",
+                    background: copiedReadmeMemo ? "#f0fdf4" : "#f8fafc",
+                    color: copiedReadmeMemo ? "#166534" : "#334155",
+                    fontSize: 12.5,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  {copiedReadmeMemo
+                    ? "✓ README追記メモをコピー済"
+                    : "📖 チーム引き継ぎ・README 追記メモをコピー"}
+                </button>
+              </div>
+
               {showPromptPreview && (
                 <pre
                   style={{
@@ -1707,7 +1820,7 @@ export default function CodePitfallMirror() {
             ログイン不要・データはお使いのブラウザに保存 • Apache-2.0 Open Source
           </div>
           <a
-            href="https://github.com/kotae-lab/google-ai-challenge-2026/issues/new?title=%5BCodePitfall%5D+%E6%84%9F%E6%83%B3%E3%83%BB%E6%94%B9%E5%96%84%E8%A6%81%E6%9C%9B"
+            href="https://github.com/JY4844/google-ai-challenge-2026/issues/new?title=%5BCodePitfall%5D+%E6%84%9F%E6%83%B3%E3%83%BB%E6%94%B9%E5%96%84%E8%A6%81%E6%9C%9B"
             target="_blank"
             rel="noopener noreferrer"
             style={{

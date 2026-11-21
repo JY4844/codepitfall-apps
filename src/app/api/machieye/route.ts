@@ -43,6 +43,13 @@ export interface MachiEyeTask {
   memo: string;
 }
 
+export interface MachiEyeMultilingualNotice {
+  ja: string;
+  en: string;
+  zh: string;
+  ko: string;
+}
+
 export interface MachiEyeAnalysis {
   title: string;
   category: MachiEyeCategory;
@@ -55,6 +62,8 @@ export interface MachiEyeAnalysis {
   eco_disaster_impact: string;
   suggested_fix: string;
   recommended_action: string;
+  safe_detour_advice?: string;
+  multilingual_notices?: MachiEyeMultilingualNotice;
   report_draft: string;
   privacy_check: MachiEyePrivacyCheck;
   suggested_tasks: MachiEyeTask[];
@@ -94,6 +103,17 @@ const RESPONSE_SCHEMA = {
     eco_disaster_impact: { type: "STRING" },
     suggested_fix: { type: "STRING" },
     recommended_action: { type: "STRING" },
+    safe_detour_advice: { type: "STRING" },
+    multilingual_notices: {
+      type: "OBJECT",
+      properties: {
+        ja: { type: "STRING" },
+        en: { type: "STRING" },
+        zh: { type: "STRING" },
+        ko: { type: "STRING" },
+      },
+      required: ["ja", "en", "zh", "ko"],
+    },
     report_draft: { type: "STRING" },
     privacy_check: {
       type: "OBJECT",
@@ -272,6 +292,8 @@ function buildPrompt(
     "- eco_disaster_impact: 放置した場合の防災・浸水・事故・環境上の具体的リスク",
     "- suggested_fix: 自治体に対する具体的な修繕・改善提案（工法や対策案を含む）",
     "- recommended_action: 通報市民や地域住民が現時点で取るべき安全行動",
+    "- safe_detour_advice: 車椅子・ベビーカー・高齢者・視覚障がい者向けの具体的な「バリアフリー迂回・日陰・災害避難安全アドバイス」（1〜2文）",
+    "- multilingual_notices: 外国人住民・観光客向けの4言語（ja: やさしい日本語, en: 英語, zh: 中国語簡体字, ko: 韓国語）による簡潔な危険注意・迂回案内カード文",
     "- report_draft: 自治体窓口へそのまま提出できる丁寧かつ構造化された通報・改善要望書",
     "- privacy_check: 写真や記述に人の顔(has_face)、ナンバープレート(has_license_plate)、表札(has_nameplate)が含まれるか判定し、warning_message に記載",
     "- suggested_tasks: 地域パトロールや住民・自治会が行うべきフォローアップタスク（2〜3個）",
@@ -341,6 +363,14 @@ function buildDeterministicFallback(params: {
       eco_disaster_impact,
       suggested_fix,
       recommended_action,
+      safe_detour_advice:
+        "♿ バリアフリー迂回・安全アドバイス：破損した点字ブロックおよび放置自転車を避け、駅南口エレベーター横のフラットな屋根付き歩道（幅員3.5m・スロープ完備）へ迂回してください。",
+      multilingual_notices: {
+        ja: "【ちゅうい】横断歩道のまえの 点字ブロックが こわれています。車いす・ベビーカー・目の不自由なかたは、南口エレベーター横の フラットな通路を とおってください。",
+        en: "[CAUTION] Tactile paving ahead is damaged and blocked. Wheelchair, stroller, and visually impaired users: please use the step-free covered walkway next to the South Exit Elevator.",
+        zh: "【注意】前方人行横道盲道破损且有障碍物。轮椅、婴儿车及视障人士请绕行南口电梯旁的无障碍平坦通道。",
+        ko: "【주의】앞쪽 횡단보도 점자블록이 파손되어 있습니다. 휠체어·유모차·시각장애인분들은 남쪽 출구 엘리베이터 옆 평탄한 우회 통로를 이용해 주세요.",
+      },
       report_draft: buildFormalReportDraft({
         title,
         category,
@@ -415,6 +445,14 @@ function buildDeterministicFallback(params: {
       eco_disaster_impact,
       suggested_fix,
       recommended_action,
+      safe_detour_advice:
+        "🌊 バリアフリー迂回・安全アドバイス：大雨・増水時は低地アンダーパス手前の歩道を避け、高台側の「さくら通り歩道（標高＋4.2m・段差なし）」を通って第一小学校・避難所へ向かってください。",
+      multilingual_notices: {
+        ja: "【大雨・冠水ちゅうい】この道は 大雨のときに 水がたまります。車いす・ベビーカーのかたは、高台側の「さくら通り」を とおってください。",
+        en: "[FLOOD RISK] Street drains ahead are clogged; road floods during heavy rain. Wheelchair & stroller users: please detour via the higher-ground Sakura Street sidewalk.",
+        zh: "【积水警告】前方排水沟堵塞，暴雨时易积水淹没台阶。轮椅及婴儿车使用者请绕行高地一侧的樱花大道人行道。",
+        ko: "【침수 주의】앞쪽 배수구가 막혀大雨 시 도로가 침수됩니다. 휠체어·유모차 이용자는 고지대인 사쿠라 거리 보도로 우회해 주세요.",
+      },
       report_draft: buildFormalReportDraft({
         title,
         category,
@@ -488,6 +526,14 @@ function buildDeterministicFallback(params: {
       eco_disaster_impact,
       suggested_fix,
       recommended_action,
+      safe_detour_advice:
+        "👶 バリアフリー迂回・安全アドバイス：正面横断歩道の4.5cm段差を避け、西側30mの「図書館正面ロータリー緩勾配スロープ（段差0cm・手すり付き・日陰ベンチあり）」から安全に入館できます。",
+      multilingual_notices: {
+        ja: "【段差ちゅうい】ここの歩道は 4.5cmの段差と 急な坂があります。車いす・ベビーカーのかたは、30mひだりの「図書館正面スロープ」を つかってください。",
+        en: "[STEP HAZARD] High 4.5cm curb and steep slope ahead. Wheelchair and stroller users: please use the step-free gentle ramp 30m west at the Library Main Entrance.",
+        zh: "【台阶注意】此处人行道有4.5厘米路缘台阶且坡度较陡。轮椅及婴儿车请走西侧30米图书馆正门平缓坡道。",
+        ko: "【단차 주의】이곳 보도에 4.5cm 턱과 급경사가 있습니다. 휠체어·유모차 이용자는 서쪽 30m 도서관 정문 완만한 경사로를 이용해 주세요.",
+      },
       report_draft: buildFormalReportDraft({
         title,
         category,
@@ -563,6 +609,14 @@ function buildDeterministicFallback(params: {
       eco_disaster_impact,
       suggested_fix,
       recommended_action,
+      safe_detour_advice:
+        "🚸 バリアフリー迂回・安全アドバイス：夜間・夕暮れ時や雨天時は見通し不良のL字路を避け、LED照明とガードレール付歩道が整備された「緑が丘本通り（東側1本隣）」へ迂回してください。",
+      multilingual_notices: {
+        ja: "【見とおし注意】このカーブは 車や自転車が 見えにくく、夜は暗くなります。夕方や夜は、となりの明るい「緑が丘本通り」を とおってください。",
+        en: "[BLIND CURVE] Sharp corner with limited visibility and dim lighting. At night or with strollers/wheelchairs, please use the well-lit Midorigaoka Main Street one block east.",
+        zh: "【盲区注意】前方急转弯视线受阻且夜间照明不足。傍晚及夜间请绕行东侧相邻、配有护栏和明亮路灯的绿丘主街。",
+        ko: "【사각지대 주의】이 커브길은 시야가 좁고 야간에 어둡습니다. 저녁·야간에는 동쪽 옆길인 밝은 미도리가오카 본거리를 이용해 주세요.",
+      },
       report_draft: buildFormalReportDraft({
         title,
         category,
@@ -596,6 +650,172 @@ function buildDeterministicFallback(params: {
         "#LED防犯灯更新要望",
         "#グリーンベルト摩耗",
         "#出会い頭事故防止",
+      ],
+    };
+  }
+
+  // Scenario 5 (Disaster Mode): 台風・豪雨・停電断水・ブロック塀倒壊リスクと広域避難
+  if (
+    params.scenarioId === "typhoon-outage" ||
+    /停電|断水|台風|地震|ブロック塀|避難所|非常用電源|備蓄/.test(combined)
+  ) {
+    const title = "台風・地震時の老朽ブロック塀倒壊・停電断水リスクおよび福祉避難ルート点検";
+    const category: MachiEyeCategory = "防災・冠水";
+    const severity = 5;
+    const severity_level: MachiEyeSeverityLevel = "緊急";
+    const hazard_score = 94;
+    const department = "防災危機管理課 ・ 都市整備部 建築指導課 ・ 水道局";
+    const affected_groups = [
+      "在宅医療・電源依存世帯",
+      "高齢者・要配慮者",
+      "乳幼児・子育て世帯",
+      "外国人住民",
+    ];
+    const barrier_free_assessment =
+      "避難所へ続く旧道沿いに傾いた老朽ブロック塀と狭隘区間があり、地震・暴風時に車椅子やシルバーカーの避難導線が寸断される恐れがあります。";
+    const eco_disaster_impact =
+      "台風・大規模地震に伴う停電・断水発生時、エレベーター停止や給水拠点までの移動困難、ブロック塀倒壊による二次被害リスクが極めて高い状態です。";
+    const suggested_fix =
+      "危険ブロック塀の除却助成・ネット固定、指定避難所（第一小学校・中央公民館）への非常用電源・マンホールトイレ・給水拠点案内標識の多言語設置を要望します。";
+    const recommended_action =
+      "暴風・地震発生前にモバイルバッテリー充電・飲料水（1人1日3L×3日分）・常備薬・携帯トイレを確保し、ブロック塀や増水河川から離れた広域避難路を選択してください。";
+
+    return {
+      title,
+      category,
+      severity,
+      severity_level,
+      hazard_score,
+      department,
+      affected_groups,
+      barrier_free_assessment,
+      eco_disaster_impact,
+      suggested_fix,
+      recommended_action,
+      safe_detour_advice:
+        "🛟 バリアフリー迂回・防災アドバイス：地震・台風時は老朽ブロック塀のある狭い路地を避け、電線地中化・スロープ完備の「中央大通り→第一小学校体育館（非常用電源・多目的トイレ・給水栓あり）」ルートで早期避難してください。",
+      multilingual_notices: {
+        ja: "【防災・ひなん案内】台風や地震のときは、ブロック塀のちかくを とおらないでください。車いす・お年寄り・外国のかたは「第一小学校（非常用電源・お水あり）」へ ひなんしてください。",
+        en: "[DISASTER EVACUATION] Stay away from old concrete walls during earthquakes or typhoons. Step-free shelter with emergency power & water is available at Dai-ichi Elementary School.",
+        zh: "【防灾避难指南】台风或地震时请远离老旧围墙。轮椅使用者及居民请沿中央大道前往“第一小学避难所”（配备应急电源、饮用水及无障碍卫生间）。",
+        ko: "【방재·대피 안내】태풍·지진 시 오래된 블록담 근처를 피해 주세요. 휠체어 이용자 및 주민분들은 비상전원과 급수대가 있는 ‘제1초등학교 대피소’로 이동해 주세요.",
+      },
+      report_draft: buildFormalReportDraft({
+        title,
+        category,
+        severityLevel: severity_level,
+        hazardScore: hazard_score,
+        department,
+        locationText:
+          params.locationText || "中央地区 指定避難所（第一小学校）周辺ルート",
+        latitude: params.latitude || "35.683450",
+        longitude: params.longitude || "139.768120",
+        affectedGroups: affected_groups,
+        barrierFreeAssessment: barrier_free_assessment,
+        ecoDisasterImpact: eco_disaster_impact,
+        suggestedFix: suggested_fix,
+      }),
+      privacy_check,
+      suggested_tasks: [
+        {
+          title: "停電・断水時の非常用電源・給水ステーション位置の家族共有",
+          priority: "high",
+          memo: "モバイルバッテリー満充電・水3日分・携帯トイレ・常備薬お薬手帳を確認",
+        },
+        {
+          title: "車椅子・ベビーカーで通れるブロック塀回避ルートの実地確認",
+          priority: "high",
+          memo: "夜間停電時でも通行可能な幅員3m以上の幹線歩道をマップに固定",
+        },
+      ],
+      detected_tags: [
+        "#台風停電断水対策",
+        "#危険ブロック塀回避",
+        "#福祉避難所ルート",
+        "#多言語防災案内",
+      ],
+    };
+  }
+
+  // Scenario 6 (Disaster Mode): 猛暑ヒートアイランド・ペット同行避難・クールシェア安全点検
+  if (
+    params.scenarioId === "pet-heatwave-evac" ||
+    /ペット|猛暑|熱中症|日陰|クールシェア|寒波|凍結|同行避難/.test(combined)
+  ) {
+    const title = "猛暑・災害時の日陰不足ルートおよびペット同行避難・給水クールスポット整備要望";
+    const category: MachiEyeCategory = "防災・冠水";
+    const severity = 4;
+    const severity_level: MachiEyeSeverityLevel = "注意";
+    const hazard_score = 86;
+    const department = "環境部 気候変動対策課 ・ 防災危機管理課 ・ 動物愛護センター";
+    const affected_groups = [
+      "高齢者・乳幼児（ベビーカー）",
+      "ペット飼育世帯（同行避難者）",
+      "屋外歩行者・車椅子ユーザー",
+      "訪日外国人旅行者",
+    ];
+    const barrier_free_assessment =
+      "駅から避難所・公園へ至る南側歩道に街路樹や日よけがなく、夏季の路面温度が50℃近くに達するため、地面に近いベビーカー・車椅子・ペットの熱中症リスクが深刻です。";
+    const eco_disaster_impact =
+      "猛暑日の熱中症救急搬送リスクに加え、災害時にペット同行避難スペースや給水・冷房シェルター案内が不足していると避難遅れや車中泊事故につながります。";
+    const suggested_fix =
+      "遮熱性舗装・街路樹グリーンインフラおよびミスト付クールシェアベンチの整備、ならびに避難所における「ペット同行避難専用区画・給水スポット」の明示を要望します。";
+    const recommended_action =
+      "猛暑時間帯は直射日光下のアスファルト通行を避けて北側の日陰歩道・公共クールシェア施設（図書館等）を経由し、ペット用飲料水・ケージ・迷子札を常備してください。";
+
+    return {
+      title,
+      category,
+      severity,
+      severity_level,
+      hazard_score,
+      department,
+      affected_groups,
+      barrier_free_assessment,
+      eco_disaster_impact,
+      suggested_fix,
+      recommended_action,
+      safe_detour_advice:
+        "🌳 バリアフリー迂回・猛暑＆ペット避難アドバイス：直射日光の照り返しが強い南側大通りを避け、並木日陰とミスト給水所がある「ひまわり公園北側遊歩道→市立図書館クールシェアロビー（ペット同行避難受付は東側屋根付きテラス）」へ迂回してください。",
+      multilingual_notices: {
+        ja: "【熱中症・ペット避難案内】この道は 日かげが 少なく暑くなります。お年寄り・ベビーカー・ペット連れのかたは、木かげのある「ひまわり公園ルート」と「図書館クールスポット」を つかってください。",
+        en: "[HEATWAVE & PET SHELTER] High pavement heat ahead. Elderly, stroller users, and pet owners: please take the shaded Himawari Park path. Pet-friendly evacuation area is at the East Covered Terrace.",
+        zh: "【防暑及宠物避难指南】前方路段缺乏遮阴且地表高温。老人、婴儿车及携宠居民请走树荫凉爽的向日葵公园步道，宠物同行避难区设在东侧有顶露台。",
+        ko: "【폭염·반려동물 대피 안내】이 길은 그늘이 적어 노면 온도가 높습니다. 노약자·유모차·반려동물 동반 시 그늘진 히마와리 공원 산책로와 도서관 쿨링쉼터(동쪽 테라스 반려동물 구역)를 이용해 주세요.",
+      },
+      report_draft: buildFormalReportDraft({
+        title,
+        category,
+        severityLevel: severity_level,
+        hazardScore: hazard_score,
+        department,
+        locationText:
+          params.locationText || "ひまわり公園〜中央図書館 クールシェア＆ペット避難導線",
+        latitude: params.latitude || "35.679510",
+        longitude: params.longitude || "139.765120",
+        affectedGroups: affected_groups,
+        barrierFreeAssessment: barrier_free_assessment,
+        ecoDisasterImpact: eco_disaster_impact,
+        suggestedFix: suggested_fix,
+      }),
+      privacy_check,
+      suggested_tasks: [
+        {
+          title: "ペット同行避難バッグ（水・フード5日分・ケージ・ワクチン証）の点検",
+          priority: "high",
+          memo: "避難所東側テラスのペット専用受付ルールを家族で共有",
+        },
+        {
+          title: "ベビーカー・車椅子向け日陰ルート＆給水クールスポットのマップ登録",
+          priority: "medium",
+          memo: "MachiCool日陰導線として地域マップにピン共有",
+        },
+      ],
+      detected_tags: [
+        "#猛暑クールシェアルート",
+        "#ペット同行避難対応",
+        "#ベビーカー照り返し対策",
+        "#グリーンインフラ要望",
       ],
     };
   }
@@ -637,6 +857,14 @@ function buildDeterministicFallback(params: {
     eco_disaster_impact,
     suggested_fix,
     recommended_action,
+    safe_detour_advice:
+      "♿ バリアフリー迂回・安全アドバイス：損傷・危険箇所から1.5m以上距離をとるか、反対側の段差のないフラットな歩道・日陰ルートへ迂回して通行してください。",
+    multilingual_notices: {
+      ja: "【通行ちゅうい】この場所に 段差や危険箇所があります。車いす・ベビーカー・お年寄りのかたは、反対側の安全な歩道を とおってください。",
+      en: "[SAFETY NOTICE] Sidewalk hazard or uneven surface ahead. Wheelchair, stroller, and elderly pedestrians: please use the safe detour on the opposite sidewalk.",
+      zh: "【通行注意】前方路面存在安全隐患或台阶。轮椅、婴儿车及高龄者请绕行对面平坦安全的人行道。",
+      ko: "【통행 주의】앞쪽 노면에 위험 구간이나 단차가 있습니다. 휠체어·유모차·어르신분들은 맞은편 안전한 보도로 우회해 주세요.",
+    },
     report_draft: buildFormalReportDraft({
       title,
       category,
@@ -732,6 +960,31 @@ function normalizeResult(
       ? obj.recommended_action.trim()
       : "危険箇所には近づかず、周囲の通行人へ注意を促しながら自治体の対応を待ってください。";
 
+  const safe_detour_advice =
+    typeof obj.safe_detour_advice === "string" && obj.safe_detour_advice.trim()
+      ? obj.safe_detour_advice.trim()
+      : "♿ バリアフリー迂回・安全アドバイス：車椅子・ベビーカー・高齢者の方は危険箇所を避け、段差のないフラットな反対側歩道・エレベーターまたは広域避難ルートへ迂回してください。";
+
+  const mn = (obj.multilingual_notices ?? {}) as Record<string, unknown>;
+  const multilingual_notices: MachiEyeMultilingualNotice = {
+    ja:
+      typeof mn.ja === "string" && mn.ja.trim()
+        ? mn.ja.trim()
+        : `【やさしい日本語】「${obj.title.trim()}」の危険があります。車いす・ベビーカー・お年寄りは安全な歩道へ迂回してください。`,
+    en:
+      typeof mn.en === "string" && mn.en.trim()
+        ? mn.en.trim()
+        : `[Safety Notice] Hazard detected (${category}). Wheelchair, stroller, and elderly users: please take a step-free detour.`,
+    zh:
+      typeof mn.zh === "string" && mn.zh.trim()
+        ? mn.zh.trim()
+        : `【安全提示】前方存在安全隐患（${category}），轮椅、婴儿车及长者请绕行平坦安全的无障碍通道。`,
+    ko:
+      typeof mn.ko === "string" && mn.ko.trim()
+        ? mn.ko.trim()
+        : `【안전 안내】앞쪽에 위험 구간(${category})이 있습니다. 휠체어·유모차·어르신분들은 안전한 우회로를 이용해 주세요.`,
+  };
+
   const pc = (obj.privacy_check ?? {}) as Record<string, unknown>;
   const hasFace = Boolean(pc.has_face);
   const hasLicensePlate = Boolean(pc.has_license_plate);
@@ -791,6 +1044,8 @@ function normalizeResult(
     eco_disaster_impact,
     suggested_fix,
     recommended_action,
+    safe_detour_advice,
+    multilingual_notices,
     report_draft,
     privacy_check: {
       has_face: hasFace,

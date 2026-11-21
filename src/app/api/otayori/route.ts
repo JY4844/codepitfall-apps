@@ -39,6 +39,8 @@ export interface OtayoriAnalysis {
   grandparent_summary: string[];
   child_message?: string;
   voice_script?: string;
+  medication_allergy_alerts?: string[];
+  reply_cushion_message?: string;
   suggested_tasks: OtayoriSuggestedTask[];
 }
 
@@ -106,6 +108,11 @@ const RESPONSE_SCHEMA = {
     },
     child_message: { type: "STRING" },
     voice_script: { type: "STRING" },
+    medication_allergy_alerts: {
+      type: "ARRAY",
+      items: { type: "STRING" },
+    },
+    reply_cushion_message: { type: "STRING" },
     suggested_tasks: {
       type: "ARRAY",
       items: {
@@ -248,6 +255,8 @@ function buildPrompt(sourceText: string, familyRoles: string): string {
     "- grandparent_summary: 祖父母向けの「やさしい日本語の3行要約」（必ず3要素の配列）。専門用語を避け、温かく具体的に「いつ・なにがあるか・お願いしたいこと」を伝える",
     "- child_message: 子ども本人が読んで自分で準備したくなる、やさしい声かけメッセージ（1〜2文）",
     "- voice_script: 家事や料理をしながら耳で聞ける、150〜220文字程度の自然な音声読み上げ用ナレーション原稿",
+    "- medication_allergy_alerts: お薬・服薬・食物アレルギー・絶食・検温・熱中症・誤飲注意など、健康・医療・安全に関わる注意点リスト（1〜3件）",
+    "- reply_cushion_message: 園・学校・病院・自治体窓口へそのまま送れる丁寧な返信・連絡・欠席相談クッション文（連絡帳・アプリ・メール貼付用）",
     "- suggested_tasks: Google カレンダー・スプレッドシート連携用の具体的な家族タスク（4件）。title の先頭に【ママ】【パパ】【子ども】【祖父母】のように担当者を明記し、priority は high / medium / low から選ぶ",
     "",
     familyRoles
@@ -357,12 +366,27 @@ function normalizeOtayori(parsed: unknown): OtayoriAnalysis {
           items_to_bring.slice(0, 4).join("、") || "特にありません"
         }です。費用は${cost}です。家族みんなで分担して準備しましょう。`;
 
+  const rawMedAlerts = Array.isArray(obj.medication_allergy_alerts)
+    ? obj.medication_allergy_alerts.map((x) => String(x ?? "").trim()).filter(Boolean)
+    : [];
+  const medication_allergy_alerts =
+    rawMedAlerts.length > 0
+      ? rawMedAlerts
+      : [
+          "💊 お薬・アレルギー・体調確認：持参物・昼食メニューや服薬時間の指定がないか前夜に再確認してください。",
+        ];
+
+  const reply_cushion_message =
+    typeof obj.reply_cushion_message === "string" && obj.reply_cushion_message.trim()
+      ? obj.reply_cushion_message.trim()
+      : `いつもお世話になっております。「${title}」のお知らせを確認いたしました。必要書類・持ち物を準備のうえ参加いたします（体調不良等で変更がある際は当日朝にご連絡いたします）。どうぞよろしくお願いいたします。`;
+
   return {
     title,
     category:
       typeof obj.category === "string" && obj.category.trim()
         ? obj.category.trim()
-        : "家族のお知らせ",
+        : "暮らし・家族のお知らせ",
     summary,
     events,
     items_to_bring,
@@ -371,6 +395,8 @@ function normalizeOtayori(parsed: unknown): OtayoriAnalysis {
     grandparent_summary,
     child_message,
     voice_script,
+    medication_allergy_alerts,
+    reply_cushion_message,
     suggested_tasks,
   };
 }
@@ -525,6 +551,12 @@ const PRESET_ANALYSES: Record<string, OtayoriAnalysis> = {
       "かけっこも ダンスも いっしょうけんめい がんばろう！前日の夜に 体操服と 紅白帽子、大きな水筒を 自分でそろえてね。",
     voice_script:
       "おたよりバトンから、さくら小学校・秋季大運動会のまとめを読み上げます。開催日は10月18日日曜日、朝8時30分登校です。まず10月9日金曜日までに、ママが敬老席と参観人数の申込票を提出します。当日はパパが7時45分の開門に合わせてシートを敷き、閉会後のテント片付けを担当します。子どもは体操服、紅白帽子、水筒を自分で準備しましょう。おじいちゃん・おばあちゃんには敬老席をご用意しています。",
+    medication_allergy_alerts: [
+      "🍱 お弁当・アレルギー注意：家族席での昼食時は保冷剤を必ず同梱し、傷みやすい生もの・アレルゲン混入にご注意ください。",
+      "☀️ 熱中症・常備薬チェック：大容量水筒（麦茶・スポーツドリンク）と、喘息吸入器や絆創膏・日焼け止めなど常備薬ポーチを携帯してください。",
+    ],
+    reply_cushion_message:
+      "いつも温かくご指導いただきありがとうございます。第48回秋季大運動会のお知らせを確認いたしました。家族参観人数（大人4名・敬老席テント2名希望）の申込票を10月9日までに提出いたします。また閉会後のPTAテント撤収にも父が参加いたします。（※万一当日朝に発熱や体調不良が見られる場合は、朝7:30までに連絡アプリより欠席のご連絡をいたします。）どうぞよろしくお願いいたします。",
     suggested_tasks: [
       {
         title: "【ママ】10/9(金) 敬老席・家族参観人数申込票を連絡帳へ入れる",
@@ -659,6 +691,12 @@ const PRESET_ANALYSES: Record<string, OtayoriAnalysis> = {
       "どんぐり拾い たのしみだね！レジャーシートを じぶんで たたむ練習をして、ビニール袋を2まい リュックにいれよう！",
     voice_script:
       "おたよりバトンから、ひまわり保育園・秋のバス遠足のまとめです。11月6日金曜日、朝8時30分までに登園します。まず10月30日金曜日までに、パパがバス代1,200円を職員室へ提出してください。お弁当はピックや爪楊枝が禁止です。おやつは200円以内でチョコやガムは避けましょう。当日は疲れやすいため、16時15分ごろにおばあちゃんに早めのお迎えをお願いします。",
+    medication_allergy_alerts: [
+      "🚫 誤飲・アレルギー重要警告：お弁当の「ピック・爪楊枝」は喉つき事故防止のため使用禁止です。おやつも「ガム・アメ・溶けやすいチョコ」は不可、友だち同士の交換を避けるため個包装に必ず記名してください。",
+      "🚌 乗り物酔い・お薬持参：バス移動時の酔い止め薬やアレルギー薬・エピペン等が必要な場合は、事前に与薬依頼書とともに担任へお渡しください。",
+    ],
+    reply_cushion_message:
+      "いつも大変お世話になっております。秋のバス遠足のおたよりを確認いたしました。10月30日までにバス代1,200円を職員室へ提出し、当日はピック不使用のお弁当・記名済みのおやつを持たせて8:30までに登園いたします。また帰園後は16:15頃に祖母がお迎えに伺う予定です。（※当日朝に咳や発熱がある場合は無理をせず朝8:00までに欠席連絡をいたします。）よろしくお願いいたします。",
     suggested_tasks: [
       {
         title: "【パパ】10/30(金) 保育園職員室へ遠足バス代 1,200円を提出",
@@ -792,6 +830,12 @@ const PRESET_ANALYSES: Record<string, OtayoriAnalysis> = {
       "ちゅうしゃは すこし チクッとするけれど、ふゆに かぜをひかないための 大事なバリアだよ！おわったら 好きな絵本をよもうね。",
     voice_script:
       "おたよりバトンから、さくら小児科・予防接種のご案内です。1回目は11月11日水曜日の16時30分、2回目は12月2日水曜日の16時30分です。前日11月10日火曜日の夜8時までに、ママがWEB予診票を入力します。当日は水曜早帰りのパパが送迎を担当します。母子健康手帳、紙の予診票、医療費受給者証を忘れると接種できないので必ず確認してください。自己負担は1回2,000円です。",
+    medication_allergy_alerts: [
+      "💉 医療・アレルギー最重要確認：母子健康手帳とお薬手帳を忘れると接種できません。卵アレルギーや過去の副反応・現在服用中のお薬がある場合は、前日20:00締切のWEB予診票に必ず明記してください。",
+      "🌡️ 当日検温・接種後の安静：来院前に自宅で検温（37.5℃以上は接種不可）し、接種後30分は急な副反応に備え、当日の激しい運動は控えてください。",
+    ],
+    reply_cushion_message:
+      "さくら小児科クリニック様、いつもお世話になっております。11月11日(水) 16:30の予防接種（インフル・日本脳炎同時接種）につきまして、前日までにWEB予診票の入力を完了し、母子健康手帳・お薬手帳・紙予診票を持参のうえ父が付き添いで伺います。（※当日朝の検温で37.5℃以上の発熱が見られた場合は、速やかに予約変更のご連絡をいたします。）よろしくお願いいたします。",
     suggested_tasks: [
       {
         title: "【ママ】11/10(火) 20:00締切 WEB予診票入力＆母子手帳ポーチ準備",
@@ -935,6 +979,12 @@ const PRESET_ANALYSES: Record<string, OtayoriAnalysis> = {
       "どうぶつの絵カードで「どっちをむいてるかな？」ゲームをしよう！健診の先生にも 元気におなまえが 言えるかな？",
     voice_script:
       "おたよりバトンから、さくら市・健康診査通知のまとめです。まず11月12日木曜日までにWebで予約時間帯を確定します。お子様の3歳児健診は11月19日木曜日の13時15分受付で、事前に自宅で視力と聴力の検査をし、当日朝の尿検体と母子手帳、バスタオルを持参します。おじいちゃん・おばあちゃんのいきいき健診は11月24日火曜日の朝9時30分で、当日は朝食抜き、パパが朝9時に車で送迎します。",
+    medication_allergy_alerts: [
+      "💊 健診当日の服薬・絶食ルール（重要）：高齢者健診（11/24）当日の朝は食事を摂らずにお越しください（水・白湯は可）。血圧・心臓のお薬は朝7:00までに少量のお水で服用可能です（糖尿病薬は主治医の指示に従い低血糖にご注意ください）。",
+      "🧪 検体採取メモ：3歳児健診は当日朝の尿検体、高齢者大腸がん検診は2日分の採便容器を冷暗所で保管して持参してください。",
+    ],
+    reply_cushion_message:
+      "さくら市保健福祉センター ご担当者様、いつもお世話になっております。令和8年度 3歳児健康診査（11月19日 13:15枠）および高齢者いきいき健康診査（11月24日 9:30枠）の通知を確認し、希望時間帯の予約手続きをいたしました。当日はアンケート・検体・母子手帳・受診券を持参して伺います。どうぞよろしくお願いいたします。",
     suggested_tasks: [
       {
         title: "【ママ】11/12(木)締切 さくら市Webポータルで健診時間帯を予約確定",
@@ -1113,9 +1163,21 @@ function buildDynamicTextFallback(
     })
   );
 
+  const medAlertLines = lines.filter((l) =>
+    /(薬|服薬|アレルギー|検温|発熱|絶食|朝食|ピック|チョコ|注意|母子|手帳)/.test(l)
+  );
+  const medication_allergy_alerts =
+    medAlertLines.length > 0
+      ? medAlertLines.slice(0, 3).map((l) => `💊 ${l}`)
+      : [
+          "💊 お薬・アレルギー・体調確認：当日の検温、持参する常備薬・お薬手帳、および食事・おやつのアレルゲン指定がないか前夜に確認してください。",
+        ];
+
+  const reply_cushion_message = `いつもお世話になっております。「${title}」のお知らせを確認いたしました。内容に沿って必要書類・持ち物を準備のうえ対応いたします（当日万一発熱や体調不良等で欠席・変更となる場合は、朝一番でご連絡いたします）。どうぞよろしくお願いいたします。`;
+
   return {
     title,
-    category: "おたより・通知解析",
+    category: "暮らし・家族の書類・メモ解析",
     summary,
     events: extractedEvents,
     items_to_bring,
@@ -1123,7 +1185,7 @@ function buildDynamicTextFallback(
     cost,
     grandparent_summary: [
       `「${title}」のお知らせが届きました。`,
-      `主な予定は ${extractedEvents[0]?.date ?? "近日中"}（${extractedEvents[0]?.title ?? "行事・提出物"}）です。`,
+      `主な予定は ${extractedEvents[0]?.date ?? "近日中"}（${extractedEvents[0]?.title ?? "行事・手続き"}）です。`,
       "無理のない範囲で、当日の見守りや応援をよろしくお願いいたします。",
     ],
     child_message:
@@ -1131,6 +1193,8 @@ function buildDynamicTextFallback(
     voice_script: `おたよりバトンから「${title}」のまとめをお伝えします。${summary} 持ち物は${items_to_bring.join(
       "、"
     )}です。費用は${cost}です。家族でバトンを渡して準備しましょう。`,
+    medication_allergy_alerts,
+    reply_cushion_message,
     suggested_tasks: extractedEvents.slice(0, 4).map((ev) => ({
       title: `【${ev.assignee}】${ev.title}`,
       priority: ev.isDeadline ? "high" : "medium",

@@ -249,6 +249,12 @@ const PRESETS: PresetDefinition[] = [
         "かけっこも ダンスも いっしょうけんめい がんばろう！前日の夜に 体操服と 紅白帽子、大きな水筒を 自分でそろえてね。",
       voice_script:
         "おたよりバトンから、さくら小学校・秋季大運動会のまとめを読み上げます。開催日は10月18日日曜日、朝8時30分登校です。まず10月9日金曜日までに、ママが敬老席と参観人数の申込票を提出します。当日はパパが7時45分の開門に合わせてシートを敷き、閉会後のテント片付けを担当します。子どもは体操服、紅白帽子、水筒を自分で準備しましょう。おじいちゃん・おばあちゃんには敬老席をご用意しています。",
+      medication_allergy_alerts: [
+        "🍱 お弁当・アレルギー注意：家族席での昼食時は保冷剤を必ず同梱し、傷みやすい生もの・アレルゲン混入にご注意ください。",
+        "☀️ 熱中症・常備薬チェック：大容量水筒（麦茶・スポーツドリンク）と、喘息吸入器や絆創膏・日焼け止めなど常備薬ポーチを携帯してください。",
+      ],
+      reply_cushion_message:
+        "いつも温かくご指導いただきありがとうございます。第48回秋季大運動会のお知らせを確認いたしました。家族参観人数（大人4名・敬老席テント2名希望）の申込票を10月9日までに提出いたします。また閉会後のPTAテント撤収にも父が参加いたします。どうぞよろしくお願いいたします。",
       suggested_tasks: [
         {
           title: "【ママ】10/9(金) 敬老席・家族参観人数申込票を連絡帳へ入れる",
@@ -401,6 +407,12 @@ const PRESETS: PresetDefinition[] = [
         "どんぐり拾い たのしみだね！レジャーシートを じぶんで たたむ練習をして、ビニール袋を2まい リュックにいれよう！",
       voice_script:
         "おたよりバトンから、ひまわり保育園・秋のバス遠足のまとめです。11月6日金曜日、朝8時30分までに登園します。まず10月30日金曜日までに、パパがバス代1,200円を職員室へ提出してください。お弁当はピックや爪楊枝が禁止です。おやつは200円以内でチョコやガムは避けましょう。当日は疲れやすいため、16時15分ごろにおばあちゃんに早めのお迎えをお願いします。",
+      medication_allergy_alerts: [
+        "🚫 誤飲・アレルギー重要警告：お弁当の「ピック・爪楊枝」は使用禁止です。おやつも「ガム・アメ・溶けやすいチョコ」は不可、友だち同士の交換を避けるため個包装に必ず記名してください。",
+        "🚌 乗り物酔い・お薬持参：バス移動時の酔い止め薬やアレルギー薬・エピペン等が必要な場合は、事前に与薬依頼書とともに担任へお渡しください。",
+      ],
+      reply_cushion_message:
+        "いつも大変お世話になっております。秋のバス遠足のおたよりを確認いたしました。10月30日までにバス代1,200円を職員室へ提出し、当日はピック不使用のお弁当・記名済みのおやつを持たせて8:30までに登園いたします。また帰園後は16:15頃に祖母がお迎えに伺う予定です。よろしくお願いいたします。",
       suggested_tasks: [
         {
           title: "【パパ】10/30(金) 保育園職員室へ遠足バス代 1,200円を提出",
@@ -551,6 +563,12 @@ const PRESETS: PresetDefinition[] = [
         "ちゅうしゃは すこし チクッとするけれど、ふゆに かぜをひかないための 大事なバリアだよ！おわったら 好きな絵本をよもうね。",
       voice_script:
         "おたよりバトンから、さくら小児科・予防接種のご案内です。1回目は11月11日水曜日の16時30分、2回目は12月2日水曜日の16時30分です。前日11月10日火曜日の夜8時までに、ママがWEB予診票を入力します。当日は水曜早帰りのパパが送迎を担当します。母子健康手帳、紙の予診票、医療費受給者証を忘れると接種できないので必ず確認してください。自己負担は1回2,000円です。",
+      medication_allergy_alerts: [
+        "💉 医療・アレルギー最重要確認：母子健康手帳とお薬手帳を忘れると接種できません。卵アレルギーや過去の副反応・現在服用中のお薬がある場合は、前日20:00締切のWEB予診票に必ず明記してください。",
+        "🌡️ 当日検温・接種後の安静：来院前に自宅で検温（37.5℃以上は接種不可）し、接種後30分は急な副反応に備え、当日の激しい運動は控えてください。",
+      ],
+      reply_cushion_message:
+        "さくら小児科クリニック様、いつもお世話になっております。11月11日(水) 16:30の予防接種（インフル・日本脳炎同時接種）につきまして、前日までにWEB予診票の入力を完了し、母子健康手帳・お薬手帳・紙予診票を持参のうえ父が付き添いで伺います。よろしくお願いいたします。",
       suggested_tasks: [
         {
           title: "【ママ】11/10(火) 20:00締切 WEB予診票入力＆母子手帳ポーチ準備",
@@ -711,6 +729,12 @@ const PRESETS: PresetDefinition[] = [
         "どうぶつの絵カードで「どっちをむいてるかな？」ゲームをしよう！健診の先生にも 元気におなまえが 言えるかな？",
       voice_script:
         "おたよりバトンから、さくら市・健康診査通知のまとめです。まず11月12日木曜日までにWebで予約時間帯を確定します。お子様の3歳児健診は11月19日木曜日の13時15分受付で、事前に自宅で視力と聴力の検査をし、当日朝の尿検体と母子手帳、バスタオルを持参します。おじいちゃん・おばあちゃんのいきいき健診は11月24日火曜日の朝9時30分で、当日は朝食抜き、パパが朝9時に車で送迎します。",
+      medication_allergy_alerts: [
+        "💊 健診当日の服薬・絶食ルール（重要）：高齢者健診（11/24）当日の朝は食事を摂らずにお越しください（水・白湯は可）。血圧・心臓のお薬は朝7:00までに少量のお水で服用可能です。",
+        "🧪 検体採取メモ：3歳児健診は当日朝の尿検体、高齢者大腸がん検診は2日分の採便容器を冷暗所で保管して持参してください。",
+      ],
+      reply_cushion_message:
+        "さくら市保健福祉センター ご担当者様、いつもお世話になっております。令和8年度 3歳児健康診査（11月19日 13:15枠）および高齢者いきいき健康診査（11月24日 9:30枠）の通知を確認し、希望時間帯の予約手続きをいたしました。当日はアンケート・検体・母子手帳・受診券を持参して伺います。よろしくお願いいたします。",
       suggested_tasks: [
         {
           title: "【ママ】11/12(木)締切 さくら市Webポータルで健診時間帯を予約確定",
@@ -950,6 +974,9 @@ export default function OtayoriUltra() {
   const [copiedLine, setCopiedLine] = useState<boolean>(false);
   const [copiedGrandma, setCopiedGrandma] = useState<boolean>(false);
   const [showLinePreview, setShowLinePreview] = useState<boolean>(false);
+  const [cushionMode, setCushionMode] = useState<"confirm" | "absence" | "allergy">("confirm");
+  const [copiedCushion, setCopiedCushion] = useState<boolean>(false);
+  const [showCushionPreview, setShowCushionPreview] = useState<boolean>(true);
 
   // Web Speech API state
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
@@ -1456,6 +1483,54 @@ export default function OtayoriUltra() {
     }
   }
 
+  const replyCushionText = useMemo(() => {
+    const mainEventDate = analysis.events[0]?.date ?? "本日・行事当日";
+    if (cushionMode === "absence") {
+      return [
+        "【園・学校・病院への欠席／日程変更のご連絡】",
+        "いつも大変お世話になっております。",
+        `本日（または ${mainEventDate} の「${analysis.title}」）につきまして、今朝から発熱・体調不良が見られるため、大事をとってお休み（または日程変更のご相談）をさせていただきたくご連絡いたしました。`,
+        analysis.cost && analysis.cost !== "なし"
+          ? `なお、提出物や費用（${analysis.cost}）につきましては、回復後の登園・来所時または家族経由で改めて提出いたします。`
+          : "なお、必要な提出物や配布プリントにつきましては、回復後の登園・登校時に確認させていただきます。",
+        "直前のご連絡となり恐縮ですが、どうぞよろしくお願いいたします。",
+      ].join("\n");
+    }
+    if (cushionMode === "allergy") {
+      const medNotes =
+        analysis.medication_allergy_alerts &&
+        analysis.medication_allergy_alerts.length > 0
+          ? analysis.medication_allergy_alerts.join(" / ")
+          : "お薬の服用・食物アレルギー配慮";
+      return [
+        "【お薬の持参・アレルギー配慮に関するお願い（連絡帳用）】",
+        "いつも温かく見守っていただきありがとうございます。",
+        `「${analysis.title}」に関連して、健康・お薬・アレルギー面の確認事項をご連絡いたします。`,
+        `・確認メモ：${medNotes}`,
+        "・当日は処方薬（またはお薬手帳・アレルギー対応食）を記名のうえ持参いたします。お忙しいところ恐れ入りますが、ご配慮のほどよろしくお願いいたします。",
+      ].join("\n");
+    }
+    return (
+      analysis.reply_cushion_message ||
+      `いつもお世話になっております。「${analysis.title}」のお知らせを確認いたしました。必要書類・持ち物（${analysis.items_to_bring
+        .slice(0, 3)
+        .join("、")}等）を準備のうえ予定通り参加・対応いたします。どうぞよろしくお願いいたします。`
+    );
+  }, [analysis, cushionMode]);
+
+  async function handleCopyCushionMessage() {
+    try {
+      await navigator.clipboard.writeText(replyCushionText);
+      setCopiedCushion(true);
+      setShowCushionPreview(true);
+      setNotice("✉️ 先生・窓口へそのまま送れる丁寧な返信・欠席クッション文をコピーしました！");
+      setTimeout(() => setCopiedCushion(false), 3000);
+    } catch {
+      setShowCushionPreview(true);
+      setError("コピーに失敗しました。プレビュー欄から手動でコピーしてください。");
+    }
+  }
+
   async function handleCopyGrandmaSummary() {
     const text = [
       `【${analysis.title}（やさしい3行まとめ）】`,
@@ -1614,13 +1689,16 @@ export default function OtayoriUltra() {
           </div>
           <div className="ou-nav-links">
             <Link href="/" className="ou-nav-link">
-              GapTutor（学習）
+              🏠 ホーム
             </Link>
             <Link href="/codemistake" className="ou-nav-link">
-              CodePitfall（開発）
+              🪞 CodePitfall（開発）
             </Link>
             <Link href="/machieye" className="ou-nav-link">
-              MachiEye（まち）
+              🛰️ MachiEye（まち・防災）
+            </Link>
+            <Link href="/gitbridge" className="ou-nav-link">
+              🌉 GitBridge
             </Link>
           </div>
         </div>
@@ -1631,17 +1709,15 @@ export default function OtayoriUltra() {
         <header className="ou-hero-header">
           <div className="ou-hero-text">
             <div className="ou-tag-row">
-              <span className="ou-cat-tag">🏠 暮らしと家族の部門 フラッグシップ</span>
+              <span className="ou-cat-tag">🏠 暮らしと家族の部門 フラッグシップ（汎用・家族書類＆メモハブ）</span>
               <span className="ou-model-pill">⚡ {usedModelLabel}</span>
             </div>
             <h1 className="ou-main-title">
-              紙のおたより・通知を、家族4役の「動けるバトン」へ
+              あらゆる紙の通知・お薬説明書・プリントを、家族4役の「動けるバトン」へ
             </h1>
             <p className="ou-subtitle">
-              学校・保育園・小児科・自治体のお知らせを撮影またはワンクリック選択。
-              <strong>ママ・パパ・子ども・祖父母</strong>の役割分担、
-              <strong>Googleカレンダー登録＆.ics一括出力</strong>、
-              <strong>料理中の音声読み上げ</strong>まで1画面で完結します。
+              学校・保育園のおたよりだけでなく、<strong>病院・薬局の処方箋やアレルギー表、市役所・税金・健診通知、町内会回覧、日々の家族メモ</strong>まで撮影またはワンクリック選択。
+              <strong>ママ・パパ・子ども・祖父母</strong>の役割分担、<strong>お薬・アレルギー警告</strong>、<strong>角の立たない欠席・返信文生成</strong>、<strong>Googleカレンダー登録</strong>まで1画面で完結します。
             </p>
           </div>
         </header>
@@ -1938,6 +2014,63 @@ export default function OtayoriUltra() {
             <h2 className="ou-result-title">{analysis.title}</h2>
             <p className="ou-result-summary">{analysis.summary}</p>
 
+            {/* Synthesized Okusuri & Allergy Auto-Warning Badges */}
+            {analysis.medication_allergy_alerts &&
+              analysis.medication_allergy_alerts.length > 0 && (
+                <div
+                  style={{
+                    marginTop: 14,
+                    background: "#fff1f2",
+                    border: "1.5px solid #fda4af",
+                    borderRadius: 13,
+                    padding: "12px 15px",
+                    color: "#881337",
+                  }}
+                  role="region"
+                  aria-label="お薬・アレルギー・体調注意の自動警告バッジ"
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      fontWeight: 800,
+                      fontSize: "0.86rem",
+                      color: "#be123c",
+                      marginBottom: 6,
+                    }}
+                  >
+                    <span
+                      style={{
+                        background: "#e11d48",
+                        color: "#ffffff",
+                        padding: "2px 9px",
+                        borderRadius: 999,
+                        fontSize: "0.73rem",
+                        fontWeight: 800,
+                      }}
+                    >
+                      💊 お薬・アレルギー・体調注意バッジ
+                    </span>
+                    <span>見落とし防止（服薬・アレルゲン・検温・持参ルール）</span>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 5,
+                      fontSize: "0.84rem",
+                      fontWeight: 700,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {analysis.medication_allergy_alerts.map((alertText, i) => (
+                      <div key={i}>{alertText}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
             {/* Hands-Free Web Speech API Voice Readout Dock */}
             <div className="ou-voice-dock" role="region" aria-label="音声読み上げコントロール">
               <div className="ou-voice-info">
@@ -2099,6 +2232,15 @@ export default function OtayoriUltra() {
                   {copiedLine
                     ? "✓ LINE用まとめをコピー済！"
                     : "💬 LINE 家族グループ用まとめをコピー"}
+                </button>
+                <button
+                  type="button"
+                  className="ou-btn-warm"
+                  onClick={handleCopyCushionMessage}
+                >
+                  {copiedCushion
+                    ? "✓ 返信・欠席クッション文をコピー済！"
+                    : "✉️ 園・学校・窓口への返信／欠席クッション文をコピー"}
                 </button>
                 <button
                   type="button"
@@ -2277,6 +2419,117 @@ export default function OtayoriUltra() {
                   </div>
                   <pre className="ou-line-pre">{lineGroupSummaryText}</pre>
                 </div>
+              )}
+            </div>
+
+            {/* Synthesized Renrakucho & SoftMail: 1-Click Polite Reply / Absence / Allergy Cushion Generator */}
+            <div
+              style={{
+                marginTop: 14,
+                background: "#fffbeb",
+                border: "1.5px solid #fcd34d",
+                borderRadius: 13,
+                padding: "14px 16px",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: 10,
+                  marginBottom: 10,
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontSize: "0.88rem",
+                      fontWeight: 800,
+                      color: "#92400e",
+                    }}
+                  >
+                    ✉️ 園・学校・病院・窓口への欠席・返信クッション文（1クリック生成）
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "0.77rem",
+                      color: "#78716c",
+                      marginTop: 2,
+                    }}
+                  >
+                    連絡帳アプリ・メール・LINE公式アカウントへそのまま貼れる丁寧なクッション文です
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {(
+                    [
+                      { id: "confirm", label: "✅ 参加・確認返信" },
+                      { id: "absence", label: "🤒 欠席・体調不良連絡" },
+                      { id: "allergy", label: "💊 与薬・アレルギー相談" },
+                    ] as const
+                  ).map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => {
+                        setCushionMode(tab.id);
+                        setShowCushionPreview(true);
+                      }}
+                      style={{
+                        padding: "5px 10px",
+                        borderRadius: 999,
+                        border:
+                          cushionMode === tab.id
+                            ? "1.5px solid #d97706"
+                            : "1px solid #e7ddd3",
+                        background:
+                          cushionMode === tab.id ? "#fef3c7" : "#ffffff",
+                        color: cushionMode === tab.id ? "#92400e" : "#57534e",
+                        fontSize: "0.75rem",
+                        fontWeight: 800,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={handleCopyCushionMessage}
+                    style={{
+                      padding: "5px 12px",
+                      borderRadius: 8,
+                      border: "none",
+                      background: copiedCushion ? "#16a34a" : "#d97706",
+                      color: "#ffffff",
+                      fontSize: "0.77rem",
+                      fontWeight: 800,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {copiedCushion ? "✓ コピー済！" : "📋 クッション文をコピー"}
+                  </button>
+                </div>
+              </div>
+              {showCushionPreview && (
+                <pre
+                  style={{
+                    margin: 0,
+                    whiteSpace: "pre-wrap",
+                    fontFamily: "inherit",
+                    fontSize: "0.82rem",
+                    background: "#ffffff",
+                    padding: "10px 12px",
+                    borderRadius: 9,
+                    border: "1px solid #fde68a",
+                    color: "#1c1917",
+                    lineHeight: 1.55,
+                  }}
+                >
+                  {replyCushionText}
+                </pre>
               )}
             </div>
           </div>
