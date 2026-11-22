@@ -46,6 +46,7 @@ export interface MachiEyeAnalysis {
   suggested_fix: string;
   recommended_action: string;
   safe_detour_advice?: string;
+  local_personalized_tips?: string[];
   multilingual_notices?: MachiEyeMultilingualNotice;
   report_draft: string;
   privacy_check: MachiEyePrivacyCheck;
@@ -1073,6 +1074,68 @@ function categoryMeta(cat: MachiEyeCategory): { icon: string; color: string } {
   }
 }
 
+function buildMachiEyeLocalSearchUrl(
+  keyword: string,
+  locationLabel: string,
+  lat: string,
+  lng: string
+): string {
+  const cleanLabel = (locationLabel || "").trim();
+  const hasRealLabel =
+    cleanLabel &&
+    !/^(現在地|市内現地|中央駅南口周辺)/.test(cleanLabel);
+  const baseLoc = hasRealLabel
+    ? cleanLabel
+    : lat && lng
+    ? `${lat},${lng}`
+    : cleanLabel || "東京駅";
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    `${baseLoc} ${keyword}`
+  )}`;
+}
+
+function deriveClientLocalPersonalizedTips(pin: CommunitySafetyPin): string[] {
+  if (
+    pin.analysis.local_personalized_tips &&
+    pin.analysis.local_personalized_tips.length > 0
+  ) {
+    return pin.analysis.local_personalized_tips;
+  }
+  const areaLabel = pin.locationText || "現在地周辺エリア";
+  const coordLabel =
+    pin.latitude && pin.longitude
+      ? `（GPS: 北緯 ${pin.latitude}, 東経 ${pin.longitude}）`
+      : "";
+
+  const tips: string[] = [
+    `🛟 避難所・一時滞在施設の確認：「${areaLabel}」${coordLabel}から徒歩圏内の指定避難所・福祉避難所（小中学校体育館・公民館）までの段差のないルートを1クリック検索で確認しておきましょう。`,
+  ];
+
+  if (pin.analysis.category === "防災・冠水") {
+    tips.push(
+      `🌊 内水氾濫・浸水ハザード注意：「${areaLabel}」周辺の低地・アンダーパス・側溝沿いは大雨時に冠水しやすいため、地域の洪水・内水ハザードマップで浸水想定深をチェックしてください。`
+    );
+  } else if (pin.analysis.category === "バリアフリー") {
+    tips.push(
+      `♿ バリアフリー導線・エレベーター確認：「${areaLabel}」周辺で車椅子・ベビーカー・白杖をご利用の際は、段差や放置物を避けられるフラットな幹線歩道および駅・公共施設のエレベーター位置を事前確認してください。`
+    );
+  } else if (pin.analysis.category === "通学路安全") {
+    tips.push(
+      `🚸 通学時間帯・夜間防犯の地域ポイント：「${areaLabel}」周辺は登下校時間帯および夕暮れ時の見通し・街路灯照度に注意し、こども110番の家や交番の位置を把握しておきましょう。`
+    );
+  } else {
+    tips.push(
+      `🚧 路面劣化・夜間通行リスク：「${areaLabel}」周辺での降雨時や夜間通行時は水たまり下の段差・陥没が見えにくくなるため、街路灯のある明るい歩道側を通行してください。`
+    );
+  }
+
+  tips.push(
+    `🚓 最寄りの交番・AED・救急拠点：「${areaLabel}」直近の交番・24時間営業コンビニ・公共施設に設置されたAEDの位置をGoogleマップで把握しておくと緊急時に安心です。`
+  );
+
+  return tips;
+}
+
 export default function MachiEyeLive() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -1564,8 +1627,11 @@ export default function MachiEyeLive() {
         body: JSON.stringify({
           sourceText: reqSourceText,
           locationText: reqLocation,
+          locationLabel: reqLocation,
           latitude: reqLat,
           longitude: reqLng,
+          lat: reqLat,
+          lng: reqLng,
           scenarioId: reqScenarioId,
           imageBase64: reqImgBase64,
           imageMimeType: reqImgMime,
@@ -2971,7 +3037,7 @@ export default function MachiEyeLive() {
                   />
                 )}
 
-                {/* Pin Selector Strip directly beneath Google Map (1-click fly-to coordinate) */}
+                {/* Pin Selector Strip + 1-Click Local Safety Search Bar directly beneath Google Map */}
                 <div
                   style={{
                     padding: "9px 12px",
@@ -2979,9 +3045,102 @@ export default function MachiEyeLive() {
                     borderTop: "1px solid rgba(56, 189, 248, 0.22)",
                     display: "flex",
                     flexDirection: "column",
-                    gap: 6,
+                    gap: 8,
                   }}
                 >
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 8,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: "0.73rem",
+                        fontWeight: 800,
+                        color: "#38bdf8",
+                      }}
+                    >
+                      📍 現在地・マップ中心（{activeGoogleMapCenter.label}）周辺の防災・安全クイック検索:
+                    </span>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 6,
+                      }}
+                    >
+                      <a
+                        href={buildMachiEyeLocalSearchUrl(
+                          "指定避難所 広域避難場所",
+                          activeGoogleMapCenter.label,
+                          activeGoogleMapCenter.lat,
+                          activeGoogleMapCenter.lng
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          padding: "3px 9px",
+                          borderRadius: 999,
+                          border: "1px solid rgba(52, 211, 153, 0.45)",
+                          background: "rgba(16, 185, 129, 0.16)",
+                          color: "#6ee7b7",
+                          textDecoration: "none",
+                          fontSize: "0.72rem",
+                          fontWeight: 800,
+                        }}
+                      >
+                        🛟 周辺の避難所を探す ↗
+                      </a>
+                      <a
+                        href={buildMachiEyeLocalSearchUrl(
+                          "交番 AED 救急病院",
+                          activeGoogleMapCenter.label,
+                          activeGoogleMapCenter.lat,
+                          activeGoogleMapCenter.lng
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          padding: "3px 9px",
+                          borderRadius: 999,
+                          border: "1px solid rgba(56, 189, 248, 0.45)",
+                          background: "rgba(14, 165, 233, 0.16)",
+                          color: "#7dd3fc",
+                          textDecoration: "none",
+                          fontSize: "0.72rem",
+                          fontWeight: 800,
+                        }}
+                      >
+                        🚓 最寄りのAED・交番を探す ↗
+                      </a>
+                      <a
+                        href={buildMachiEyeLocalSearchUrl(
+                          "防災 ハザードマップ 浸水 避難所",
+                          activeGoogleMapCenter.label,
+                          activeGoogleMapCenter.lat,
+                          activeGoogleMapCenter.lng
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          padding: "3px 9px",
+                          borderRadius: 999,
+                          border: "1px solid rgba(251, 146, 60, 0.45)",
+                          background: "rgba(249, 115, 22, 0.16)",
+                          color: "#fdba74",
+                          textDecoration: "none",
+                          fontSize: "0.72rem",
+                          fontWeight: 800,
+                        }}
+                      >
+                        🗺️ 地域のハザードマップ検索 ↗
+                      </a>
+                    </div>
+                  </div>
                   <div
                     style={{
                       display: "flex",
@@ -3826,6 +3985,126 @@ export default function MachiEyeLive() {
                     {selectedPin.analysis.safe_detour_advice ||
                       selectedPin.analysis.recommended_action}
                   </p>
+                </div>
+
+                {/* Personalized Local Safety Tips & 1-Click Google Maps Evacuation / AED / Hazard Map Search */}
+                <div
+                  style={{
+                    padding: "14px 16px",
+                    borderRadius: 12,
+                    background: "rgba(16, 185, 129, 0.12)",
+                    border: "1.5px solid rgba(52, 211, 153, 0.42)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
+                  }}
+                  role="region"
+                  aria-label="この現在地・エリア向けパーソナライズ安全情報"
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 8,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: "0.82rem",
+                        fontWeight: 800,
+                        color: "#6ee7b7",
+                      }}
+                    >
+                      📍 この現在地・エリア向けパーソナライズ安全情報（{selectedPin.locationText}）
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      <a
+                        href={buildMachiEyeLocalSearchUrl(
+                          "指定避難所 広域避難場所",
+                          selectedPin.locationText,
+                          selectedPin.latitude,
+                          selectedPin.longitude
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          padding: "4px 10px",
+                          borderRadius: 999,
+                          border: "1px solid rgba(52, 211, 153, 0.55)",
+                          background: "rgba(15, 23, 42, 0.85)",
+                          color: "#6ee7b7",
+                          textDecoration: "none",
+                          fontSize: "0.73rem",
+                          fontWeight: 800,
+                        }}
+                      >
+                        🛟 周辺の避難所を探す ↗
+                      </a>
+                      <a
+                        href={buildMachiEyeLocalSearchUrl(
+                          "交番 AED 救急病院",
+                          selectedPin.locationText,
+                          selectedPin.latitude,
+                          selectedPin.longitude
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          padding: "4px 10px",
+                          borderRadius: 999,
+                          border: "1px solid rgba(56, 189, 248, 0.55)",
+                          background: "rgba(15, 23, 42, 0.85)",
+                          color: "#7dd3fc",
+                          textDecoration: "none",
+                          fontSize: "0.73rem",
+                          fontWeight: 800,
+                        }}
+                      >
+                        🚓 最寄りのAED・交番を探す ↗
+                      </a>
+                      <a
+                        href={buildMachiEyeLocalSearchUrl(
+                          "防災 ハザードマップ 浸水 避難所",
+                          selectedPin.locationText,
+                          selectedPin.latitude,
+                          selectedPin.longitude
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          padding: "4px 10px",
+                          borderRadius: 999,
+                          border: "1px solid rgba(251, 146, 60, 0.55)",
+                          background: "rgba(15, 23, 42, 0.85)",
+                          color: "#fdba74",
+                          textDecoration: "none",
+                          fontSize: "0.73rem",
+                          fontWeight: 800,
+                        }}
+                      >
+                        🗺️ 地域のハザードマップ検索 ↗
+                      </a>
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 6,
+                      fontSize: "0.82rem",
+                      fontWeight: 600,
+                      color: "#ecfdf5",
+                      lineHeight: 1.55,
+                    }}
+                  >
+                    {deriveClientLocalPersonalizedTips(selectedPin).map(
+                      (tip, idx) => (
+                        <div key={idx}>・{tip}</div>
+                      )
+                    )}
+                  </div>
                 </div>
 
                 {/* Hazard Score Meter & Responsible Department */}

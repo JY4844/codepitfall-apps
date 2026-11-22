@@ -15,6 +15,7 @@ import type {
   OtayoriAnalysis,
   OtayoriChecklistItem,
   OtayoriEvent,
+  OtayoriUserLocation,
 } from "@/app/api/otayori/route";
 
 interface PresetDefinition {
@@ -824,7 +825,103 @@ function ensureCompactIso(
 }
 
 const MEMBERS_STORAGE_KEY = "otayori_ultra_custom_members_v1";
+const USER_LOCATION_STORAGE_KEY = "otayori_ultra_user_location_v1";
 const QUICK_MEMBER_PRESETS = ["自分", "パートナー", "子ども", "親・祖父母", "兄弟・同居人"];
+const GOOGLE_MAPS_API_KEY = (
+  process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""
+).trim();
+
+interface OtayoriGMapInstance {
+  setCenter: (latlng: { lat: number; lng: number }) => void;
+  setZoom: (zoom: number) => void;
+}
+
+interface OtayoriGMarkerInstance {
+  setMap: (map: OtayoriGMapInstance | null) => void;
+  setPosition: (latlng: { lat: number; lng: number }) => void;
+}
+
+interface OtayoriGeocoderResult {
+  geometry?: {
+    location?: {
+      lat: () => number;
+      lng: () => number;
+    };
+  };
+}
+
+interface OtayoriGoogleMapsWindow {
+  google?: {
+    maps?: {
+      Map: new (
+        el: HTMLElement,
+        opts: Record<string, unknown>
+      ) => OtayoriGMapInstance;
+      Marker: new (opts: Record<string, unknown>) => OtayoriGMarkerInstance;
+      Geocoder: new () => {
+        geocode: (
+          req: { address: string },
+          cb: (results: OtayoriGeocoderResult[] | null, status: string) => void
+        ) => void;
+      };
+    };
+  };
+}
+
+function resolveEventMapQuery(
+  ev: OtayoriEvent | undefined,
+  docTitle: string,
+  userLocation: OtayoriUserLocation
+): string {
+  const rawLoc = (ev?.location || "").trim();
+  const isGenericLoc =
+    !rawLoc ||
+    /^(自宅|プリント記載|予定記載|予定の場所|おたより記載|会場)/.test(rawLoc);
+  const baseVenue = !isGenericLoc
+    ? rawLoc.replace(/^(自宅〜|〜)/, "").trim()
+    : (ev?.title || docTitle || "市役所").trim();
+  const areaPrefix = (userLocation.areaName || "").trim();
+  if (areaPrefix && !baseVenue.includes(areaPrefix)) {
+    return `${areaPrefix} ${baseVenue}`;
+  }
+  return baseVenue;
+}
+
+function buildGoogleMapsDirectionsUrl(
+  destinationQuery: string,
+  userLocation: OtayoriUserLocation
+): string {
+  const params = new URLSearchParams({
+    api: "1",
+    destination: destinationQuery,
+  });
+  if (
+    typeof userLocation.lat === "number" &&
+    typeof userLocation.lng === "number"
+  ) {
+    params.set("origin", `${userLocation.lat},${userLocation.lng}`);
+  } else if (userLocation.areaName?.trim()) {
+    params.set("origin", userLocation.areaName.trim());
+  }
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
+function buildGoogleMapsSearchUrl(
+  keyword: string,
+  userLocation: OtayoriUserLocation,
+  fallbackVenue?: string
+): string {
+  const area =
+    userLocation.areaName?.trim() ||
+    (typeof userLocation.lat === "number" &&
+    typeof userLocation.lng === "number"
+      ? `${userLocation.lat},${userLocation.lng}`
+      : fallbackVenue?.trim() || "");
+  const query = area ? `${area} ${keyword}` : keyword;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    query
+  )}`;
+}
 
 function getMemberStyle(name: string): {
   icon: string;
@@ -1034,8 +1131,19 @@ export default function OtayoriUltra() {
   const [showAddEventForm, setShowAddEventForm] = useState<boolean>(false);
   const [manualEventTitle, setManualEventTitle] = useState<string>("");
   const [manualEventDate, setManualEventDate] = useState<string>("");
+  const [manualEventLocation, setManualEventLocation] = useState<string>("");
   const [manualEventNote, setManualEventNote] = useState<string>("");
   const [manualEventAssignee, setManualEventAssignee] = useState<string>("未割り当て");
+
+  // Optional User Location state ("📍 現在地を設定（GPS / エリア名）", starts empty by default)
+  const [userLocation, setUserLocation] = useState<OtayoriUserLocation>({});
+  const [gpsLoading, setGpsLoading] = useState<boolean>(false);
+  const [selectedMapEventIdx, setSelectedMapEventIdx] = useState<number>(0);
+  const [gmapsSdkReady, setGmapsSdkReady] = useState<boolean>(false);
+  const [gmapsSdkFailed, setGmapsSdkFailed] = useState<boolean>(false);
+  const gmapCanvasRef = useRef<HTMLDivElement | null>(null);
+  const gmapInstanceRef = useRef<OtayoriGMapInstance | null>(null);
+  const gmapMarkerRef = useRef<OtayoriGMarkerInstance | null>(null);
 
   const [extraTab, setExtraTab] = useState<"share" | "family" | "save">("share");
   const [analyzing, setAnalyzing] = useState<boolean>(false);
@@ -1066,7 +1174,7 @@ export default function OtayoriUltra() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Load user's saved custom household members from localStorage (starts [] if none saved)
+  // Load user's saved custom household members & optional userLocation from localStorage
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(MEMBERS_STORAGE_KEY);
@@ -1084,7 +1192,184 @@ export default function OtayoriUltra() {
     } catch {
       // ignore
     }
+    try {
+      const savedLoc = window.localStorage.getItem(USER_LOCATION_STORAGE_KEY);
+      if (savedLoc) {
+        const parsedLoc = JSON.parse(savedLoc) as OtayoriUserLocation;
+        if (parsedLoc && typeof parsedLoc === "object") {
+          setUserLocation({
+            lat: typeof parsedLoc.lat === "number" ? parsedLoc.lat : undefined,
+            lng: typeof parsedLoc.lng === "number" ? parsedLoc.lng : undefined,
+            areaName:
+              typeof parsedLoc.areaName === "string"
+                ? parsedLoc.areaName
+                : undefined,
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
   }, []);
+
+  const persistUserLocation = useCallback((nextLoc: OtayoriUserLocation) => {
+    setUserLocation(nextLoc);
+    try {
+      if (
+        !nextLoc.areaName?.trim() &&
+        typeof nextLoc.lat !== "number" &&
+        typeof nextLoc.lng !== "number"
+      ) {
+        window.localStorage.removeItem(USER_LOCATION_STORAGE_KEY);
+      } else {
+        window.localStorage.setItem(
+          USER_LOCATION_STORAGE_KEY,
+          JSON.stringify(nextLoc)
+        );
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleGetGps = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setError("このブラウザは位置情報取得（Geolocation）に対応していません。");
+      return;
+    }
+    setGpsLoading(true);
+    setError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = Number(pos.coords.latitude.toFixed(6));
+        const lng = Number(pos.coords.longitude.toFixed(6));
+        const nextLoc: OtayoriUserLocation = {
+          ...userLocation,
+          lat,
+          lng,
+        };
+        persistUserLocation(nextLoc);
+        setGpsLoading(false);
+        setNotice(
+          `📍 現在地のGPS座標（北緯 ${lat}, 東経 ${lng}）を設定しました！予定会場までのルート案内と地域別アドバイスに反映されます。`
+        );
+      },
+      () => {
+        setGpsLoading(false);
+        setError(
+          "GPS現在地の取得が許可されなかったかタイムアウトしました。右の入力欄にエリア名（例：世田谷区、さくら市）を入力して設定できます。"
+        );
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  // Load Google Maps JS API if NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is configured
+  useEffect(() => {
+    if (!GOOGLE_MAPS_API_KEY || typeof window === "undefined") return;
+    const win = window as unknown as OtayoriGoogleMapsWindow;
+    if (win.google?.maps) {
+      setGmapsSdkReady(true);
+      return;
+    }
+    const existing = document.getElementById(
+      "otayori-google-maps-sdk"
+    ) as HTMLScriptElement | null;
+    if (existing) {
+      const onLoad = () => setGmapsSdkReady(true);
+      const onErr = () => setGmapsSdkFailed(true);
+      existing.addEventListener("load", onLoad);
+      existing.addEventListener("error", onErr);
+      return () => {
+        existing.removeEventListener("load", onLoad);
+        existing.removeEventListener("error", onErr);
+      };
+    }
+    const script = document.createElement("script");
+    script.id = "otayori-google-maps-sdk";
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
+      GOOGLE_MAPS_API_KEY
+    )}&language=ja`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => setGmapsSdkReady(true);
+    script.onerror = () => setGmapsSdkFailed(true);
+    document.head.appendChild(script);
+  }, []);
+
+  const activeMapEvent = useMemo(() => {
+    if (!analysis || analysis.events.length === 0) return undefined;
+    return analysis.events[selectedMapEventIdx] ?? analysis.events[0];
+  }, [analysis, selectedMapEventIdx]);
+
+  const activeEventMapQuery = useMemo(() => {
+    if (!analysis) return "";
+    return resolveEventMapQuery(activeMapEvent, analysis.title, userLocation);
+  }, [analysis, activeMapEvent, userLocation]);
+
+  // Update Google Maps JS API canvas when activeEventMapQuery changes and JS SDK is enabled
+  useEffect(() => {
+    if (
+      !analysis ||
+      !activeEventMapQuery ||
+      !GOOGLE_MAPS_API_KEY ||
+      !gmapsSdkReady ||
+      gmapsSdkFailed ||
+      !gmapCanvasRef.current ||
+      typeof window === "undefined"
+    ) {
+      return;
+    }
+    const gmaps = (window as unknown as OtayoriGoogleMapsWindow).google?.maps;
+    if (!gmaps) return;
+
+    const defaultCenter = {
+      lat: typeof userLocation.lat === "number" ? userLocation.lat : 35.681236,
+      lng: typeof userLocation.lng === "number" ? userLocation.lng : 139.767125,
+    };
+
+    if (!gmapInstanceRef.current) {
+      gmapInstanceRef.current = new gmaps.Map(gmapCanvasRef.current, {
+        center: defaultCenter,
+        zoom: 15,
+        mapTypeControl: false,
+        streetViewControl: true,
+        fullscreenControl: true,
+      });
+    }
+
+    const geocoder = new gmaps.Geocoder();
+    geocoder.geocode({ address: activeEventMapQuery }, (results, status) => {
+      if (
+        status === "OK" &&
+        results &&
+        results[0]?.geometry?.location &&
+        gmapInstanceRef.current
+      ) {
+        const loc = results[0].geometry.location;
+        const pos = { lat: loc.lat(), lng: loc.lng() };
+        gmapInstanceRef.current.setCenter(pos);
+        gmapInstanceRef.current.setZoom(15);
+        if (gmapMarkerRef.current) {
+          gmapMarkerRef.current.setPosition(pos);
+          gmapMarkerRef.current.setMap(gmapInstanceRef.current);
+        } else {
+          gmapMarkerRef.current = new gmaps.Marker({
+            position: pos,
+            map: gmapInstanceRef.current,
+            title: activeEventMapQuery,
+          });
+        }
+      }
+    });
+  }, [
+    analysis,
+    activeEventMapQuery,
+    gmapsSdkReady,
+    gmapsSdkFailed,
+    userLocation.lat,
+    userLocation.lng,
+  ]);
 
   const persistMembers = useCallback((nextMembers: string[]) => {
     setMembers(nextMembers);
@@ -1366,6 +1651,11 @@ export default function OtayoriUltra() {
     setError(null);
     setNotice(null);
 
+    const hasUserLoc =
+      Boolean(userLocation.areaName?.trim()) ||
+      (typeof userLocation.lat === "number" &&
+        typeof userLocation.lng === "number");
+
     try {
       const res = await fetch("/api/otayori", {
         method: "POST",
@@ -1374,6 +1664,7 @@ export default function OtayoriUltra() {
           sourceText: sourceText.trim(),
           familyRoles: familyRolesNote,
           customMembers: members,
+          userLocation: hasUserLoc ? userLocation : undefined,
           imageBase64,
           imageMimeType,
           presetId: activePresetId || undefined,
@@ -1386,6 +1677,12 @@ export default function OtayoriUltra() {
       if (data.analysis) {
         const nextAnalysis = data.analysis as OtayoriAnalysis;
         setAnalysis(nextAnalysis);
+        const venueIdx = nextAnalysis.events.findIndex(
+          (ev) =>
+            ev.location &&
+            !/^(自宅|プリント記載|予定記載|おたより記載)/.test(ev.location)
+        );
+        setSelectedMapEventIdx(venueIdx >= 0 ? venueIdx : 0);
         const freshChecklist = defaultChecklistForAnalysis(nextAnalysis, members);
         setChecklist(freshChecklist);
         persistState(freshChecklist, nextAnalysis.events);
@@ -1416,11 +1713,17 @@ export default function OtayoriUltra() {
       return;
     }
     const dateStr = manualEventDate.trim() || "日程未定";
+    const locInput = manualEventLocation.trim();
     const noteStr = manualEventNote.trim() || "手動で追加した予定";
     const assignee =
       manualEventAssignee && manualEventAssignee !== "未割り当て"
         ? manualEventAssignee
         : members[0] ?? "未割り当て";
+
+    const hasUserLoc =
+      Boolean(userLocation.areaName?.trim()) ||
+      (typeof userLocation.lat === "number" &&
+        typeof userLocation.lng === "number");
 
     setAnalyzing(true);
     setError(null);
@@ -1430,6 +1733,7 @@ export default function OtayoriUltra() {
       const combinedPromptText = [
         `【予定追加】${title}`,
         `日時：${dateStr}`,
+        locInput ? `会場・場所：${locInput}` : "",
         `担当：${assignee}`,
         `メモ・補足：${noteStr}`,
         sourceText.trim() ? `\n【関連メモ】\n${sourceText.trim()}` : "",
@@ -1444,6 +1748,7 @@ export default function OtayoriUltra() {
           sourceText: combinedPromptText,
           familyRoles: familyRolesNote,
           customMembers: members,
+          userLocation: hasUserLoc ? userLocation : undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -1458,6 +1763,13 @@ export default function OtayoriUltra() {
         generated?.schedule_cautions?.[0] ||
         "前日の夜に持ち物・必要書類・集合時間を再確認しておきましょう。";
 
+      const resolvedLocation =
+        locInput ||
+        (generated?.events?.[0]?.location &&
+        !/^(プリント記載|おたより記載)/.test(generated.events[0].location)
+          ? generated.events[0].location
+          : title);
+
       const newEv: OtayoriEvent = {
         date: dateStr,
         title,
@@ -1466,7 +1778,7 @@ export default function OtayoriUltra() {
         caution: addedCaution,
         isoStart: start,
         isoEnd: end,
-        location: generated?.events?.[0]?.location || "予定の場所",
+        location: resolvedLocation,
         isDeadline: /(締切|提出|予約|集金|期限)/.test(`${title} ${noteStr}`),
       };
 
@@ -1490,6 +1802,9 @@ export default function OtayoriUltra() {
                 "前日に持ち物と時間を確認しておきましょう。",
               ],
               schedule_cautions: [addedCaution],
+              location_tips: [
+                `🗺️ 会場（${resolvedLocation}）へのルートと移動時間をGoogleマップで事前に確認しておきましょう。`,
+              ],
               suggested_tasks: [
                 {
                   title: `【${assignee}】${title}`,
@@ -1499,6 +1814,7 @@ export default function OtayoriUltra() {
               ],
             };
         setAnalysis(nextAnalysis);
+        setSelectedMapEventIdx(0);
         const freshChecklist = defaultChecklistForAnalysis(nextAnalysis, members);
         setChecklist(freshChecklist);
         persistState(freshChecklist, nextAnalysis.events);
@@ -1509,13 +1825,24 @@ export default function OtayoriUltra() {
             ...(generated?.schedule_cautions ?? [addedCaution]),
           ])
         ).slice(0, 6);
+        const mergedLocationTips = Array.from(
+          new Set([
+            ...(analysis.location_tips ?? []),
+            ...(generated?.location_tips ?? []),
+          ])
+        ).slice(0, 4);
         const updatedEvents = [...analysis.events, newEv];
         const nextAnalysis: OtayoriAnalysis = {
           ...analysis,
           events: updatedEvents,
           schedule_cautions: mergedCautions,
+          location_tips:
+            mergedLocationTips.length > 0
+              ? mergedLocationTips
+              : analysis.location_tips,
         };
         setAnalysis(nextAnalysis);
+        setSelectedMapEventIdx(updatedEvents.length - 1);
         persistState(checklist, updatedEvents);
       }
 
@@ -1524,10 +1851,11 @@ export default function OtayoriUltra() {
       }
       setManualEventTitle("");
       setManualEventDate("");
+      setManualEventLocation("");
       setManualEventNote("");
       setShowAddEventForm(false);
       setNotice(
-        `📅 予定「${title}」を追加し、Gemini がこの予定で気をつける注意点を自動生成しました！`
+        `📅 予定「${title}」を追加し、Google マップ会場情報と Gemini 注意点アドバイスを自動生成しました！`
       );
     } catch (err) {
       setError(
@@ -2141,6 +2469,113 @@ export default function OtayoriUltra() {
             </div>
           </div>
 
+          {/* Optional Clean Current Location Bar ("📍 現在地を設定（GPS / エリア名）", starts empty by default, persisted in localStorage) */}
+          <div
+            style={{
+              padding: "11px 14px",
+              borderRadius: 12,
+              background: "#f8fafc",
+              border: "1px solid #e2e8f0",
+              marginBottom: 16,
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#1e293b" }}>
+                📍 現在地を設定（GPS / エリア名）
+              </span>
+              <span style={{ fontSize: "0.74rem", color: "#64748b" }}>
+                ※任意・設定すると予定会場へのルート案内と地域別アドバイスを最適化します
+              </span>
+              {typeof userLocation.lat === "number" &&
+                typeof userLocation.lng === "number" && (
+                  <span
+                    style={{
+                      fontSize: "0.73rem",
+                      fontWeight: 800,
+                      padding: "2px 8px",
+                      borderRadius: 999,
+                      background: "#dcfce7",
+                      border: "1px solid #86efac",
+                      color: "#166534",
+                    }}
+                  >
+                    🛰️ GPS設定済 ({userLocation.lat.toFixed(4)}, {userLocation.lng.toFixed(4)})
+                  </span>
+                )}
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: 8,
+                flex: 1,
+                minWidth: 260,
+                justifyContent: "flex-end",
+              }}
+            >
+              <button
+                type="button"
+                onClick={handleGetGps}
+                disabled={gpsLoading}
+                className="ou-btn-secondary"
+                style={{
+                  whiteSpace: "nowrap",
+                  padding: "6px 11px",
+                  borderColor: "#93c5fd",
+                  background: "#eff6ff",
+                  color: "#1d4ed8",
+                }}
+              >
+                {gpsLoading ? "GPS取得中..." : "📍 GPSで現在地を取得"}
+              </button>
+              <input
+                type="text"
+                aria-label="現在地・お住まいのエリア名"
+                value={userLocation.areaName || ""}
+                onChange={(e) =>
+                  persistUserLocation({
+                    ...userLocation,
+                    areaName: e.target.value,
+                  })
+                }
+                placeholder="またはエリア・最寄り駅名を入力（例：世田谷区、横浜駅、さくら市）"
+                className="ou-text-input"
+                style={{
+                  padding: "6px 10px",
+                  fontSize: "0.78rem",
+                  flex: 1,
+                  minWidth: 210,
+                  maxWidth: 340,
+                }}
+              />
+              {(userLocation.areaName ||
+                typeof userLocation.lat === "number") && (
+                <button
+                  type="button"
+                  onClick={() => persistUserLocation({})}
+                  style={{
+                    border: "none",
+                    background: "transparent",
+                    color: "#64748b",
+                    fontSize: "0.75rem",
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  位置リセット
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Optional Direct Manual Schedule Form ("＋ 予定を追加") */}
           {showAddEventForm && (
             <form
@@ -2157,12 +2592,12 @@ export default function OtayoriUltra() {
               }}
             >
               <div style={{ fontSize: "0.84rem", fontWeight: 800, color: "#9a3412" }}>
-                📅 予定を直接追加（Gemini がその予定で気をつける注意点を自動アドバイスします）
+                📅 予定を直接追加（Google マップ会場カード＆Gemini 注意点アドバイスを自動生成）
               </div>
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(175px, 1fr))",
                   gap: 8,
                 }}
               >
@@ -2183,7 +2618,14 @@ export default function OtayoriUltra() {
                 <input
                   type="text"
                   className="ou-text-input"
-                  placeholder="場所・メモ（任意：母子手帳持参、お弁当など）"
+                  placeholder="会場・場所（例：さくら小学校、市役所、〇〇小児科）"
+                  value={manualEventLocation}
+                  onChange={(e) => setManualEventLocation(e.target.value)}
+                />
+                <input
+                  type="text"
+                  className="ou-text-input"
+                  placeholder="メモ（任意：母子手帳持参、お弁当など）"
                   value={manualEventNote}
                   onChange={(e) => setManualEventNote(e.target.value)}
                 />
@@ -2207,7 +2649,7 @@ export default function OtayoriUltra() {
                   disabled={analyzing}
                   style={{ padding: "8px 16px", fontSize: "0.84rem" }}
                 >
-                  {analyzing ? "追加・注意点生成中..." : "＋ 予定を追加して注意点を生成"}
+                  {analyzing ? "追加・注意点生成中..." : "＋ 予定を追加して地図＆注意点を生成"}
                 </button>
               </div>
             </form>
@@ -2496,6 +2938,125 @@ export default function OtayoriUltra() {
                   </div>
                 )}
 
+              {/* Personalized Location Tips Banner ("📍 地域・現在地に合わせたパーソナライズ注意点") */}
+              {analysis.location_tips && analysis.location_tips.length > 0 && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    background: "#f0f9ff",
+                    border: "1.5px solid #7dd3fc",
+                    borderRadius: 13,
+                    padding: "12px 15px",
+                    color: "#0c4a6e",
+                  }}
+                  role="region"
+                  aria-label="地域・現在地に合わせたパーソナライズ注意点"
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 8,
+                      marginBottom: 6,
+                    }}
+                  >
+                    <span
+                      style={{
+                        background: "#0284c7",
+                        color: "#ffffff",
+                        padding: "2px 9px",
+                        borderRadius: 999,
+                        fontSize: "0.73rem",
+                        fontWeight: 800,
+                      }}
+                    >
+                      📍 地域・現在地に合わせたパーソナライズ注意点
+                    </span>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      <a
+                        href={buildGoogleMapsSearchUrl(
+                          "市役所 保健福祉センター 窓口",
+                          userLocation,
+                          activeEventMapQuery
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          fontSize: "0.73rem",
+                          fontWeight: 800,
+                          padding: "3px 9px",
+                          borderRadius: 999,
+                          background: "#ffffff",
+                          border: "1px solid #38bdf8",
+                          color: "#0369a1",
+                          textDecoration: "none",
+                        }}
+                      >
+                        🏛️ 自治体窓口・保健所を検索 ↗
+                      </a>
+                      <a
+                        href={buildGoogleMapsSearchUrl(
+                          "処方箋薬局 小児科 クリニック",
+                          userLocation,
+                          activeEventMapQuery
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          fontSize: "0.73rem",
+                          fontWeight: 800,
+                          padding: "3px 9px",
+                          borderRadius: 999,
+                          background: "#ffffff",
+                          border: "1px solid #38bdf8",
+                          color: "#0369a1",
+                          textDecoration: "none",
+                        }}
+                      >
+                        💊 周辺の薬局・小児科を検索 ↗
+                      </a>
+                      <a
+                        href={buildGoogleMapsSearchUrl(
+                          "コインパーキング 駐車場",
+                          userLocation,
+                          activeEventMapQuery
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          fontSize: "0.73rem",
+                          fontWeight: 800,
+                          padding: "3px 9px",
+                          borderRadius: 999,
+                          background: "#ffffff",
+                          border: "1px solid #38bdf8",
+                          color: "#0369a1",
+                          textDecoration: "none",
+                        }}
+                      >
+                        🅿️ 会場周辺の駐車場を検索 ↗
+                      </a>
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 5,
+                      fontSize: "0.84rem",
+                      fontWeight: 700,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {analysis.location_tips.map((tipText, i) => (
+                      <div key={i}>・{tipText}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Okusuri & Allergy Auto-Warning Badges */}
               {analysis.medication_allergy_alerts &&
                 analysis.medication_allergy_alerts.length > 0 && (
@@ -2648,6 +3209,16 @@ export default function OtayoriUltra() {
                     analysis.items_to_bring,
                     idx
                   );
+                  const evMapQuery = resolveEventMapQuery(
+                    ev,
+                    analysis.title,
+                    userLocation
+                  );
+                  const evDirectionsUrl = buildGoogleMapsDirectionsUrl(
+                    evMapQuery,
+                    userLocation
+                  );
+                  const isMapSelected = selectedMapEventIdx === idx;
 
                   return (
                     <div
@@ -2661,7 +3232,25 @@ export default function OtayoriUltra() {
                             <span className="ou-deadline-badge">⏰ 提出・予約締切</span>
                           )}
                           {ev.location && (
-                            <span className="ou-event-location">📍 {ev.location}</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedMapEventIdx(idx)}
+                              style={{
+                                border: isMapSelected
+                                  ? "1.5px solid #0284c7"
+                                  : "1px solid #e2e8f0",
+                                background: isMapSelected ? "#e0f2fe" : "#f8fafc",
+                                color: isMapSelected ? "#0369a1" : "#475569",
+                                borderRadius: 999,
+                                padding: "2px 9px",
+                                fontSize: "0.75rem",
+                                fontWeight: 700,
+                                cursor: "pointer",
+                              }}
+                              title="下のGoogleマップでこの会場を表示"
+                            >
+                              📍 {ev.location}（地図表示）
+                            </button>
                           )}
                         </div>
                         <div className="ou-event-title">{ev.title}</div>
@@ -2720,6 +3309,27 @@ export default function OtayoriUltra() {
                         )}
 
                         <a
+                          href={evDirectionsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 5,
+                            padding: "7px 11px",
+                            borderRadius: 9,
+                            border: "1px solid #86efac",
+                            background: "#f0fdf4",
+                            color: "#166534",
+                            fontSize: "0.78rem",
+                            fontWeight: 800,
+                            textDecoration: "none",
+                          }}
+                        >
+                          🗺️ 現在地からのルートを見る ↗
+                        </a>
+
+                        <a
                           href={gcalUrl}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -2732,6 +3342,215 @@ export default function OtayoriUltra() {
                   );
                 })}
               </div>
+
+              {/* Clean Google Maps Card for Event Location + 1-Click Route From Current Location */}
+              {activeEventMapQuery && (
+                <div
+                  style={{
+                    marginTop: 14,
+                    borderRadius: 15,
+                    border: "1.5px solid #bae6fd",
+                    background: "#f8fafc",
+                    overflow: "hidden",
+                  }}
+                  role="region"
+                  aria-label="予定会場のGoogleマップと現在地からのルート案内"
+                >
+                  <div
+                    style={{
+                      padding: "11px 15px",
+                      background: "#f0f9ff",
+                      borderBottom: "1px solid #bae6fd",
+                      display: "flex",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 10,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <span
+                        style={{
+                          padding: "3px 9px",
+                          borderRadius: 999,
+                          background: "#0284c7",
+                          color: "#ffffff",
+                          fontSize: "0.72rem",
+                          fontWeight: 800,
+                        }}
+                      >
+                        {GOOGLE_MAPS_API_KEY && gmapsSdkReady && !gmapsSdkFailed
+                          ? "🗺️ Google Maps JS API"
+                          : "🗺️ Google Maps Live Embed"}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "0.86rem",
+                          fontWeight: 800,
+                          color: "#0c4a6e",
+                        }}
+                      >
+                        📍 会場マップ：{activeEventMapQuery}
+                      </span>
+                      {(userLocation.areaName ||
+                        typeof userLocation.lat === "number") && (
+                        <span
+                          style={{
+                            fontSize: "0.74rem",
+                            color: "#0369a1",
+                            fontWeight: 700,
+                          }}
+                        >
+                          （出発地:{" "}
+                          {userLocation.areaName ||
+                            `GPS (${userLocation.lat?.toFixed(4)}, ${userLocation.lng?.toFixed(4)})`}
+                          ）
+                        </span>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <a
+                        href={buildGoogleMapsDirectionsUrl(
+                          activeEventMapQuery,
+                          userLocation
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 5,
+                          padding: "6px 12px",
+                          borderRadius: 8,
+                          background: "#16a34a",
+                          color: "#ffffff",
+                          fontSize: "0.78rem",
+                          fontWeight: 800,
+                          textDecoration: "none",
+                        }}
+                      >
+                        🗺️ 現在地からのルートを見る ↗
+                      </a>
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                          activeEventMapQuery
+                        )}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 5,
+                          padding: "6px 11px",
+                          borderRadius: 8,
+                          border: "1px solid #7dd3fc",
+                          background: "#ffffff",
+                          color: "#0369a1",
+                          fontSize: "0.76rem",
+                          fontWeight: 800,
+                          textDecoration: "none",
+                        }}
+                      >
+                        📍 Googleマップで開く ↗
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Event Venue Selector Pills if multiple events exist */}
+                  {analysis.events.length > 1 && (
+                    <div
+                      style={{
+                        padding: "8px 14px",
+                        background: "#ffffff",
+                        borderBottom: "1px solid #e2e8f0",
+                        display: "flex",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "0.74rem",
+                          fontWeight: 700,
+                          color: "#64748b",
+                        }}
+                      >
+                        表示する予定会場：
+                      </span>
+                      {analysis.events.map((ev, i) => {
+                        const active = selectedMapEventIdx === i;
+                        const label = ev.location || ev.title;
+                        return (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => setSelectedMapEventIdx(i)}
+                            style={{
+                              padding: "3px 10px",
+                              borderRadius: 999,
+                              border: active
+                                ? "1.5px solid #0284c7"
+                                : "1px solid #cbd5e1",
+                              background: active ? "#e0f2fe" : "#f8fafc",
+                              color: active ? "#0369a1" : "#475569",
+                              fontSize: "0.74rem",
+                              fontWeight: active ? 800 : 600,
+                              cursor: "pointer",
+                            }}
+                          >
+                            📍 {label.length > 18 ? `${label.slice(0, 18)}…` : label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {GOOGLE_MAPS_API_KEY && gmapsSdkReady && !gmapsSdkFailed ? (
+                    <div
+                      ref={gmapCanvasRef}
+                      style={{
+                        width: "100%",
+                        height: 230,
+                        background: "#e2e8f0",
+                      }}
+                      aria-label={`Google マップ - ${activeEventMapQuery}`}
+                    />
+                  ) : (
+                    <iframe
+                      key={`otayori-gmap-${activeEventMapQuery}`}
+                      title={`Google マップ - ${activeEventMapQuery}`}
+                      src={`https://maps.google.com/maps?q=${encodeURIComponent(
+                        activeEventMapQuery
+                      )}&hl=ja&z=15&output=embed`}
+                      style={{
+                        width: "100%",
+                        height: 230,
+                        border: 0,
+                        display: "block",
+                        background: "#e2e8f0",
+                      }}
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                    />
+                  )}
+                </div>
+              )}
             </div>
 
             {/* PRIMARY SECTION 2: Checklist */}

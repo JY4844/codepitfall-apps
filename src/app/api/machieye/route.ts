@@ -63,6 +63,7 @@ export interface MachiEyeAnalysis {
   suggested_fix: string;
   recommended_action: string;
   safe_detour_advice?: string;
+  local_personalized_tips?: string[];
   multilingual_notices?: MachiEyeMultilingualNotice;
   report_draft: string;
   privacy_check: MachiEyePrivacyCheck;
@@ -104,6 +105,10 @@ const RESPONSE_SCHEMA = {
     suggested_fix: { type: "STRING" },
     recommended_action: { type: "STRING" },
     safe_detour_advice: { type: "STRING" },
+    local_personalized_tips: {
+      type: "ARRAY",
+      items: { type: "STRING" },
+    },
     multilingual_notices: {
       type: "OBJECT",
       properties: {
@@ -293,6 +298,7 @@ function buildPrompt(
     "- suggested_fix: 自治体に対する具体的な修繕・改善提案（工法や対策案を含む）",
     "- recommended_action: 通報市民や地域住民が現時点で取るべき安全行動",
     "- safe_detour_advice: 車椅子・ベビーカー・高齢者・視覚障がい者向けの具体的な「バリアフリー迂回・日陰・災害避難安全アドバイス」（1〜2文）",
+    "- local_personalized_tips: 📍「この現在地・エリア向けパーソナライズ安全情報」（3〜4件の具体的な地域・GPS地点別アドバイス配列。例：この地点から最寄りの指定避難所・広域避難場所への段差なし誘導、最寄りの交番・AED設置施設・防災井戸の確認ポイント、低地・河川・老朽塀などの地域ハザードマップ確認ポイント、夜間・豪雨時の地域迂回アドバイスなど）",
     "- multilingual_notices: 外国人住民・観光客向けの4言語（ja: やさしい日本語, en: 英語, zh: 中国語簡体字, ko: 韓国語）による簡潔な危険注意・迂回案内カード文",
     "- report_draft: 自治体窓口へそのまま提出できる丁寧かつ構造化された通報・改善要望書",
     "- privacy_check: 写真や記述に人の顔(has_face)、ナンバープレート(has_license_plate)、表札(has_nameplate)が含まれるか判定し、warning_message に記載",
@@ -306,7 +312,73 @@ function buildPrompt(
     .join("\n");
 }
 
+function buildLocalPersonalizedTips(params: {
+  category: MachiEyeCategory;
+  locationText: string;
+  latitude: string;
+  longitude: string;
+  title: string;
+}): string[] {
+  const areaLabel = params.locationText.trim() || "現在地周辺エリア";
+  const coordLabel =
+    params.latitude && params.longitude
+      ? `（GPS: 北緯 ${params.latitude}, 東経 ${params.longitude}）`
+      : "";
+
+  const tips: string[] = [
+    `🛟 避難所・一時滞在施設の確認：「${areaLabel}」${coordLabel}から徒歩圏内の指定避難所・福祉避難所（小中学校体育館・公民館）までの段差のないルートを下の1クリック検索で確認しておきましょう。`,
+  ];
+
+  if (params.category === "防災・冠水") {
+    tips.push(
+      `🌊 内水氾濫・浸水ハザード注意：「${areaLabel}」周辺の低地・アンダーパス・側溝沿いはゲリラ豪雨時に冠水しやすいため、自治体の洪水・内水ハザードマップで浸水想定深をチェックしてください。`
+    );
+  } else if (params.category === "バリアフリー") {
+    tips.push(
+      `♿ バリアフリー導線・エレベーター確認：「${areaLabel}」周辺で車椅子・ベビーカー・白杖をご利用の際は、段差や放置物を避けられるフラットな幹線歩道および駅・公共施設のエレベーター位置を事前確認してください。`
+    );
+  } else if (params.category === "通学路安全") {
+    tips.push(
+      `🚸 通学時間帯・夜間防犯の地域ポイント：「${areaLabel}」周辺は登下校（7:30〜8:30 / 15:00〜17:30）および夕暮れ時の見通し・街路灯照度に注意し、こども110番の家や交番の位置を把握しておきましょう。`
+    );
+  } else {
+    tips.push(
+      `🚧 路面劣化・夜間通行リスク：「${areaLabel}」周辺での降雨時や夜間通行時は水たまり下の段差・陥没が見えにくくなるため、街路灯のある明るい歩道側を通行してください。`
+    );
+  }
+
+  tips.push(
+    `🚓 最寄りの交番・AED・救急拠点：「${areaLabel}」直近の交番・24時間営業コンビニ・公共施設に設置されたAED（自動体外式除細動器）の位置をGoogleマップで把握しておくと緊急時に安心です。`
+  );
+
+  return tips;
+}
+
 function buildDeterministicFallback(params: {
+  sourceText: string;
+  locationText: string;
+  latitude: string;
+  longitude: string;
+  scenarioId?: string;
+  hasImage: boolean;
+}): MachiEyeAnalysis {
+  const core = buildDeterministicFallbackCore(params);
+  return {
+    ...core,
+    local_personalized_tips:
+      core.local_personalized_tips && core.local_personalized_tips.length > 0
+        ? core.local_personalized_tips
+        : buildLocalPersonalizedTips({
+            category: core.category,
+            locationText: params.locationText,
+            latitude: params.latitude,
+            longitude: params.longitude,
+            title: core.title,
+          }),
+  };
+}
+
+function buildDeterministicFallbackCore(params: {
   sourceText: string;
   locationText: string;
   latitude: string;
@@ -965,6 +1037,22 @@ function normalizeResult(
       ? obj.safe_detour_advice.trim()
       : "♿ バリアフリー迂回・安全アドバイス：車椅子・ベビーカー・高齢者の方は危険箇所を避け、段差のないフラットな反対側歩道・エレベーターまたは広域避難ルートへ迂回してください。";
 
+  const rawLocalTips = Array.isArray(obj.local_personalized_tips)
+    ? obj.local_personalized_tips
+        .map((x) => String(x ?? "").trim())
+        .filter(Boolean)
+    : [];
+  const local_personalized_tips =
+    rawLocalTips.length > 0
+      ? rawLocalTips
+      : buildLocalPersonalizedTips({
+          category,
+          locationText: context.locationText,
+          latitude: context.latitude,
+          longitude: context.longitude,
+          title: obj.title.trim(),
+        });
+
   const mn = (obj.multilingual_notices ?? {}) as Record<string, unknown>;
   const multilingual_notices: MachiEyeMultilingualNotice = {
     ja:
@@ -1045,6 +1133,7 @@ function normalizeResult(
     suggested_fix,
     recommended_action,
     safe_detour_advice,
+    local_personalized_tips,
     multilingual_notices,
     report_draft,
     privacy_check: {
@@ -1085,11 +1174,23 @@ export async function POST(request: NextRequest) {
     const sourceText =
       typeof body?.sourceText === "string" ? body.sourceText.trim() : "";
     const locationText =
-      typeof body?.locationText === "string" ? body.locationText.trim() : "";
+      typeof body?.locationText === "string" && body.locationText.trim()
+        ? body.locationText.trim()
+        : typeof body?.locationLabel === "string"
+        ? body.locationLabel.trim()
+        : "";
     const latitude =
-      typeof body?.latitude === "string" ? body.latitude.trim() : "";
+      typeof body?.latitude === "string" && body.latitude.trim()
+        ? body.latitude.trim()
+        : typeof body?.lat === "string" || typeof body?.lat === "number"
+        ? String(body.lat).trim()
+        : "";
     const longitude =
-      typeof body?.longitude === "string" ? body.longitude.trim() : "";
+      typeof body?.longitude === "string" && body.longitude.trim()
+        ? body.longitude.trim()
+        : typeof body?.lng === "string" || typeof body?.lng === "number"
+        ? String(body.lng).trim()
+        : "";
     const scenarioId =
       typeof body?.scenarioId === "string" ? body.scenarioId.trim() : "";
     const imageBase64 =

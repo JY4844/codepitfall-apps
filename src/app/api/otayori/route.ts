@@ -29,6 +29,12 @@ export interface OtayoriSuggestedTask {
   memo: string;
 }
 
+export interface OtayoriUserLocation {
+  lat?: number;
+  lng?: number;
+  areaName?: string;
+}
+
 export interface OtayoriAnalysis {
   title: string;
   category?: string;
@@ -42,6 +48,7 @@ export interface OtayoriAnalysis {
   voice_script?: string;
   medication_allergy_alerts?: string[];
   schedule_cautions?: string[];
+  location_tips?: string[];
   reply_cushion_message?: string;
   suggested_tasks: OtayoriSuggestedTask[];
 }
@@ -116,6 +123,10 @@ const RESPONSE_SCHEMA = {
       items: { type: "STRING" },
     },
     schedule_cautions: {
+      type: "ARRAY",
+      items: { type: "STRING" },
+    },
+    location_tips: {
       type: "ARRAY",
       items: { type: "STRING" },
     },
@@ -242,12 +253,28 @@ function inferIsoDates(dateText: string, indexOffset = 0): {
 function buildPrompt(
   sourceText: string,
   familyRoles: string,
-  customMembers: string[]
+  customMembers: string[],
+  userLocation?: OtayoriUserLocation
 ): string {
   const membersListText =
     customMembers.length > 0
       ? `登録されている担当メンバー一覧: ${customMembers.join(" / ")}（※assignee にはこの中から適切なメンバー名を割り当ててください）`
       : "担当メンバーはまだ未登録のため、assignee にはすべて「未割り当て」を設定してください。";
+
+  const locParts: string[] = [];
+  if (userLocation?.areaName) {
+    locParts.push(`エリア・自治体名: ${userLocation.areaName}`);
+  }
+  if (
+    typeof userLocation?.lat === "number" &&
+    typeof userLocation?.lng === "number"
+  ) {
+    locParts.push(`現在地GPS座標: 北緯 ${userLocation.lat}, 東経 ${userLocation.lng}`);
+  }
+  const userLocationText =
+    locParts.length > 0
+      ? `【ユーザーの現在地・地域設定】\n${locParts.join(" / ")}`
+      : "";
 
   return [
     "あなたは多様な世帯構成を支える優秀な暮らし・予定秘書AI「おたよりバトン Ultra」です。",
@@ -274,10 +301,12 @@ function buildPrompt(
     "- voice_script: 家事や移動をしながら耳で聞ける、150〜220文字程度の自然な音声読み上げ用ナレーション原稿",
     "- medication_allergy_alerts: お薬・服薬・食物アレルギー・絶食・検温・熱中症など、健康・医療・安全に関わる注意点リスト（1〜3件）",
     "- schedule_cautions: ⚠️「この予定でよくある注意点・気をつけること（Gemini アドバイス）」（2〜4件の具体的なアドバイス配列。例：雨天順延時の連絡確認タイミング、健診前の絶食や服薬ルール、役所・病院でのマイナ保険証・母子手帳・受診券の持参、学校行事での全持ち物への記名やおつりなし集金袋の準備など）",
+    "- location_tips: 📍「地域・現在地に合わせたパーソナライズ注意点」（2〜4件の具体的な地域・移動・会場周辺アドバイス配列。例：現在地から会場への移動・朝の混雑バッファ、自治体窓口・保健センターの受付時間や駐車場確認、病院周辺の処方箋薬局や小児科・コインパーキングの事前チェック、屋外行事での地域天候・紫外線・防寒対策など）",
     "- reply_cushion_message: 園・学校・病院・自治体窓口へそのまま送れる丁寧な返信・連絡・欠席相談クッション文",
     "- suggested_tasks: Google カレンダー・スプレッドシート連携用の具体的なタスク（2〜4件）。priority は high / medium / low から選ぶ",
     "",
     `【世帯の担当メンバー設定】\n${membersListText}`,
+    userLocationText,
     familyRoles ? `【役割分担・補足メモ】\n${familyRoles}` : "",
     sourceText ? `\n【おたより・通知・予定のテキスト】\n${sourceText}` : "",
   ]
@@ -354,6 +383,63 @@ function deriveScheduleCautions(
   return cautions.slice(0, 4);
 }
 
+function deriveLocationTips(
+  title: string,
+  summary: string,
+  events: OtayoriEvent[],
+  userLocation?: OtayoriUserLocation
+): string[] {
+  const combined = `${title} ${summary} ${events.map((e) => `${e.title} ${e.location ?? ""}`).join(" ")}`;
+  const areaLabel =
+    userLocation?.areaName?.trim() ||
+    (typeof userLocation?.lat === "number" && typeof userLocation?.lng === "number"
+      ? `現在地GPS (${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)})`
+      : "");
+
+  const primaryVenue =
+    events.find(
+      (e) =>
+        e.location &&
+        !/^(自宅|プリント記載|予定記載|会場|おたより記載)/.test(e.location)
+    )?.location ||
+    events[0]?.location ||
+    "会場";
+
+  const tips: string[] = [];
+
+  if (areaLabel) {
+    tips.push(
+      `🗺️ 現在地（${areaLabel}）からの移動バッファ：「${primaryVenue}」へのルートと朝の交通・バス遅延を見込み、集合時刻の15〜20分前に到着する経路をGoogleマップで確認しておきましょう。`
+    );
+  } else {
+    tips.push(
+      `🗺️ 会場（${primaryVenue}）へのルート・所要時間確認：当日の朝や夕方は周辺道路・公共交通機関が混雑しやすいため、Googleマップで現在地からの移動時間と入口位置を事前チェックしておきましょう。`
+    );
+  }
+
+  if (/(健診|検診|予防接種|ワクチン|小児科|病院|クリニック|保健|医療)/.test(combined)) {
+    tips.push(
+      `💊 周辺の処方箋薬局・駐車場・小児科チェック：${
+        areaLabel ? `${areaLabel}・` : ""
+      }${primaryVenue}周辺の調剤薬局の営業時間や、車送迎時のコインパーキング・駐輪場位置を確認しておくと受診後スムーズです。`
+    );
+  } else if (/(運動会|遠足|公園|校庭|屋外|キャンプ|体育)/.test(combined)) {
+    tips.push(
+      `🌤️ 地域の天候・日陰・駐輪ルール確認：${
+        areaLabel ? `${areaLabel}エリアの` : ""
+      }当日朝の天気予報・気温差に備えて羽織りものや雨具を用意し、校庭・公園周辺の駐輪・駐車禁止エリアに注意してください。`
+    );
+  }
+
+  tips.push(
+    `🏛️ 自治体窓口・施設案内の事前確認：${
+      areaLabel ? `${areaLabel}の` : ""
+    }自治体ホームページや施設案内で、助成券・受診券の対象条件や受付窓口フロア・駐車場の混雑状況を確認しておくと安心です。`
+  );
+
+  return tips.slice(0, 4);
+}
+
 function pickAssigneeForMemberList(
   raw: unknown,
   customMembers: string[],
@@ -372,7 +458,8 @@ function pickAssigneeForMemberList(
 
 function normalizeOtayori(
   parsed: unknown,
-  customMembers: string[] = []
+  customMembers: string[] = [],
+  userLocation?: OtayoriUserLocation
 ): OtayoriAnalysis {
   if (!parsed || typeof parsed !== "object") {
     throw new Error("AI の出力が有効なオブジェクトではありませんでした。");
@@ -495,6 +582,14 @@ function normalizeOtayori(
       ? rawScheduleCautions
       : deriveScheduleCautions(title, summary, events, customMembers);
 
+  const rawLocationTips = Array.isArray(obj.location_tips)
+    ? obj.location_tips.map((x) => String(x ?? "").trim()).filter(Boolean)
+    : [];
+  const location_tips =
+    rawLocationTips.length > 0
+      ? rawLocationTips
+      : deriveLocationTips(title, summary, events, userLocation);
+
   const reply_cushion_message =
     typeof obj.reply_cushion_message === "string" && obj.reply_cushion_message.trim()
       ? obj.reply_cushion_message.trim()
@@ -516,6 +611,7 @@ function normalizeOtayori(
     voice_script,
     medication_allergy_alerts,
     schedule_cautions,
+    location_tips,
     reply_cushion_message,
     suggested_tasks,
   };
@@ -523,7 +619,8 @@ function normalizeOtayori(
 
 function extractJsonObject(
   raw: string,
-  customMembers: string[] = []
+  customMembers: string[] = [],
+  userLocation?: OtayoriUserLocation
 ): OtayoriAnalysis {
   const trimmed = raw.trim();
   let parsed: unknown;
@@ -538,7 +635,7 @@ function extractJsonObject(
       throw new Error("AI の出力を JSON として解析できませんでした。");
     }
   }
-  return normalizeOtayori(parsed, customMembers);
+  return normalizeOtayori(parsed, customMembers, userLocation);
 }
 
 /**
@@ -1328,7 +1425,8 @@ function buildDynamicTextFallback(
 
 function adaptAnalysisToCustomMembers(
   base: OtayoriAnalysis,
-  customMembers: string[]
+  customMembers: string[],
+  userLocation?: OtayoriUserLocation
 ): OtayoriAnalysis {
   const events = base.events.map((ev, idx) => ({
     ...ev,
@@ -1343,12 +1441,17 @@ function adaptAnalysisToCustomMembers(
     base.schedule_cautions && base.schedule_cautions.length > 0
       ? base.schedule_cautions
       : deriveScheduleCautions(base.title, base.summary, events, customMembers);
+  const location_tips =
+    base.location_tips && base.location_tips.length > 0
+      ? base.location_tips
+      : deriveLocationTips(base.title, base.summary, events, userLocation);
 
   return {
     ...base,
     events,
     checklist_items,
     schedule_cautions,
+    location_tips,
   };
 }
 
@@ -1379,6 +1482,22 @@ export async function POST(request: NextRequest) {
         .map((m) => String(m ?? "").trim())
         .filter(Boolean)
     : [];
+
+  let userLocation: OtayoriUserLocation | undefined;
+  if (body.userLocation && typeof body.userLocation === "object") {
+    const ul = body.userLocation as Record<string, unknown>;
+    const rawLat = typeof ul.lat === "number" ? ul.lat : Number(ul.lat);
+    const rawLng = typeof ul.lng === "number" ? ul.lng : Number(ul.lng);
+    const areaName =
+      typeof ul.areaName === "string" && ul.areaName.trim()
+        ? ul.areaName.trim()
+        : undefined;
+    userLocation = {
+      lat: Number.isFinite(rawLat) ? rawLat : undefined,
+      lng: Number.isFinite(rawLng) ? rawLng : undefined,
+      areaName,
+    };
+  }
 
   if (!sourceText && !imageBase64 && !presetId) {
     return errorResponse(
@@ -1411,7 +1530,7 @@ export async function POST(request: NextRequest) {
       detectedPreset && !imageBase64
         ? PRESET_ANALYSES[detectedPreset]
         : buildDynamicTextFallback(sourceText, Boolean(imageBase64));
-    return adaptAnalysisToCustomMembers(raw, customMembers);
+    return adaptAnalysisToCustomMembers(raw, customMembers, userLocation);
   };
 
   const apiKey = process.env.GEMINI_API_KEY;
@@ -1423,7 +1542,12 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const prompt = buildPrompt(sourceText, familyRoles, customMembers);
+  const prompt = buildPrompt(
+    sourceText,
+    familyRoles,
+    customMembers,
+    userLocation
+  );
   const parts: Array<Record<string, unknown>> = [{ text: prompt }];
   if (imageBase64 && imageMimeType) {
     parts.push({
@@ -1477,7 +1601,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const analysis = extractJsonObject(rawText, customMembers);
+    const analysis = extractJsonObject(rawText, customMembers, userLocation);
     return NextResponse.json({
       analysis,
       usedModel: GEMINI_MODEL,

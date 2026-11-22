@@ -9,7 +9,8 @@ export type MistakeCategory =
   | "DB"
   | "Env"
   | "Hydration"
-  | "Git";
+  | "Git"
+  | "MCP";
 
 export interface PersonalMistake {
   id: string;
@@ -228,6 +229,32 @@ const TASK_CHECKLIST_TEMPLATES: Record<
       keywords: /env|環境変数|本番|Config/i,
     },
   ],
+  "MCP / AIエージェント設定": [
+    {
+      id: "mcp-1",
+      title: "MCP ツール定義（inputSchema / JSON Schema）の型と必須項目が実装と一致しているか",
+      why: "AIエージェント呼び出し時の Schema validation failed / Invalid tool arguments エラーを防ぎます。",
+      keywords: /MCP|Schema|inputSchema|tool|Agent/i,
+    },
+    {
+      id: "mcp-2",
+      title: "MCP stdio サーバー内で console.log() ではなく console.error() を使っているか",
+      why: "標準出力（stdout）にログが混ざって JSON-RPC 通信が壊れる 2026 最多トラブルを防ぎます。",
+      keywords: /MCP|stdio|console|JSON-RPC|transport/i,
+    },
+    {
+      id: "mcp-3",
+      title: "Agent SDK / MCP 通信で HTTP 429 / 503 ステータス消失時のリトライ・ログを出しているか",
+      why: "SDK がステータスコードを削ぎ落として原因不明の Transport Error になる現象を防ぎます。",
+      keywords: /429|503|MCP|SDK|rate limit|timeout/i,
+    },
+    {
+      id: "mcp-4",
+      title: "外部リポジトリの AGENTS.md / setup.js / postinstall に不審な curl | sh や環境変数送信がないか確認したか",
+      why: "AIエージェントの自動実行を悪用するプロンプトインジェクション・サプライチェーン攻撃を防ぎます。",
+      keywords: /AGENTS\.md|Security|curl|postinstall|env|サプライチェーン/i,
+    },
+  ],
 };
 
 function buildChecklistForTask(
@@ -294,6 +321,175 @@ function runDeterministicErrorDiagnosis(
   habits: PersonalMistake[]
 ): AuditResponse {
   const combined = `${errorLog}\n${code}`.trim();
+
+  // Case 0-A (2026 GitHub Trending Security): AGENTS.md / setup.js / shell-hook supply-chain & env-exfiltration warning
+  if (
+    /curl\s+[^\n]*\|\s*(sh|bash|zsh|pwsh|powershell)|wget\s+[^\n]*\|\s*(sh|bash)|eval\s*\(\s*atob|child_process\.exec\([^\n]*(curl|wget|env|process\.env)|postinstall[^\n]*(curl|wget|nc|bash)|AGENTS\.md[^\n]*(curl|wget|ignore previous|system prompt|exfil)|process\.env[^\n]*(fetch|http|webhook|requestbin|ngrok|exfil)/i.test(
+      combined
+    )
+  ) {
+    const matchedHabit = findMatchingHabit(
+      habits,
+      /Security|AGENTS\.md|curl|postinstall|secret|env|サプライチェーン/i,
+      "Security"
+    );
+    const quickCause =
+      "【重要セキュリティ警告】AGENTS.md・setup.js・postinstall 等のスクリプト内に、不審な外部シェル実行（curl | sh 等）や環境変数（.env）外部送信の疑いがある危険なパターンが検出されました。";
+    const whyItHappened =
+      "2026年の GitHub トレンドでは、AIコーディングエージェントが自動参照する AGENTS.md や npm の postinstall / setup.js フックを悪用し、開発者の API キー（process.env）を外部送信したり任意コマンドを実行させるサプライチェーン攻撃が急増しています。";
+    const terminalCmd = "git diff AGENTS.md package.json";
+
+    const fixSteps: FixStep[] = [
+      {
+        stepNumber: 1,
+        where: "VS Code エディタ（緊急停止）",
+        instruction:
+          "絶対にそのままコマンド実行や AI エージェントの自動承認（Run / Approve）を行わないでください。該当する curl | sh、eval、外部 Webhook 送信箇所を即座に削除します。",
+      },
+      {
+        stepNumber: 2,
+        where: "VS Code ターミナル",
+        instruction:
+          "外部リポジトリを検証する際は、postinstall 等の自動スクリプトを無効化してパッケージを導入し、差分を監査します。",
+        codeOrCommand: "npm install --ignore-scripts && git diff AGENTS.md package.json",
+      },
+      {
+        stepNumber: 3,
+        where: "API キー・環境変数管理",
+        instruction:
+          "万が一すでに実行してしまった場合は、.env / .env.local に含まれる API キーや GitHub トークンを直ちに失効（Revoke）して再発行してください。",
+      },
+    ];
+
+    return {
+      quickCause,
+      whyItHappened,
+      category: "Security",
+      severity: "high",
+      matchedHabit,
+      suggestedHabitPattern:
+        "外部リポジトリの AGENTS.md / postinstall 自動実行スクリプトの安全性監査",
+      fixSteps,
+      aiFixPrompt: buildAiFixPrompt({
+        errorLog,
+        code,
+        quickCause,
+        fixSummary:
+          "コードおよび設定ファイル内の不審な外部通信（curl/wget/fetch）・シェル実行・process.env 漏洩リスクをすべて洗い出し、安全な実装に無害化してください",
+      }),
+      terminalCommand: terminalCmd,
+      riskScore: 96,
+      summary: quickCause,
+      diagnostics: [
+        {
+          line: 1,
+          severity: "high",
+          category: "Security",
+          title: "AGENTS.md / シェルフック・サプライチェーン攻撃リスク検出",
+          reason: whyItHappened,
+          matchedPersonalHabit:
+            matchedHabit?.pattern ??
+            "外部リポジトリの AGENTS.md / postinstall 自動実行スクリプトの安全性監査",
+          fixSuggestion:
+            "不審な curl | sh / eval / 外部環境変数送信を削除し、npm install --ignore-scripts を使用",
+        },
+      ],
+      fixedCode: code,
+      preflightChecklist: buildChecklistForTask(
+        "MCP / AIエージェント設定",
+        habits
+      ),
+      source: "local-analyzer",
+      taskType,
+      errorLog,
+    };
+  }
+
+  // Case 0-B (2026 GitHub Trending AI Dev): MCP / Agent SDK errors (stripped HTTP 429/503 status codes, schema mismatch, transport timeout)
+  if (
+    /MCP|Model Context Protocol|McpError|JSON-RPC|-32600|-32601|-32602|-32603|Transport closed|stdio transport|SSE transport|inputSchema|Invalid tool arguments|Schema validation failed|Agent SDK|429 Too Many Requests|503 Service Unavailable|status code stripped|rate_limit_exceeded/i.test(
+      combined
+    )
+  ) {
+    const matchedHabit = findMatchingHabit(
+      habits,
+      /MCP|Agent|Schema|429|503|stdio|JSON-RPC|API/i,
+      "MCP"
+    );
+    const quickCause =
+      "MCP サーバーまたは Agent SDK 通信で、HTTP 429/503 ステータスコード消失（レート制限）・inputSchema の型不一致・または stdio 標準出力への console.log 混入によるトランスポート切断が起きています。";
+    const whyItHappened =
+      "2026年の AI エージェント / MCP 開発で頻発する3大原因です：① Agent SDK が上流の HTTP 429/503 エラーのステータスコードを削ぎ落として汎用 Transport Error に変換してしまう、② stdio 通信中に console.log() を使って JSON-RPC が壊れる、③ ツール定義の inputSchema と引数の型がズレているケースです。";
+
+    const fixSteps: FixStep[] = [
+      {
+        stepNumber: 1,
+        where: "VS Code エディタ (MCP Server / SDK)",
+        instruction:
+          "stdio 型の MCP サーバー内で console.log() を使っている箇所をすべて console.error() に変更し、JSON-RPC パイプの破損を防ぎます。",
+        codeOrCommand: `// NG: stdout に混ざり JSON-RPC がクラッシュします\n// console.log("Tool called");\n// OK: stderr に出力します\nconsole.error("[MCP Server] Tool called safely");`,
+      },
+      {
+        stepNumber: 2,
+        where: "VS Code エディタ (429/503 ハンドリング)",
+        instruction:
+          "Agent SDK が HTTP 429 / 503 のステータスコードを握り潰さないよう、err.cause / status / Retry-After ヘッダーを保持して指数バックオフ（待機リトライ）を入れます。",
+        codeOrCommand: `if (err?.status === 429 || err?.status === 503 || /429|503|rate/i.test(String(err?.cause ?? err))) {\n  console.error("[Agent SDK] Rate limit or 503 overload detected. Backing off...");\n}`,
+      },
+      {
+        stepNumber: 3,
+        where: "VS Code エディタ (inputSchema 検証)",
+        instruction:
+          "MCP ツールの inputSchema (JSON Schema / Zod) の required 配列とプロパティ型が実装と一致しているか型チェックで確認します。",
+        codeOrCommand: "npx tsc --noEmit",
+      },
+    ];
+
+    return {
+      quickCause,
+      whyItHappened,
+      category: "MCP",
+      severity: "high",
+      matchedHabit,
+      suggestedHabitPattern:
+        "MCP stdio の console.log 混入と Agent SDK の HTTP 429/503 ステータス消失対策",
+      fixSteps,
+      aiFixPrompt: buildAiFixPrompt({
+        errorLog,
+        code,
+        quickCause,
+        fixSummary:
+          "MCP サーバーの stdout 汚染（console.log → console.error）修正、inputSchema の型整合性修正、および HTTP 429/503 ステータス保持とリトライ処理を追加してください",
+      }),
+      terminalCommand: "npx tsc --noEmit",
+      riskScore: 82,
+      summary: quickCause,
+      diagnostics: [
+        {
+          line: 1,
+          severity: "high",
+          category: "MCP",
+          title: "MCP / Agent SDK トランスポート・Schema・HTTP 429/503 診断",
+          reason: whyItHappened,
+          matchedPersonalHabit:
+            matchedHabit?.pattern ??
+            "MCP stdio の console.log 混入と Agent SDK の HTTP 429/503 ステータス消失対策",
+          fixSuggestion:
+            "console.error への切り替え、inputSchema 整合性確認、429/503 バックオフの追加",
+        },
+      ],
+      fixedCode: code
+        ? code.replace(/console\.log\s*\(/g, "console.error(")
+        : "",
+      preflightChecklist: buildChecklistForTask(
+        "MCP / AIエージェント設定",
+        habits
+      ),
+      source: "local-analyzer",
+      taskType,
+      errorLog,
+    };
+  }
 
   // Case 1: TypeError / res.json is not a function / await forgotten / Promise
   if (
@@ -807,7 +1003,7 @@ export async function POST(request: Request) {
           )}`,
           `貼り付けられたエラーログ:\n${errorLog || "(なし)"}`,
           code.trim() ? `添えられた該当コード:\n${code}` : "",
-          '必ず以下のJSONスキーマのみを返してください: {"quickCause":"1文で3秒で分かる原因の結論","whyItHappened":"初心者にも優しい理由説明","category":"Async|API|Logic|Config|Security|DB|Env|Hydration|Git","severity":"high|medium|low","matchedHabitPattern":"一致した過去クセのpattern文字列またはnull","suggestedHabitPattern":"今後再発防止としてクセDNAに記憶すべき短い名前","fixSteps":[{"stepNumber":1,"where":"VS Code エディタ または VS Code ターミナル","instruction":"具体的な手順","codeOrCommand":"修正コードやコマンド（任意）"}],"aiFixPrompt":"VS CodeのAI（Copilot等）にそのまま貼れる丁寧な修正指示プロンプト","terminalCommand":"ターミナルで実行すべきコマンド1行またはnull"}',
+          '必ず以下のJSONスキーマのみを返してください: {"quickCause":"1文で3秒で分かる原因の結論","whyItHappened":"初心者にも優しい理由説明","category":"Async|API|Logic|Config|Security|DB|Env|Hydration|Git|MCP","severity":"high|medium|low","matchedHabitPattern":"一致した過去クセのpattern文字列またはnull","suggestedHabitPattern":"今後再発防止としてクセDNAに記憶すべき短い名前","fixSteps":[{"stepNumber":1,"where":"VS Code エディタ または VS Code ターミナル","instruction":"具体的な手順","codeOrCommand":"修正コードやコマンド（任意）"}],"aiFixPrompt":"VS CodeのAI（Copilot/Antigravity/Cursor/Claude Code等）にそのまま貼れる丁寧な修正指示プロンプト","terminalCommand":"ターミナルで実行すべきコマンド1行またはnull"}',
         ]
           .filter(Boolean)
           .join("\n\n");
