@@ -7,7 +7,7 @@ interface FeedbackFooterProps {
   theme?: "light" | "dark";
 }
 
-const REPO_URL = "https://github.com/JY4844/google-ai-challenge-2026";
+const REPO_URL = "https://github.com/JY4844/codepitfall-kit";
 
 export default function FeedbackFooter({
   appName,

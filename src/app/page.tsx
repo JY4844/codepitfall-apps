@@ -554,7 +554,7 @@ export default function HomePage() {
             ログイン不要・データはお使いのブラウザとPC/スマホに保存 • Apache-2.0 Open Source
           </div>
           <a
-            href="https://github.com/JY4844/google-ai-challenge-2026/issues/new?title=%5BFlagship%5D+%E6%84%9F%E6%83%B3%E3%83%BB%E6%94%B9%E5%96%84%E8%A6%81%E6%9C%9B"
+            href="https://github.com/JY4844/codepitfall-kit/issues/new?title=%5BFlagship%5D+%E6%84%9F%E6%83%B3%E3%83%BB%E6%94%B9%E5%96%84%E8%A6%81%E6%9C%9B"
             target="_blank"
             rel="noopener noreferrer"
             style={{

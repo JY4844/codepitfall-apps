@@ -56,7 +56,7 @@ export default function OpenGraphImage() {
         >
           <span>OtayoriBaton Ultra • MachiEye Live • GitBridge</span>
           <span style={{ color: "#34d399", fontWeight: 700 }}>
-            github.com/kotae-lab/google-ai-challenge-2026
+            github.com/JY4844/codepitfall-kit
           </span>
         </div>
       </div>

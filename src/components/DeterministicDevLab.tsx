@@ -539,7 +539,7 @@ export default function DeterministicDevLab() {
             type="button"
             onClick={() =>
               void handleRunRepoAudit(
-                "https://github.com/JY4844/google-ai-challenge-2026"
+                "https://github.com/JY4844/codepitfall-kit"
               )
             }
             style={{
