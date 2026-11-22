@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import FeedbackFooter from "@/components/FeedbackFooter";
 import type {
   AuditResponse,
   ChecklistItem,
@@ -2049,36 +2050,7 @@ export default function CodePitfallMirror() {
         </section>
 
         {/* Footer with Open Source notice & 1-click Feedback Link */}
-        <footer
-          style={{
-            marginTop: 28,
-            paddingTop: 18,
-            borderTop: "1px solid #e2e8f0",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: 12,
-            fontSize: 12,
-            color: "#64748b",
-          }}
-        >
-          <div>
-            ログイン不要・データはお使いのブラウザに保存 • Apache-2.0 Open Source
-          </div>
-          <a
-            href="https://github.com/JY4844/google-ai-challenge-2026/issues/new?title=%5BCodePitfall%5D+%E6%84%9F%E6%83%B3%E3%83%BB%E6%94%B9%E5%96%84%E8%A6%81%E6%9C%9B"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              color: "#2563eb",
-              fontWeight: 700,
-              textDecoration: "none",
-            }}
-          >
-            💬 使ってみた感想・改善要望を送る
-          </a>
-        </footer>
+        <FeedbackFooter appName="CodePitfall × GitBridge" theme="light" />
       </main>
     </div>
   );

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
+import FeedbackFooter from "@/components/FeedbackFooter";
 
 export type MachiEyeCategory =
   | "バリアフリー"
@@ -5083,6 +5084,8 @@ export default function MachiEyeLive() {
               </details>
             </div>
           )}
+
+        <FeedbackFooter appName="MachiEye Live" theme="dark" />
       </div>
     </div>
   );

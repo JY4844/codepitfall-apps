@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import FeedbackFooter from "@/components/FeedbackFooter";
 import {
   ChangeEvent,
   FormEvent,
@@ -4513,6 +4514,7 @@ export default function OtayoriUltra() {
             </div>
           </div>
         )}
+        <FeedbackFooter appName="OtayoriBaton Ultra" theme="light" />
       </main>
 
       <style>{`
