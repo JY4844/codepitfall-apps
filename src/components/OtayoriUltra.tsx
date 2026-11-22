@@ -37,7 +37,20 @@ interface PersistedBatonState {
   eventAssigneesByDoc: Record<string, Record<number, FamilyRole>>;
 }
 
+interface ArchivedOtayoriDoc {
+  id: string;
+  savedAt: string;
+  title: string;
+  category: string;
+  summary: string;
+  eventCount: number;
+  thumbnailDataUrl?: string;
+  sourceText: string;
+  analysis: OtayoriAnalysis;
+}
+
 const STORAGE_KEY = "otayori_ultra_baton_v1";
+const ARCHIVE_STORAGE_KEY = "otayori_ultra_archive_v1";
 
 const FAMILY_ROLES: Array<{
   key: FamilyRole;
@@ -1121,6 +1134,13 @@ export default function OtayoriUltra() {
   const [imageMimeType, setImageMimeType] = useState<string>("");
   const [imageSourceLabel, setImageSourceLabel] = useState<string>("");
 
+  // Local Photo-Thumbnail Archive (starts completely empty [] until user analyzes a document)
+  const [archivedDocs, setArchivedDocs] = useState<ArchivedOtayoriDoc[]>([]);
+  const [zoomedArchiveImage, setZoomedArchiveImage] = useState<{
+    src: string;
+    title: string;
+  } | null>(null);
+
   // Checklist state (starts empty [])
   const [checklist, setChecklist] = useState<PersistedChecklistItem[]>([]);
   const [roleFilter, setRoleFilter] = useState<string>("ALL");
@@ -1686,6 +1706,7 @@ export default function OtayoriUltra() {
         const freshChecklist = defaultChecklistForAnalysis(nextAnalysis, members);
         setChecklist(freshChecklist);
         persistState(freshChecklist, nextAnalysis.events);
+        void saveDocToArchive(nextAnalysis, sourceText.trim(), imagePreview);
       }
       if (typeof data.usedModel === "string") {
         setUsedModelLabel(data.usedModel);
@@ -1703,6 +1724,109 @@ export default function OtayoriUltra() {
       setAnalyzing(false);
     }
   }
+
+  // Load saved local handout archive on mount (starts empty [])
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(ARCHIVE_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setArchivedDocs(parsed as ArchivedOtayoriDoc[]);
+        }
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
+
+  const persistArchivedDocs = useCallback((next: ArchivedOtayoriDoc[]) => {
+    setArchivedDocs(next);
+    try {
+      localStorage.setItem(ARCHIVE_STORAGE_KEY, JSON.stringify(next.slice(0, 12)));
+    } catch {
+      // If quota exceeded, retry without thumbnails
+      try {
+        const light = next.slice(0, 8).map((d) => ({ ...d, thumbnailDataUrl: undefined }));
+        localStorage.setItem(ARCHIVE_STORAGE_KEY, JSON.stringify(light));
+      } catch {
+        // Ignore
+      }
+    }
+  }, []);
+
+  const saveDocToArchive = useCallback(
+    async (
+      nextAnalysis: OtayoriAnalysis,
+      rawText: string,
+      previewUrl: string | null
+    ) => {
+      let compactThumb: string | undefined;
+      if (previewUrl) {
+        compactThumb = await new Promise<string | undefined>((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const maxDim = 480;
+            const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.max(1, Math.round(img.width * scale));
+            canvas.height = Math.max(1, Math.round(img.height * scale));
+            const ctx = canvas.getContext("2d");
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              resolve(canvas.toDataURL("image/jpeg", 0.72));
+            } else {
+              resolve(undefined);
+            }
+          };
+          img.onerror = () => resolve(undefined);
+          img.src = previewUrl;
+        });
+      }
+
+      const entry: ArchivedOtayoriDoc = {
+        id: `doc-${Date.now()}`,
+        savedAt: new Date().toLocaleString("ja-JP", {
+          month: "numeric",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        title: nextAnalysis.title || "おたよりメモ",
+        category: nextAnalysis.category || "家族メモ",
+        summary: nextAnalysis.summary || "",
+        eventCount: nextAnalysis.events.length,
+        thumbnailDataUrl: compactThumb,
+        sourceText: rawText,
+        analysis: nextAnalysis,
+      };
+
+      setArchivedDocs((prev) => {
+        const deduped = prev.filter((d) => d.title !== entry.title);
+        const next = [entry, ...deduped].slice(0, 12);
+        try {
+          localStorage.setItem(ARCHIVE_STORAGE_KEY, JSON.stringify(next));
+        } catch {
+          // Ignore quota error
+        }
+        return next;
+      });
+    },
+    []
+  );
+
+  const handleOpenArchivedDoc = (doc: ArchivedOtayoriDoc) => {
+    setAnalysis(doc.analysis);
+    setSourceText(doc.sourceText);
+    setImagePreview(doc.thumbnailDataUrl || null);
+    const restoredChecklist = defaultChecklistForAnalysis(doc.analysis, members);
+    setChecklist(restoredChecklist);
+    setNotice(`🗂️ 保存済みおたより「${doc.title}」を開きました！`);
+  };
+
+  const handleDeleteArchivedDoc = (docId: string) => {
+    persistArchivedDocs(archivedDocs.filter((d) => d.id !== docId));
+  };
 
   // Manually add a schedule and have Gemini (/api/otayori) automatically generate schedule_cautions & event cautions
   async function handleAddManualSchedule(e: FormEvent) {
@@ -1818,6 +1942,7 @@ export default function OtayoriUltra() {
         const freshChecklist = defaultChecklistForAnalysis(nextAnalysis, members);
         setChecklist(freshChecklist);
         persistState(freshChecklist, nextAnalysis.events);
+        void saveDocToArchive(nextAnalysis, sourceText.trim(), imagePreview);
       } else {
         const mergedCautions = Array.from(
           new Set([
@@ -4129,6 +4254,264 @@ export default function OtayoriUltra() {
               </div>
             </div>
           </section>
+        )}
+        {/* Local Original-Photo & Handout Archive (only shown once user has saved items) */}
+        {archivedDocs.length > 0 && (
+          <section
+            style={{
+              marginTop: 22,
+              background: "#ffffff",
+              border: "1px solid #fed7aa",
+              borderRadius: 18,
+              padding: "18px 20px",
+              boxShadow: "0 4px 16px rgba(234, 88, 12, 0.06)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: 8,
+                marginBottom: 14,
+              }}
+            >
+              <div>
+                <h2
+                  style={{
+                    margin: 0,
+                    fontSize: "1.02rem",
+                    fontWeight: 800,
+                    color: "#7c2d12",
+                  }}
+                >
+                  🗂️ 保存済みおたより原本アーカイブ（{archivedDocs.length}件・この端末に保存）
+                </h2>
+                <p
+                  style={{
+                    margin: "3px 0 0 0",
+                    fontSize: "0.78rem",
+                    color: "#9a3412",
+                  }}
+                >
+                  読み取ったプリント写真と予定を端末ローカルに自動保管。いつでも原本の細かい文字を見返せます。
+                </p>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+                gap: 12,
+              }}
+            >
+              {archivedDocs.map((doc) => (
+                <div
+                  key={doc.id}
+                  style={{
+                    borderRadius: 14,
+                    border: "1px solid #ffedd5",
+                    background: "#fffaf5",
+                    padding: 12,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                  }}
+                >
+                  {doc.thumbnailDataUrl && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setZoomedArchiveImage({
+                          src: doc.thumbnailDataUrl!,
+                          title: doc.title,
+                        })
+                      }
+                      style={{
+                        border: "none",
+                        padding: 0,
+                        background: "transparent",
+                        cursor: "zoom-in",
+                        borderRadius: 10,
+                        overflow: "hidden",
+                        position: "relative",
+                      }}
+                      title="クリックして原本写真を拡大表示"
+                    >
+                      <img
+                        src={doc.thumbnailDataUrl}
+                        alt={`${doc.title} の原本写真`}
+                        style={{
+                          width: "100%",
+                          height: 118,
+                          objectFit: "cover",
+                          display: "block",
+                          borderRadius: 10,
+                          border: "1px solid #fed7aa",
+                        }}
+                      />
+                      <span
+                        style={{
+                          position: "absolute",
+                          right: 6,
+                          bottom: 6,
+                          fontSize: "0.68rem",
+                          fontWeight: 700,
+                          padding: "2px 7px",
+                          borderRadius: 999,
+                          background: "rgba(15, 23, 42, 0.72)",
+                          color: "#fff",
+                        }}
+                      >
+                        🔍 原本を拡大
+                      </span>
+                    </button>
+                  )}
+
+                  <div>
+                    <div
+                      style={{
+                        fontSize: "0.86rem",
+                        fontWeight: 800,
+                        color: "#1e293b",
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      {doc.title}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 4,
+                        fontSize: "0.73rem",
+                        color: "#64748b",
+                        display: "flex",
+                        gap: 8,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <span>📅 予定 {doc.eventCount}件</span>
+                      <span>🕒 {doc.savedAt}</span>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 8,
+                      marginTop: "auto",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleOpenArchivedDoc(doc)}
+                      style={{
+                        flex: 1,
+                        padding: "6px 10px",
+                        borderRadius: 9,
+                        border: "1px solid #fdba74",
+                        background: "#fff7ed",
+                        color: "#c2410c",
+                        fontSize: "0.78rem",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      📂 開いて確認
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteArchivedDoc(doc.id)}
+                      style={{
+                        padding: "6px 9px",
+                        borderRadius: 9,
+                        border: "1px solid #e2e8f0",
+                        background: "#ffffff",
+                        color: "#94a3b8",
+                        fontSize: "0.76rem",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                      title="このアーカイブを削除"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Full-size Original Handout Photo Modal */}
+        {zoomedArchiveImage && (
+          <div
+            onClick={() => setZoomedArchiveImage(null)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 60,
+              background: "rgba(15, 23, 42, 0.78)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 20,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                maxWidth: 720,
+                width: "100%",
+                background: "#ffffff",
+                borderRadius: 16,
+                padding: 16,
+                boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 10,
+                }}
+              >
+                <strong style={{ fontSize: "0.92rem", color: "#0f172a" }}>
+                  📄 原本写真：{zoomedArchiveImage.title}
+                </strong>
+                <button
+                  type="button"
+                  onClick={() => setZoomedArchiveImage(null)}
+                  style={{
+                    border: "1px solid #cbd5e1",
+                    background: "#f8fafc",
+                    borderRadius: 8,
+                    padding: "4px 10px",
+                    fontSize: "0.8rem",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  閉じる ×
+                </button>
+              </div>
+              <img
+                src={zoomedArchiveImage.src}
+                alt={zoomedArchiveImage.title}
+                style={{
+                  width: "100%",
+                  maxHeight: "72vh",
+                  objectFit: "contain",
+                  borderRadius: 10,
+                  background: "#f8fafc",
+                }}
+              />
+            </div>
+          </div>
         )}
       </main>
 

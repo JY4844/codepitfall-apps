@@ -975,23 +975,80 @@ export async function POST(request: Request) {
     const errorLog = String(body.errorLog ?? "");
     const code = String(body.code ?? "");
     const taskType = String(body.taskType ?? "Next.js API / フォーム送信");
+    const imageDataUrl =
+      typeof body.imageDataUrl === "string" ? body.imageDataUrl : "";
     const habits: PersonalMistake[] = Array.isArray(body.habits)
       ? body.habits
       : [];
 
+    const hasImage = /^data:image\/(png|jpeg|jpg|webp);base64,/i.test(
+      imageDataUrl
+    );
+    const githubUrlMatch = errorLog.match(
+      /https?:\/\/github\.com\/([\w.-]+)\/([\w.-]+)/i
+    );
+
     const fallback = runDeterministicErrorDiagnosis(
-      errorLog,
+      errorLog ||
+        (hasImage
+          ? "スクリーンショット画像からエラー画面を読み取り中（VS Code / ターミナル / GitHub画面）"
+          : ""),
       code,
-      taskType,
+      githubUrlMatch ? "Git / GitHub Push・PR作成" : taskType,
       habits
     );
 
+    if (githubUrlMatch && !errorLog.includes("rejected")) {
+      const repoLabel = `${githubUrlMatch[1]}/${githubUrlMatch[2]}`;
+      fallback.quickCause = `GitHub リポジトリ（${repoLabel}）の公開前・利用前セキュリティ＆構成チェックを実行しました。`;
+      fallback.whyItHappened =
+        "外部リポジトリのクローンや自作リポジトリの公開前には、秘密鍵（.env）混入・package.json の不審な postinstall スクリプト・AGENTS.md のプロンプトインジェクションを確認するのが 2026 年の標準安全手順です。";
+      fallback.category = "Security";
+      fallback.severity = "medium";
+      fallback.fixSteps = [
+        {
+          stepNumber: 1,
+          where: "VS Code ターミナル",
+          instruction: `${repoLabel} に秘密鍵や .env が含まれていないか、追跡ファイル一覧を確認します。`,
+          codeOrCommand: "git ls-files | findstr /I \".env secret key\"",
+        },
+        {
+          stepNumber: 2,
+          where: "VS Code エディタ",
+          instruction:
+            "package.json の scripts（特に preinstall / postinstall）や AGENTS.md に不審な外部送信・curl | sh が含まれていないか目視確認します。",
+        },
+        {
+          stepNumber: 3,
+          where: "VS Code ターミナル",
+          instruction:
+            "依存関係の既知脆弱性と TypeScript 型エラーを公開前に一括チェックします。",
+          codeOrCommand: "npm audit --omit=dev && npx tsc --noEmit",
+        },
+      ];
+      fallback.terminalCommand = "npm audit --omit=dev && npx tsc --noEmit";
+    } else if (hasImage && !errorLog.trim()) {
+      fallback.quickCause =
+        "添付されたエラー画面スクリーンショットを受け付けました。Gemini Vision API キーが設定されている環境では画像内のエラー行を自動OCR解析します。";
+      fallback.whyItHappened =
+        "現在はローカルフォールバック診断モードで動作しています。画面の赤いエラー1行目を上の欄にコピー＆ペーストするか、Vercel / .env.local に GEMINI_API_KEY を設定すると、スクショからファイル名・行番号・直し方を完全自動抽出できます。";
+    }
+
     const apiKey = process.env.GEMINI_API_KEY;
-    if (apiKey && (errorLog.trim().length > 0 || code.trim().length > 0)) {
+    if (
+      apiKey &&
+      (errorLog.trim().length > 0 || code.trim().length > 0 || hasImage)
+    ) {
       try {
         const prompt = [
-          "あなたはVS CodeやGitHubで開発中のユーザーを助ける「エラー即解決サイドキックAI」です。",
-          "ユーザーが貼り付けたエラーログ（および任意のコード断片）と、ユーザーの過去のミスクセDNAを照合し、初心者にも3秒で分かる原因とVS Code/ターミナルでの具体的な直し方をJSONで返してください。",
+          "あなたはVS CodeやGitHubで開発中のユーザーを助ける「エラー即解決サイドキックAI（マルチモーダルVision対応）」です。",
+          "ユーザーが貼り付けたエラーログ・スクリーンショット画像（VS Codeの赤い波線・ターミナル・GitHub Actions等）・任意のコード断片と、ユーザーの過去のミスクセDNAを照合し、初心者にも3秒で分かる原因とVS Code/ターミナルでの具体的な直し方をJSONで返してください。",
+          hasImage
+            ? "【重要】添付されたスクリーンショット画像内のエラーメッセージ・ファイル名・行番号・スタックトレースを正確に読み取って診断してください。"
+            : "",
+          githubUrlMatch
+            ? `【GitHub URL 検出】${githubUrlMatch[0]} に関する構成・公開前チェック・セキュリティ観点（.env漏洩・postinstall・AGENTS.md安全確認）も踏まえて回答してください。`
+            : "",
           `現在の作業種類: ${taskType}`,
           `ユーザーの過去クセDNA一覧: ${JSON.stringify(
             habits.map((h) => ({
@@ -1001,12 +1058,34 @@ export async function POST(request: Request) {
               hits: h.hits,
             }))
           )}`,
-          `貼り付けられたエラーログ:\n${errorLog || "(なし)"}`,
+          `貼り付けられたエラーログ:\n${errorLog || "(なし・スクリーンショット画像を参照)"}`,
           code.trim() ? `添えられた該当コード:\n${code}` : "",
           '必ず以下のJSONスキーマのみを返してください: {"quickCause":"1文で3秒で分かる原因の結論","whyItHappened":"初心者にも優しい理由説明","category":"Async|API|Logic|Config|Security|DB|Env|Hydration|Git|MCP","severity":"high|medium|low","matchedHabitPattern":"一致した過去クセのpattern文字列またはnull","suggestedHabitPattern":"今後再発防止としてクセDNAに記憶すべき短い名前","fixSteps":[{"stepNumber":1,"where":"VS Code エディタ または VS Code ターミナル","instruction":"具体的な手順","codeOrCommand":"修正コードやコマンド（任意）"}],"aiFixPrompt":"VS CodeのAI（Copilot/Antigravity/Cursor/Claude Code等）にそのまま貼れる丁寧な修正指示プロンプト","terminalCommand":"ターミナルで実行すべきコマンド1行またはnull"}',
         ]
           .filter(Boolean)
           .join("\n\n");
+
+        const parts: Array<
+          | { text: string }
+          | { inlineData: { mimeType: string; data: string } }
+        > = [{ text: prompt }];
+
+        if (hasImage) {
+          const match = imageDataUrl.match(
+            /^data:(image\/(?:png|jpeg|jpg|webp));base64,(.+)$/i
+          );
+          if (match) {
+            parts.push({
+              inlineData: {
+                mimeType:
+                  match[1].toLowerCase() === "image/jpg"
+                    ? "image/jpeg"
+                    : match[1].toLowerCase(),
+                data: match[2],
+              },
+            });
+          }
+        }
 
         const resp = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
@@ -1014,7 +1093,7 @@ export async function POST(request: Request) {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
+              contents: [{ parts }],
               generationConfig: {
                 temperature: 0.2,
                 responseMimeType: "application/json",

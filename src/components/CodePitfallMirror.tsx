@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type {
   AuditResponse,
@@ -270,6 +270,9 @@ export default function CodePitfallMirror() {
   const [habits, setHabits] = useState<PersonalMistake[]>(DEFAULT_HABITS);
   const [errorLog, setErrorLog] = useState<string>("");
   const [optionalCode, setOptionalCode] = useState<string>("");
+  const [screenshotDataUrl, setScreenshotDataUrl] = useState<string>("");
+  const [screenshotName, setScreenshotName] = useState<string>("");
+  const screenshotInputRef = useRef<HTMLInputElement | null>(null);
   const [showCodeBox, setShowCodeBox] = useState<boolean>(false);
   const [activePresetId, setActivePresetId] = useState<string>("");
   const [taskType, setTaskType] = useState<string>(ERROR_PRESETS[0].taskType);
@@ -303,7 +306,8 @@ export default function CodePitfallMirror() {
       targetError: string,
       targetCode: string,
       targetTask: string,
-      currentHabits: PersonalMistake[]
+      currentHabits: PersonalMistake[],
+      targetImage?: string
     ) => {
       setLoading(true);
       setRememberedCurrent(false);
@@ -316,6 +320,7 @@ export default function CodePitfallMirror() {
             code: targetCode,
             taskType: targetTask,
             habits: currentHabits,
+            imageDataUrl: targetImage ?? "",
           }),
         });
         if (res.ok) {
@@ -354,6 +359,44 @@ export default function CodePitfallMirror() {
     setTaskType(preset.taskType);
   };
 
+  // Handle error screenshot file upload or Ctrl+V image paste
+  const loadScreenshotFile = (file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : "";
+      if (!dataUrl) return;
+      setScreenshotDataUrl(dataUrl);
+      setScreenshotName(file.name || "error-screenshot.png");
+      setPasteStatus("📸 エラー画面のスクショを読み込みました！そのまま診断できます");
+      setTimeout(() => setPasteStatus(""), 3200);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleScreenshotFileChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (file) loadScreenshotFile(file);
+    e.target.value = "";
+  };
+
+  const handleTextareaPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith("image/")) {
+        const file = items[i].getAsFile();
+        if (file) {
+          e.preventDefault();
+          loadScreenshotFile(file);
+          return;
+        }
+      }
+    }
+  };
+
   // 1-Click Paste from Clipboard & Immediate Diagnosis
   const handlePasteFromClipboard = async () => {
     try {
@@ -363,7 +406,7 @@ export default function CodePitfallMirror() {
         setActivePresetId("");
         setPasteStatus("✓ クリップボードから貼り付けて診断しました");
         setTimeout(() => setPasteStatus(""), 2800);
-        void runDiagnosis(text, optionalCode, taskType, habits);
+        void runDiagnosis(text, optionalCode, taskType, habits, screenshotDataUrl);
       } else {
         setPasteStatus("クリップボードが空です。エラーをコピーしてから押してください");
         setTimeout(() => setPasteStatus(""), 3000);
@@ -857,28 +900,56 @@ export default function CodePitfallMirror() {
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={handlePasteFromClipboard}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "9px 14px",
-                borderRadius: 10,
-                background: "#eff6ff",
-                border: "1px solid #93c5fd",
-                color: "#1d4ed8",
-                fontWeight: 700,
-                fontSize: 13,
-                cursor: "pointer",
-              }}
-            >
-              📋 クリップボードから貼る
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <input
+                ref={screenshotInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={handleScreenshotFileChange}
+                style={{ display: "none" }}
+              />
+              <button
+                type="button"
+                onClick={() => screenshotInputRef.current?.click()}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "9px 14px",
+                  borderRadius: 10,
+                  background: "#f0fdf4",
+                  border: "1px solid #86efac",
+                  color: "#15803d",
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: "pointer",
+                }}
+              >
+                📸 スクショを添付 (Vision)
+              </button>
+              <button
+                type="button"
+                onClick={handlePasteFromClipboard}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "9px 14px",
+                  borderRadius: 10,
+                  background: "#eff6ff",
+                  border: "1px solid #93c5fd",
+                  color: "#1d4ed8",
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: "pointer",
+                }}
+              >
+                📋 クリップボードから貼る
+              </button>
+            </div>
           </div>
 
-          {/* Error Paste Textarea */}
+          {/* Error Paste Textarea (also supports Ctrl+V image screenshot paste & GitHub repo URL) */}
           <textarea
             id="error-paste-box"
             value={errorLog}
@@ -886,14 +957,25 @@ export default function CodePitfallMirror() {
               setErrorLog(e.target.value);
               setActivePresetId("");
             }}
+            onPaste={handleTextareaPaste}
             onKeyDown={(e) => {
-              if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && errorLog.trim()) {
+              if (
+                (e.ctrlKey || e.metaKey) &&
+                e.key === "Enter" &&
+                (errorLog.trim() || screenshotDataUrl)
+              ) {
                 e.preventDefault();
-                void runDiagnosis(errorLog, optionalCode, taskType, habits);
+                void runDiagnosis(
+                  errorLog,
+                  optionalCode,
+                  taskType,
+                  habits,
+                  screenshotDataUrl
+                );
               }
             }}
             rows={4}
-            placeholder="例: TypeError: res.json is not a function / Module not found: Can't resolve ... / ! [rejected] main -> main (fetch first)"
+            placeholder="例: TypeError: res.json is not a function / https://github.com/owner/repo（安全診断） / エラー画面のスクショをそのまま Ctrl+V でもOK"
             style={{
               width: "100%",
               boxSizing: "border-box",
@@ -910,6 +992,65 @@ export default function CodePitfallMirror() {
               outline: "none",
             }}
           />
+
+          {/* Attached Screenshot Preview */}
+          {screenshotDataUrl && (
+            <div
+              style={{
+                marginTop: 10,
+                padding: "10px 12px",
+                borderRadius: 10,
+                background: "#f0fdf4",
+                border: "1px solid #86efac",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <img
+                  src={screenshotDataUrl}
+                  alt="添付されたエラー画面スクリーンショット"
+                  style={{
+                    width: 72,
+                    height: 48,
+                    objectFit: "cover",
+                    borderRadius: 6,
+                    border: "1px solid #bbf7d0",
+                  }}
+                />
+                <div>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: "#166534" }}>
+                    📸 エラー画面スクショ添付済み（Gemini Vision 解析対応）
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "#15803d" }}>
+                    {screenshotName || "screenshot.png"}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setScreenshotDataUrl("");
+                  setScreenshotName("");
+                }}
+                style={{
+                  padding: "5px 10px",
+                  borderRadius: 8,
+                  border: "1px solid #fca5a5",
+                  background: "#fff",
+                  color: "#dc2626",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                × 削除
+              </button>
+            </div>
+          )}
 
           {/* Optional Collapsed Toggle for Code Context + Subtle Example Link + Primary Diagnose CTA */}
           <div
@@ -958,12 +1099,14 @@ export default function CodePitfallMirror() {
                 {activePresetId ? "✓ 例を入力中" : "例を1つ試す"}
               </button>
 
-              {errorLog && (
+              {(errorLog || screenshotDataUrl) && (
                 <button
                   type="button"
                   onClick={() => {
                     setErrorLog("");
                     setOptionalCode("");
+                    setScreenshotDataUrl("");
+                    setScreenshotName("");
                     setActivePresetId("");
                     setResult(null);
                   }}
@@ -988,19 +1131,35 @@ export default function CodePitfallMirror() {
               <button
                 type="button"
                 onClick={() =>
-                  void runDiagnosis(errorLog, optionalCode, taskType, habits)
+                  void runDiagnosis(
+                    errorLog,
+                    optionalCode,
+                    taskType,
+                    habits,
+                    screenshotDataUrl
+                  )
                 }
-                disabled={loading || !errorLog.trim()}
+                disabled={loading || (!errorLog.trim() && !screenshotDataUrl)}
                 style={{
                   padding: "10px 20px",
                   borderRadius: 10,
                   border: "none",
-                  background: !errorLog.trim() ? "#94a3b8" : "#2563eb",
+                  background:
+                    !errorLog.trim() && !screenshotDataUrl
+                      ? "#94a3b8"
+                      : "#2563eb",
                   color: "#ffffff",
                   fontWeight: 800,
                   fontSize: 14,
-                  cursor: loading ? "wait" : !errorLog.trim() ? "not-allowed" : "pointer",
-                  boxShadow: !errorLog.trim() ? "none" : "0 2px 8px rgba(37, 99, 235, 0.25)",
+                  cursor: loading
+                    ? "wait"
+                    : !errorLog.trim() && !screenshotDataUrl
+                    ? "not-allowed"
+                    : "pointer",
+                  boxShadow:
+                    !errorLog.trim() && !screenshotDataUrl
+                      ? "none"
+                      : "0 2px 8px rgba(37, 99, 235, 0.25)",
                 }}
               >
                 {loading ? "診断中..." : "🔍 原因と直し方を即診断する"}

@@ -64,6 +64,8 @@ export interface CommunitySafetyPin {
   mapY: number; // 0 - 100 (%)
   sourceText: string;
   imagePreview?: string;
+  afterImagePreview?: string;
+  resolvedAt?: string;
   upvotes: number;
   workflowStatus: PinWorkflowStatus;
   usedModel: string;
@@ -1740,9 +1742,55 @@ export default function MachiEyeLive() {
       if (p.id !== pinId) return p;
       const idx = order.indexOf(p.workflowStatus);
       const nextStatus = order[(idx + 1) % order.length];
-      return { ...p, workflowStatus: nextStatus };
+      return {
+        ...p,
+        workflowStatus: nextStatus,
+        resolvedAt:
+          nextStatus === "改善完了"
+            ? p.resolvedAt || new Date().toLocaleDateString("ja-JP")
+            : p.resolvedAt,
+      };
     });
     savePins(next);
+  };
+
+  // Attach "After" resolution photo (compressed thumbnail) & mark pin as 改善完了
+  const handleAttachAfterPhoto = (pinId: string, file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const rawUrl = typeof reader.result === "string" ? reader.result : "";
+      if (!rawUrl) return;
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 640;
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext("2d");
+        const compactUrl = ctx
+          ? (ctx.drawImage(img, 0, 0, canvas.width, canvas.height),
+            canvas.toDataURL("image/jpeg", 0.78))
+          : rawUrl;
+        const next = pins.map((p) =>
+          p.id === pinId
+            ? {
+                ...p,
+                afterImagePreview: compactUrl,
+                workflowStatus: "改善完了" as PinWorkflowStatus,
+                resolvedAt: new Date().toLocaleDateString("ja-JP"),
+              }
+            : p
+        );
+        savePins(next);
+        setStatusBanner(
+          "✅ 改善後（After）写真を記録し、ステータスを「改善完了」に更新しました！"
+        );
+      };
+      img.src = rawUrl;
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleResetSeedPins = () => {
@@ -3765,8 +3813,134 @@ export default function MachiEyeLive() {
                     >
                       状態: {selectedPin.workflowStatus} ↻
                     </button>
+                    <label
+                      style={{
+                        padding: "5px 11px",
+                        borderRadius: 8,
+                        border: "1px solid rgba(52, 211, 153, 0.5)",
+                        background: "rgba(5, 150, 105, 0.22)",
+                        color: "#a7f3d0",
+                        fontSize: "0.76rem",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      📸 改善後(After)写真を記録
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        style={{ display: "none" }}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleAttachAfterPhoto(selectedPin.id, f);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
                   </div>
                 </div>
+
+                {/* Before / After Resolution Comparison Card */}
+                {(selectedPin.afterImagePreview ||
+                  selectedPin.workflowStatus === "改善完了") && (
+                  <div
+                    style={{
+                      padding: "12px 14px",
+                      borderRadius: 12,
+                      background: "rgba(6, 78, 59, 0.35)",
+                      border: "1px solid rgba(52, 211, 153, 0.45)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 10,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        flexWrap: "wrap",
+                        gap: 8,
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "0.82rem",
+                          fontWeight: 800,
+                          color: "#6ee7b7",
+                        }}
+                      >
+                        ✅ 改善完了レポート（Before / After 記録）
+                      </span>
+                      {selectedPin.resolvedAt && (
+                        <span style={{ fontSize: "0.74rem", color: "#a7f3d0" }}>
+                          確認日: {selectedPin.resolvedAt}
+                        </span>
+                      )}
+                    </div>
+                    {(selectedPin.imagePreview || selectedPin.afterImagePreview) && (
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns:
+                            "repeat(auto-fit, minmax(160px, 1fr))",
+                          gap: 10,
+                        }}
+                      >
+                        {selectedPin.imagePreview && (
+                          <div>
+                            <div
+                              style={{
+                                fontSize: "0.72rem",
+                                fontWeight: 700,
+                                color: "#fca5a5",
+                                marginBottom: 4,
+                              }}
+                            >
+                              Before（発見時）
+                            </div>
+                            <img
+                              src={selectedPin.imagePreview}
+                              alt="発見時の写真（Before）"
+                              style={{
+                                width: "100%",
+                                maxHeight: 150,
+                                objectFit: "cover",
+                                borderRadius: 8,
+                                border: "1px solid rgba(248, 113, 113, 0.4)",
+                              }}
+                            />
+                          </div>
+                        )}
+                        {selectedPin.afterImagePreview && (
+                          <div>
+                            <div
+                              style={{
+                                fontSize: "0.72rem",
+                                fontWeight: 700,
+                                color: "#6ee7b7",
+                                marginBottom: 4,
+                              }}
+                            >
+                              After（改善後）
+                            </div>
+                            <img
+                              src={selectedPin.afterImagePreview}
+                              alt="改善後の写真（After）"
+                              style={{
+                                width: "100%",
+                                maxHeight: 150,
+                                objectFit: "cover",
+                                borderRadius: 8,
+                                border: "1px solid rgba(52, 211, 153, 0.5)",
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div>
                   <h3
@@ -3795,6 +3969,50 @@ export default function MachiEyeLive() {
                     <span>
                       🌐 ({selectedPin.latitude}, {selectedPin.longitude})
                     </span>
+                    <a
+                      href={`https://www.google.com/search?q=${encodeURIComponent(
+                        `${selectedPin.locationText} ${selectedPin.analysis.department} 通報 窓口`
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                        padding: "3px 9px",
+                        borderRadius: 999,
+                        background: "rgba(56, 189, 248, 0.16)",
+                        border: "1px solid rgba(56, 189, 248, 0.45)",
+                        color: "#7dd3fc",
+                        fontSize: "0.74rem",
+                        fontWeight: 700,
+                        textDecoration: "none",
+                      }}
+                    >
+                      🏛️ この地域の自治体通報窓口を検索 ↗
+                    </a>
+                    <a
+                      href={`https://www.google.com/search?q=${encodeURIComponent(
+                        `${selectedPin.locationText} ハザードマップ 防災 避難所`
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                        padding: "3px 9px",
+                        borderRadius: 999,
+                        background: "rgba(251, 191, 36, 0.14)",
+                        border: "1px solid rgba(251, 191, 36, 0.4)",
+                        color: "#fde68a",
+                        fontSize: "0.74rem",
+                        fontWeight: 700,
+                        textDecoration: "none",
+                      }}
+                    >
+                      🌊 ハザードマップ検索 ↗
+                    </a>
                   </div>
                   <div
                     style={{
