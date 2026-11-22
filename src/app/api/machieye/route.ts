@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { TaskPriority } from "@/types/task";
 
 const ALLOWED_GEMINI_MODELS = [
+  "gemini-3-flash-preview",
   "gemini-2.5-flash",
   "gemini-3.8-flash",
   "gemini-4-hydrogen",
@@ -71,7 +72,7 @@ export interface MachiEyeAnalysis {
   detected_tags: string[];
 }
 
-const DEFAULT_GEMINI_MODEL: GeminiModel = "gemini-2.5-flash";
+const DEFAULT_GEMINI_MODEL: GeminiModel = "gemini-3-flash-preview";
 const GEMINI_TIMEOUT_MS = 30_000;
 const MAX_IMAGE_BASE64_LENGTH = 7_000_000;
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
@@ -180,8 +181,12 @@ function isAllowedGeminiModel(value: string): value is GeminiModel {
 }
 
 function resolveUpstreamGeminiModel(model: GeminiModel): string {
-  if (model === "gemini-3.8-flash" || model === "gemini-4-hydrogen") {
-    return "gemini-2.5-flash";
+  if (
+    model === "gemini-2.5-flash" ||
+    model === "gemini-3.8-flash" ||
+    model === "gemini-4-hydrogen"
+  ) {
+    return "gemini-3-flash-preview";
   }
   return model;
 }
