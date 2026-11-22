@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import FeedbackFooter from "@/components/FeedbackFooter";
+import { scanAndRedactLocally } from "@/lib/deterministicGuard";
 import type {
   AuditResponse,
   ChecklistItem,
@@ -312,13 +313,16 @@ export default function CodePitfallMirror() {
     ) => {
       setLoading(true);
       setRememberedCurrent(false);
+      // 100% browser-local deterministic secret redaction BEFORE anything leaves the browser
+      const safeError = scanAndRedactLocally(targetError).redactedText;
+      const safeCode = scanAndRedactLocally(targetCode).redactedText;
       try {
         const res = await fetch("/api/codemistake", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            errorLog: targetError,
-            code: targetCode,
+            errorLog: safeError,
+            code: safeCode,
             taskType: targetTask,
             habits: currentHabits,
             imageDataUrl: targetImage ?? "",
@@ -703,6 +707,16 @@ export default function CodePitfallMirror() {
     setTimeout(() => setDnaStatus(""), 4200);
   };
 
+  const localSecretScan = useMemo(() => {
+    const errScan = scanAndRedactLocally(errorLog);
+    const codeScan = scanAndRedactLocally(optionalCode);
+    return {
+      findings: [...errScan.findings, ...codeScan.findings],
+      redactedError: errScan.redactedText,
+      redactedCode: codeScan.redactedText,
+    };
+  }, [errorLog, optionalCode]);
+
   const activeChecklist =
     TASK_TEMPLATES[taskType] ?? TASK_TEMPLATES["Next.js API / フォーム送信"];
   const completedCount = activeChecklist.filter(
@@ -993,6 +1007,66 @@ export default function CodePitfallMirror() {
               outline: "none",
             }}
           />
+
+          {/* 0ms Browser-Local Secret & Supply-Chain Alert (Non-LLM, before anything leaves browser) */}
+          {localSecretScan.findings.length > 0 && (
+            <div
+              role="alert"
+              style={{
+                marginTop: 10,
+                padding: "12px 14px",
+                borderRadius: 12,
+                background: "#fef2f2",
+                border: "1.5px solid #fca5a5",
+                color: "#991b1b",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  marginBottom: 6,
+                }}
+              >
+                <strong style={{ fontSize: 13 }}>
+                  🛡️ ブラウザ内0ms秘密鍵スキャナー警告（{localSecretScan.findings.length}件検出・AI送信時は自動マスク済）
+                </strong>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorLog(localSecretScan.redactedError);
+                    setOptionalCode(localSecretScan.redactedCode);
+                    setPasteStatus(
+                      "🛡️ 入力欄の秘密鍵をブラウザ内で安全に [REDACTED] マスクしました！"
+                    );
+                    setTimeout(() => setPasteStatus(""), 3200);
+                  }}
+                  style={{
+                    padding: "5px 11px",
+                    borderRadius: 8,
+                    border: "1px solid #dc2626",
+                    background: "#dc2626",
+                    color: "#ffffff",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  🛡️ 今すぐ入力欄を [REDACTED] に置換
+                </button>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {localSecretScan.findings.map((f) => (
+                  <div key={f.id} style={{ fontSize: 12 }}>
+                    • <strong>{f.label}</strong> (<code>{f.preview}</code>) — {f.reason}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Attached Screenshot Preview */}
           {screenshotDataUrl && (

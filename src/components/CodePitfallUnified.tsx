@@ -3,13 +3,16 @@
 import React, { useState } from "react";
 import CodePitfallMirror from "./CodePitfallMirror";
 import GitBridge from "./GitBridge";
+import DeterministicDevLab from "./DeterministicDevLab";
 
 interface Props {
-  initialTab?: "error" | "github";
+  initialTab?: "error" | "github" | "guard";
 }
 
 export default function CodePitfallUnified({ initialTab = "error" }: Props) {
-  const [activeTab, setActiveTab] = useState<"error" | "github">(initialTab);
+  const [activeTab, setActiveTab] = useState<"error" | "github" | "guard">(
+    initialTab
+  );
 
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
@@ -109,11 +112,39 @@ export default function CodePitfallUnified({ initialTab = "error" }: Props) {
             >
               🌉 はじめての GitHub 安全公開
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "guard"}
+              onClick={() => setActiveTab("guard")}
+              style={{
+                border: "none",
+                borderRadius: 9,
+                padding: "7px 14px",
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: "pointer",
+                background: activeTab === "guard" ? "#ffffff" : "transparent",
+                color: activeTab === "guard" ? "#047857" : "#475569",
+                boxShadow:
+                  activeTab === "guard"
+                    ? "0 1px 3px rgba(15,23,42,0.12)"
+                    : "none",
+              }}
+            >
+              🛡️ 非AI安全ツール (Git図解・実リポ監査・Hook)
+            </button>
           </div>
         </div>
       </div>
 
-      {activeTab === "error" ? <CodePitfallMirror /> : <GitBridge />}
+      {activeTab === "error" ? (
+        <CodePitfallMirror />
+      ) : activeTab === "github" ? (
+        <GitBridge />
+      ) : (
+        <DeterministicDevLab />
+      )}
     </div>
   );
 }
