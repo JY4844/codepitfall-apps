@@ -1,6 +1,6 @@
-# Google AI Challenge 2026 — 3 部門デモアプリ集（Next.js + Gemini API + Neon + GAS）
+# 個人開発AIアプリ集（Next.js + Gemini API + Neon + GAS）
 
-Google AI Challenge（Google Japan 25 周年記念）向けに制作した **3 部門のマルチモーダル AI アプリ** を 1 つの Next.js (App Router) プロジェクトに統合したリポジトリです。
+個人開発で制作した **マルチモーダル AI アプリ** を 1 つの Next.js (App Router) プロジェクトに統合したリポジトリです。
 
 ## 収録アプリ（全 3 部門）
 
