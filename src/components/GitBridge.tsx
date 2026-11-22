@@ -203,24 +203,15 @@ export default function GitBridge() {
 
   return (
     <div className={styles.shell}>
-      <nav className={styles.topNav} aria-label="アプリ切り替え">
+      <nav className={styles.topNav} aria-label="GitBridge ナビゲーション">
         <div className={styles.topNavInner}>
           <div className={styles.brandGroup}>
             <span className={styles.brand}>🌉 GitBridge</span>
             <span className={styles.geminiBadge}>✦ はじめての GitHub 安全ナビ</span>
           </div>
           <div className={styles.navLinks}>
-            <Link href="/" className={styles.navLink}>
-              🏠 ホーム
-            </Link>
             <Link href="/codemistake" className={styles.navLink}>
-              🔍 CodePitfall Mirror
-            </Link>
-            <Link href="/otayori" className={styles.navLink}>
-              🍊 おたよりバトン
-            </Link>
-            <Link href="/machieye" className={styles.navLink}>
-              🛰️ MachiEye
+              🔍 エラー診断（CodePitfall）
             </Link>
           </div>
         </div>

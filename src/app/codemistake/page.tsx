@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import CodePitfallMirror from "@/components/CodePitfallMirror";
+import CodePitfallUnified from "@/components/CodePitfallUnified";
 
 export const metadata: Metadata = {
-  title: "CodePitfall Mirror — VS Code / GitHub エラー即解決＆過去クセDNA補助ツール",
+  title: "CodePitfall × GitBridge — エラー即解決＆はじめての GitHub 安全公開コンパニオン",
   description:
-    "VS Code や GitHub でエラーが出た瞬間に貼り付けるだけ。3秒で分かる原因・過去クセDNA一致アラート・VS Code/AI用ワンクリック修正指示コピーを備えた開発サイドキック",
+    "VS Code・GitHub のエラー即レス診断・やりがちミスDNA・AGENTS.md出力と、初心者向け GitHub 安全公開ガイドをひとつに統合したオープンソース開発補助アプリ",
 };
 
 export default function CodeMistakePage() {
-  return <CodePitfallMirror />;
+  return <CodePitfallUnified initialTab="error" />;
 }

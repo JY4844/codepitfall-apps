@@ -2236,20 +2236,6 @@ export default function OtayoriUltra() {
               ✦ Gemini 2.5 Flash Vision + 予定・注意点・持ち物整理
             </span>
           </div>
-          <div className="ou-nav-links">
-            <Link href="/" className="ou-nav-link">
-              🏠 ホーム
-            </Link>
-            <Link href="/codemistake" className="ou-nav-link">
-              🪞 CodePitfall（開発）
-            </Link>
-            <Link href="/machieye" className="ou-nav-link">
-              🛰️ MachiEye（まち・防災）
-            </Link>
-            <Link href="/gitbridge" className="ou-nav-link">
-              🌉 GitBridge
-            </Link>
-          </div>
         </div>
       </nav>
 
