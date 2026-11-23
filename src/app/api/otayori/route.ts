@@ -56,7 +56,8 @@ export interface OtayoriAnalysis {
 type OtayoriErrorCode =
   | "INVALID_JSON"
   | "MISSING_INPUT"
-  | "INVALID_IMAGE";
+  | "INVALID_IMAGE"
+  | "VISION_UNAVAILABLE";
 
 const GEMINI_MODEL = "gemini-3-flash-preview";
 const GEMINI_TIMEOUT_MS = 28_000;
@@ -219,10 +220,12 @@ function inferIsoDates(dateText: string, indexOffset = 0): {
 
   if (mdKanji) {
     month = Math.min(12, Math.max(1, Number(mdKanji[1])));
-    day = Math.min(28, Math.max(1, Number(mdKanji[2])));
+    const maxDay = new Date(year, month, 0).getDate();
+    day = Math.min(maxDay, Math.max(1, Number(mdKanji[2])));
   } else if (mdSlash) {
     month = Math.min(12, Math.max(1, Number(mdSlash[1])));
-    day = Math.min(28, Math.max(1, Number(mdSlash[2])));
+    const maxDay = new Date(year, month, 0).getDate();
+    day = Math.min(maxDay, Math.max(1, Number(mdSlash[2])));
   }
 
   const timeMatches = [...dateText.matchAll(/(\d{1,2}):(\d{2})/g)];
@@ -1248,20 +1251,8 @@ function detectPresetKey(sourceText: string, presetId?: string): string | null {
   return null;
 }
 
-function buildDynamicTextFallback(
-  sourceText: string,
-  hasImage: boolean
-): OtayoriAnalysis {
+function buildDynamicTextFallback(sourceText: string): OtayoriAnalysis {
   const cleaned = sourceText.trim();
-  if (!cleaned && hasImage) {
-    // When only an image is uploaded and API key is absent, return a realistic school handout analysis
-    return {
-      ...PRESET_ANALYSES.undokai,
-      title: "撮影プリント解析：学校・園からのお知らせ",
-      summary:
-        "アップロードされたプリント画像から行事予定・提出締切・持ち物リストを抽出し、ママ・パパ・子ども・祖父母の4役へバランスよくバトン配分しました。",
-    };
-  }
 
   const lines = cleaned
     .split(/\r?\n/)
@@ -1284,7 +1275,7 @@ function buildDynamicTextFallback(
       extractedEvents.length < 5
     ) {
       const dateMatch = line.match(
-        /((?:20\d{2}年)?\d{1,2}月\d{1,2}日(?:\s*[（(][月火水木金土日][）)])?(?:\s*\d{1,2}:\d{2})?|\d{1,2}\/\d{1,2}(?:\s*[（(][月火水木金土日][）)])?(?:\s*\d{1,2}:\d{2})?)/
+        /((?:20\d{2}年)?\d{1,2}月\d{1,2}日(?:\s*[（(][月火水木金土日][）)])?(?:\s*\d{1,2}:\d{2})?|20\d{2}-\d{1,2}-\d{1,2}(?:\s*[（(][月火水木金土日][）)])?(?:\s*\d{1,2}:\d{2})?|\d{1,2}\/\d{1,2}(?:\s*[（(][月火水木金土日][）)])?(?:\s*\d{1,2}:\d{2})?)/
       );
       const dateStr = dateMatch ? dateMatch[1] : `予定 #${extractedEvents.length + 1}`;
       const isDeadline = /(締切|までに|提出|集金|予約)/.test(line);
@@ -1529,17 +1520,39 @@ export async function POST(request: NextRequest) {
     const raw =
       detectedPreset && !imageBase64
         ? PRESET_ANALYSES[detectedPreset]
-        : buildDynamicTextFallback(sourceText, Boolean(imageBase64));
+        : buildDynamicTextFallback(sourceText);
     return adaptAnalysisToCustomMembers(raw, customMembers, userLocation);
+  };
+
+  const respondWhenVisionUnavailable = (
+    errorMessage: string,
+    fallbackModelLabel: string
+  ) => {
+    if (imageBase64 && !sourceText) {
+      return errorResponse("VISION_UNAVAILABLE", errorMessage, 503);
+    }
+    if (imageBase64 && sourceText) {
+      return NextResponse.json({
+        analysis: getFallback(),
+        usedModel: fallbackModelLabel,
+        mode: "fallback",
+        visionSkipped: true,
+        warning: `${errorMessage}（※入力されたテキスト部分のみから予定・持ち物を整理しました）`,
+      });
+    }
+    return NextResponse.json({
+      analysis: getFallback(),
+      usedModel: fallbackModelLabel,
+      mode: "fallback",
+    });
   };
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return NextResponse.json({
-      analysis: getFallback(),
-      usedModel: `${GEMINI_MODEL} (内蔵スマート解析エンジン)`,
-      mode: "fallback",
-    });
+    return respondWhenVisionUnavailable(
+      "現在 GEMINI_API_KEY が未設定のため、Gemini Vision API で画像を読み取れません。おたよりの主要テキスト（日時・場所・持ち物）をテキスト欄へ貼り付けて解析するか、環境変数 GEMINI_API_KEY を設定してください。",
+      "ローカルテキスト解析 (GEMINI_API_KEY未設定)"
+    );
   }
 
   const prompt = buildPrompt(
@@ -1579,11 +1592,10 @@ export async function POST(request: NextRequest) {
 
     const geminiJson = await safeParseJson(geminiRes);
     if (!geminiRes.ok) {
-      return NextResponse.json({
-        analysis: getFallback(),
-        usedModel: `${GEMINI_MODEL} (スマートフォールバック)`,
-        mode: "fallback",
-      });
+      return respondWhenVisionUnavailable(
+        "Gemini Vision API が一時的に利用できないため（API応答エラーまたは回数制限）、画像を解析できませんでした。時間をおいて再試行するか、おたよりの主要テキスト（日時・場所・持ち物）をテキスト欄に貼り付けて解析してください。",
+        "ローカルテキスト解析 (Gemini応答エラー時フォールバック)"
+      );
     }
 
     const candidates = geminiJson?.candidates as
@@ -1594,11 +1606,10 @@ export async function POST(request: NextRequest) {
     const rawText = contentParts?.[0]?.text;
 
     if (typeof rawText !== "string" || !rawText.trim()) {
-      return NextResponse.json({
-        analysis: getFallback(),
-        usedModel: `${GEMINI_MODEL} (スマートフォールバック)`,
-        mode: "fallback",
-      });
+      return respondWhenVisionUnavailable(
+        "Gemini Vision API から有効な解析結果が返らなかったため、画像を読み取れませんでした。時間をおいて再試行するか、おたよりの主要テキストを貼り付けて解析してください。",
+        "ローカルテキスト解析 (Gemini空応答フォールバック)"
+      );
     }
 
     const analysis = extractJsonObject(rawText, customMembers, userLocation);
@@ -1608,10 +1619,9 @@ export async function POST(request: NextRequest) {
       mode: "gemini",
     });
   } catch {
-    return NextResponse.json({
-      analysis: getFallback(),
-      usedModel: `${GEMINI_MODEL} (スマートフォールバック)`,
-      mode: "fallback",
-    });
+    return respondWhenVisionUnavailable(
+      "Gemini Vision API への接続がタイムアウトまたは失敗したため、画像を解析できませんでした。時間をおいて再試行するか、おたよりの主要テキスト（日時・場所・持ち物）を貼り付けて解析してください。",
+      "ローカルテキスト解析 (Gemini通信失敗フォールバック)"
+    );
   }
 }

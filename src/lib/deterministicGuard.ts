@@ -180,8 +180,20 @@ fi
 
 # 2. Deterministic Secret Scanner (gitleaks-style regex)
 DIFF_ADDED=$(git diff --cached -U0 | grep '^+' | grep -v '^+++' || true)
-if echo "$DIFF_ADDED" | grep -qE '(AIza[0-9A-Za-z_-]{20,}|AQ\\.[0-9A-Za-z_-]{28,}|ghp_[0-9A-Za-z]{20,}|github_pat_[0-9A-Za-z_]{30,}|sk-(live|test|proj)-[0-9A-Za-z_-]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----)'; then
-  echo "❌ [BLOCKED] APIキーまたは秘密鍵の混入を検出しました！環境変数 (.env.local) へ移してください。"
+if echo "$DIFF_ADDED" | grep -qE '(AIza[0-9A-Za-z_-]{20,}|AQ\\.[0-9A-Za-z_-]{28,}|(ghp|gho|ghu|ghs|ghr)_[0-9A-Za-z]{20,}|github_pat_[0-9A-Za-z_]{30,}|sk-(live|test|proj|ant)-[0-9A-Za-z_-]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----)'; then
+  echo "❌ [BLOCKED] APIキー（Google/GitHub/OpenAI/Anthropic/AWS）または秘密鍵の混入を検出しました！環境変数 (.env.local) へ移してください。"
+  exit 1
+fi
+
+# 2b. Block DB connection strings with embedded credentials (postgres / mysql / mongodb / redis)
+if echo "$DIFF_ADDED" | grep -qiE '(postgres(ql)?|mysql|mongodb(\\+srv)?|redis)://[^:/[:space:]]+:[^@[:space:]]{4,}@[^[:space:]]+'; then
+  echo "❌ [BLOCKED] パスワード付き DB 接続文字列 (postgres/mysql/mongodb/redis) の混入を検出しました！環境変数 (.env.local) へ移してください。"
+  exit 1
+fi
+
+# 2c. Block hardcoded .env-style secret assignments
+if echo "$DIFF_ADDED" | grep -viE '(process\\.env|import\\.meta\\.env|os\\.environ|os\\.getenv|REDACTED|example|placeholder|changeme|your_)' | grep -qE '(^|[[:space:]+])(export[[:space:]]+)?[A-Z0-9_]*(SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY)[A-Z0-9_]*[[:space:]]*=[[:space:]]*["'\\'']?[A-Za-z0-9_./+=-]{12,}["'\\'']?([[:space:];,#]|$)'; then
+  echo "❌ [BLOCKED] .env 形式の秘密値代入（SECRET/TOKEN/PASSWORD/API_KEY/PRIVATE_KEY）を検出しました！生の値をコミットしないでください。"
   exit 1
 fi
 
@@ -198,10 +210,16 @@ fi
 ${
   hasMcpHabit
     ? `
-# 5. Personal DNA Rule: Block console.log in MCP server files (breaks stdio JSON-RPC)
-if echo "$STAGED_FILES" | grep -qiE 'mcp'; then
-  if echo "$DIFF_ADDED" | grep -q 'console\\.log('; then
-    echo "❌ [BLOCKED] MCP ファイル内で console.log() を検出しました。stdout 汚染防止のため console.error() を使ってください。"
+# 5. Personal DNA Rule: Block console.log ONLY in staged MCP server files (*mcp*) (breaks stdio JSON-RPC)
+MCP_STAGED_FILES=$(echo "$STAGED_FILES" | grep -i 'mcp' || true)
+if [ -n "$MCP_STAGED_FILES" ]; then
+  MCP_DIFF_ADDED=$(printf '%s\\n' "$MCP_STAGED_FILES" | while IFS= read -r file; do
+    if [ -n "$file" ]; then
+      git diff --cached -U0 -- "$file"
+    fi
+  done | grep '^+' | grep -v '^+++' || true)
+  if echo "$MCP_DIFF_ADDED" | grep -q 'console\\.log('; then
+    echo "❌ [BLOCKED] MCP ファイル (*mcp*) 内で console.log() を検出しました。stdout 汚染防止のため console.error() を使ってください。"
     exit 1
   fi
 fi

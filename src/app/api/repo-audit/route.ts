@@ -41,7 +41,19 @@ function parseGithubRepoUrl(raw: string): { owner: string; repo: string } | null
   return null;
 }
 
-async function fetchGithubJson(url: string) {
+interface GithubFetchResult<T = unknown> {
+  ok: boolean;
+  status: number;
+  rateLimited: boolean;
+  data: T | null;
+}
+
+const GITHUB_RATE_LIMIT_ERROR =
+  "GitHub API の一時的な回数制限に達しました。数分後に再試行するか GITHUB_TOKEN を設定してください";
+
+async function fetchGithubJson<T = Record<string, unknown>>(
+  url: string
+): Promise<GithubFetchResult<T>> {
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
     "User-Agent": "CodePitfall-GitBridge-RepoAudit/1.0",
@@ -50,8 +62,17 @@ async function fetchGithubJson(url: string) {
     headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
   }
   const res = await fetch(url, { headers, cache: "no-store" });
-  if (!res.ok) return null;
-  return res.json();
+  const rateLimitRemaining = res.headers.get("x-ratelimit-remaining");
+  const rateLimited =
+    !res.ok &&
+    (res.status === 403 || res.status === 429 || rateLimitRemaining === "0");
+
+  if (!res.ok) {
+    return { ok: false, status: res.status, rateLimited, data: null };
+  }
+
+  const data = (await res.json()) as T;
+  return { ok: true, status: res.status, rateLimited: false, data };
 }
 
 async function fetchRawFile(owner: string, repo: string, branch: string, filePath: string): Promise<string | null> {
@@ -79,24 +100,58 @@ export async function POST(request: Request) {
     }
 
     const { owner, repo } = parsed;
-    const repoMeta = await fetchGithubJson(
-      `https://api.github.com/repos/${owner}/${repo}`
-    );
+    const repoRes = await fetchGithubJson<{
+      name?: string;
+      default_branch?: string;
+      license?: { spdx_id?: string; name?: string } | null;
+      html_url?: string;
+      description?: string;
+      stargazers_count?: number;
+    }>(`https://api.github.com/repos/${owner}/${repo}`);
 
-    if (!repoMeta || typeof repoMeta.name !== "string") {
+    if (repoRes.rateLimited) {
+      return NextResponse.json(
+        { error: GITHUB_RATE_LIMIT_ERROR },
+        { status: 429 }
+      );
+    }
+
+    if (repoRes.status === 404) {
       return NextResponse.json(
         {
           error:
-            "公開リポジトリを取得できませんでした（URLの間違い、Privateリポジトリ、またはGitHub APIレート制限の可能性があります）。",
+            "公開リポジトリが見つかりませんでした（404 Not Found: URLの間違い、または Private リポジトリの可能性があります）。",
         },
         { status: 404 }
       );
     }
 
+    const repoMeta = repoRes.data;
+    if (!repoRes.ok || !repoMeta || typeof repoMeta.name !== "string") {
+      return NextResponse.json(
+        {
+          error: `GitHub API からリポジトリ情報を取得できませんでした（HTTP ${repoRes.status}）。`,
+        },
+        {
+          status:
+            repoRes.status >= 400 && repoRes.status < 600
+              ? repoRes.status
+              : 502,
+        }
+      );
+    }
+
     const defaultBranch = String(repoMeta.default_branch || "main");
-    const rootContents = await fetchGithubJson(
+    const contentsRes = await fetchGithubJson<Array<{ name?: string }>>(
       `https://api.github.com/repos/${owner}/${repo}/contents`
     );
+    if (contentsRes.rateLimited) {
+      return NextResponse.json(
+        { error: GITHUB_RATE_LIMIT_ERROR },
+        { status: 429 }
+      );
+    }
+    const rootContents = contentsRes.data;
     const rootFiles: string[] = Array.isArray(rootContents)
       ? rootContents.map((item: { name?: string }) => String(item.name || ""))
       : [];

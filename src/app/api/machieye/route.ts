@@ -4,8 +4,6 @@ import { TaskPriority } from "@/types/task";
 const ALLOWED_GEMINI_MODELS = [
   "gemini-3-flash-preview",
   "gemini-2.5-flash",
-  "gemini-3.8-flash",
-  "gemini-4-hydrogen",
 ] as const;
 
 type GeminiModel = (typeof ALLOWED_GEMINI_MODELS)[number];
@@ -178,17 +176,6 @@ function errorResponse(code: MachiEyeErrorCode, error: string, status: number) {
 
 function isAllowedGeminiModel(value: string): value is GeminiModel {
   return (ALLOWED_GEMINI_MODELS as readonly string[]).includes(value);
-}
-
-function resolveUpstreamGeminiModel(model: GeminiModel): string {
-  if (
-    model === "gemini-2.5-flash" ||
-    model === "gemini-3.8-flash" ||
-    model === "gemini-4-hydrogen"
-  ) {
-    return "gemini-3-flash-preview";
-  }
-  return model;
 }
 
 function normalizeCategory(raw: unknown): MachiEyeCategory {
@@ -403,8 +390,8 @@ function buildDeterministicFallbackCore(params: {
     has_nameplate: hasNameplate,
     warning_message:
       hasFace || hasPlate || hasNameplate || hasPrivacyMention
-        ? "ナンバープレートまたは表札等の個人情報要素が検出されました。地域公開マップへ掲載する際は自動モザイク適用を推奨します。"
-        : "顔・ナンバープレート・表札の映り込みは検出されませんでした。コミュニティ安全マップへそのまま公開可能です。",
+        ? "ナンバープレートまたは表札等の個人情報要素が検出されました。送信・記録前に端末内の物理ぼかし適用を推奨します。"
+        : "顔・ナンバープレート・表札の映り込みは検出されませんでした。ローカル安全マップ（この端末に保存）へそのまま記録できます。",
   };
 
   // Scenario 1: 点字ブロック破損・障害物
@@ -528,7 +515,7 @@ function buildDeterministicFallbackCore(params: {
         ja: "【大雨・冠水ちゅうい】この道は 大雨のときに 水がたまります。車いす・ベビーカーのかたは、高台側の「さくら通り」を とおってください。",
         en: "[FLOOD RISK] Street drains ahead are clogged; road floods during heavy rain. Wheelchair & stroller users: please detour via the higher-ground Sakura Street sidewalk.",
         zh: "【积水警告】前方排水沟堵塞，暴雨时易积水淹没台阶。轮椅及婴儿车使用者请绕行高地一侧的樱花大道人行道。",
-        ko: "【침수 주의】앞쪽 배수구가 막혀大雨 시 도로가 침수됩니다. 휠체어·유모차 이용자는 고지대인 사쿠라 거리 보도로 우회해 주세요.",
+        ko: "【침수 주의】앞쪽 배수구가 막혀 호우 시 도로가 침수됩니다. 휠체어·유모차 이용자는 고지대인 사쿠라 거리 보도로 우회해 주세요.",
       },
       report_draft: buildFormalReportDraft({
         title,
@@ -1273,9 +1260,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const upstreamModel = resolveUpstreamGeminiModel(geminiModel);
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-      upstreamModel
+      geminiModel
     )}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
     let geminiRes: Response;

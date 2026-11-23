@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import Link from "next/link";
 import FeedbackFooter from "@/components/FeedbackFooter";
 import type { WhatIfResponse } from "@/app/api/whatif/route";
 
@@ -49,22 +50,46 @@ export default function WhatIfMirror() {
   const [interventionA, setInterventionA] = useState<string>("");
   const [interventionB, setInterventionB] = useState<string>("");
   const [intensity, setIntensity] = useState<number>(70);
+  const [simulatedIntensity, setSimulatedIntensity] = useState<number>(70);
 
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
   const [result, setResult] = useState<WhatIfResponse | null>(null);
+  const [checkedChecklist, setCheckedChecklist] = useState<Record<number, boolean>>({});
   const [savedNotice, setSavedNotice] = useState<string>("");
 
+  // Helper to clamp values smoothly between 5 and 98
+  const clampScore = (v: number) => Math.min(98, Math.max(5, Math.round(v)));
+
   // 0ms deterministic client-side risk/benefit projection preview as slider moves
+  // Updates smoothly both before AND after Gemini simulation by applying sensitivity delta!
   const livePreview = useMemo(() => {
-    const baseRisk = result?.factualBaseline.riskScore ?? 62;
-    const baseBenefit = result?.factualBaseline.benefitScore ?? 52;
-    const branchARisk = result?.branches[0]?.riskScore ?? Math.max(14, baseRisk - Math.round(intensity * 0.42));
-    const branchABenefit = result?.branches[0]?.benefitScore ?? Math.min(95, 58 + Math.round(intensity * 0.34));
-    const branchBRisk = result?.branches[1]?.riskScore ?? Math.min(90, baseRisk + Math.round((100 - intensity) * 0.16));
-    const branchBBenefit = result?.branches[1]?.benefitScore ?? Math.max(38, 66 - Math.round((100 - intensity) * 0.14));
+    if (!result) {
+      const baseRisk = 62;
+      const baseBenefit = 52;
+      const branchARisk = clampScore(baseRisk - intensity * 0.42);
+      const branchABenefit = clampScore(58 + intensity * 0.34);
+      const branchBRisk = clampScore(baseRisk + (100 - intensity) * 0.16);
+      const branchBBenefit = clampScore(66 - (100 - intensity) * 0.14);
+      return { baseRisk, baseBenefit, branchARisk, branchABenefit, branchBRisk, branchBBenefit };
+    }
+
+    const delta = intensity - simulatedIntensity;
+    const baseRisk = clampScore(result.factualBaseline.riskScore);
+    const baseBenefit = clampScore(result.factualBaseline.benefitScore);
+
+    const baseRiskA = result.branches[0]?.riskScore ?? 40;
+    const baseBenefitA = result.branches[0]?.benefitScore ?? 75;
+    const baseRiskB = result.branches[1]?.riskScore ?? 70;
+    const baseBenefitB = result.branches[1]?.benefitScore ?? 45;
+
+    const branchARisk = clampScore(baseRiskA - delta * 0.42);
+    const branchABenefit = clampScore(baseBenefitA + delta * 0.35);
+    const branchBRisk = clampScore(baseRiskB + delta * 0.16);
+    const branchBBenefit = clampScore(baseBenefitB - delta * 0.14);
+
     return { baseRisk, baseBenefit, branchARisk, branchABenefit, branchBRisk, branchBBenefit };
-  }, [intensity, result]);
+  }, [intensity, simulatedIntensity, result]);
 
   const handleRunSimulation = async () => {
     if (!situation.trim()) return;
@@ -86,6 +111,8 @@ export default function WhatIfMirror() {
         setError(data.error || "シミュレーションに失敗しました。");
       } else {
         setResult(data as WhatIfResponse);
+        setSimulatedIntensity(intensity);
+        setCheckedChecklist({});
       }
     } catch {
       setError("通信エラーが発生しました。");
@@ -106,14 +133,14 @@ export default function WhatIfMirror() {
       situation,
       "",
       "## 現状維持（事実ベースライン）",
-      `- リスク: ${result.factualBaseline.riskScore}/100 ・ 期待メリット: ${result.factualBaseline.benefitScore}/100`,
+      `- リスク: ${livePreview.baseRisk}/100 ・ 期待メリット: ${livePreview.baseBenefit}/100`,
       `- 予測: ${result.factualBaseline.outcome}`,
       "",
       "## 反実仮想ルート比較",
-      ...result.branches.flatMap((b) => [
+      ...result.branches.flatMap((b, i) => [
         `### ${b.label}`,
         `- 介入: ${b.intervention}`,
-        `- リスク: ${b.riskScore}/100 ・ 期待メリット: ${b.benefitScore}/100`,
+        `- リスク: ${i === 0 ? livePreview.branchARisk : livePreview.branchBRisk}/100 ・ 期待メリット: ${i === 0 ? livePreview.branchABenefit : livePreview.branchBBenefit}/100`,
         `- 予測: ${b.outcomeSummary}`,
         `- 隠れ要因（交絡因子）: ${b.hiddenConfounder}`,
         `- 最初の一歩: ${b.firstAction}`,
@@ -123,7 +150,9 @@ export default function WhatIfMirror() {
       ...result.hiddenConfounders.map((c) => `- ${c}`),
       "",
       "## 後悔しないための確認チェックリスト",
-      ...result.regretPreventionChecklist.map((c) => `- [ ] ${c}`),
+      ...result.regretPreventionChecklist.map((c, idx) =>
+        `${checkedChecklist[idx] ? "- [x]" : "- [ ]"} ${c}`
+      ),
     ].join("\n");
 
     const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
@@ -211,6 +240,25 @@ export default function WhatIfMirror() {
               </p>
             </div>
           </div>
+
+          <Link
+            href="/"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              fontSize: 12.5,
+              fontWeight: 700,
+              color: "#475569",
+              textDecoration: "none",
+              padding: "6px 12px",
+              borderRadius: 8,
+              background: "#f1f5f9",
+              border: "1px solid #cbd5e1",
+            }}
+          >
+            ← トップ
+          </Link>
         </div>
       </header>
 
@@ -266,6 +314,9 @@ export default function WhatIfMirror() {
                     setInterventionA(ex.interventionA);
                     setInterventionB(ex.interventionB);
                     setIntensity(ex.intensity);
+                    setSimulatedIntensity(ex.intensity);
+                    setResult(null);
+                    setCheckedChecklist({});
                   }}
                   style={{
                     padding: "5px 10px",
@@ -526,6 +577,11 @@ export default function WhatIfMirror() {
                   <div style={{ fontSize: 12, color: "#475569", fontWeight: 700 }}>
                     介入: {b.intervention}
                   </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12, fontWeight: 700, color: "#334155" }}>
+                    <span>リスク: {i === 0 ? livePreview.branchARisk : livePreview.branchBRisk}/100</span>
+                    <span>•</span>
+                    <span>期待メリット: {i === 0 ? livePreview.branchABenefit : livePreview.branchBBenefit}/100</span>
+                  </div>
                   <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}>{b.outcomeSummary}</p>
                   <div style={{ padding: "8px 10px", borderRadius: 10, background: "#fffbeb", border: "1px solid #fde68a", fontSize: 12, color: "#92400e" }}>
                     <strong>⚠️ 見落としがちな隠れ要因:</strong> {b.hiddenConfounder}
@@ -553,9 +609,26 @@ export default function WhatIfMirror() {
               </ul>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {result.regretPreventionChecklist.map((item, idx) => (
-                  <label key={idx} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
-                    <input type="checkbox" />
-                    <span>{item}</span>
+                  <label key={idx} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(checkedChecklist[idx])}
+                      onChange={(e) =>
+                        setCheckedChecklist((prev) => ({
+                          ...prev,
+                          [idx]: e.target.checked,
+                        }))
+                      }
+                      style={{ cursor: "pointer", accentColor: "#4f46e5" }}
+                    />
+                    <span
+                      style={{
+                        color: checkedChecklist[idx] ? "#15803d" : "#0f172a",
+                        textDecoration: checkedChecklist[idx] ? "line-through" : "none",
+                      }}
+                    >
+                      {item}
+                    </span>
                   </label>
                 ))}
               </div>

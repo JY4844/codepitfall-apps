@@ -83,6 +83,12 @@ Agent SDK Error: Upstream request failed (status code stripped: HTTP 429 Too Man
   },
 ];
 
+const QUICK_EXAMPLE_CHIPS: Array<{ presetId: string; chipLabel: string }> = [
+  { presetId: "preset-await", chipLabel: "await忘れ" },
+  { presetId: "preset-git", chipLabel: "Git push rejected" },
+  { presetId: "preset-mcp", chipLabel: "MCP stdio切断" },
+];
+
 const TASK_TEMPLATES: Record<string, ChecklistItem[]> = {
   "Next.js API / フォーム送信": [
     {
@@ -280,6 +286,7 @@ export default function CodePitfallMirror() {
   const [taskType, setTaskType] = useState<string>(ERROR_PRESETS[0].taskType);
 
   const [loading, setLoading] = useState<boolean>(false);
+  const [diagError, setDiagError] = useState<string>("");
   const [result, setResult] = useState<AuditResponse | null>(null);
 
   const [copiedPrompt, setCopiedPrompt] = useState<boolean>(false);
@@ -312,6 +319,7 @@ export default function CodePitfallMirror() {
       targetImage?: string
     ) => {
       setLoading(true);
+      setDiagError("");
       setRememberedCurrent(false);
       // 100% browser-local deterministic secret redaction BEFORE anything leaves the browser
       const safeError = scanAndRedactLocally(targetError).redactedText;
@@ -331,9 +339,20 @@ export default function CodePitfallMirror() {
         if (res.ok) {
           const data: AuditResponse = await res.json();
           setResult(data);
+        } else {
+          const errPayload = await res.json().catch(() => null);
+          const serverMsg =
+            errPayload && typeof errPayload.error === "string"
+              ? errPayload.error
+              : res.status === 413
+              ? "送信データ（画像サイズ等）が大きすぎます。小さめの画像またはテキストログで再試行してください。"
+              : `診断APIエラーが発生しました（HTTP ${res.status}）。時間をおいて再試行してください。`;
+          setDiagError(serverMsg);
         }
       } catch {
-        // Keep existing result if offline
+        setDiagError(
+          "診断サーバーへの通信に失敗しました。ネットワーク接続やサーバーの起動状態を確認して再試行してください。"
+        );
       } finally {
         setLoading(false);
       }
@@ -356,25 +375,76 @@ export default function CodePitfallMirror() {
     }
   }, []);
 
-  // Optional 1-Click Example Loader (only if user clicks "例を1つ試す")
+  // Optional 1-Click Example Loader
   const handleSelectPreset = (preset: ErrorPreset) => {
     setActivePresetId(preset.id);
     setErrorLog(preset.errorLog);
     setOptionalCode(preset.optionalCode);
     setTaskType(preset.taskType);
+    setDiagError("");
+    if (preset.optionalCode) {
+      setShowCodeBox(true);
+    }
   };
 
-  // Handle error screenshot file upload or Ctrl+V image paste
+  // Handle error screenshot file upload or Ctrl+V image paste (Canvas compression: max 1600px JPEG 0.8)
   const loadScreenshotFile = (file: File) => {
     if (!file.type.startsWith("image/")) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const dataUrl = typeof reader.result === "string" ? reader.result : "";
-      if (!dataUrl) return;
-      setScreenshotDataUrl(dataUrl);
-      setScreenshotName(file.name || "error-screenshot.png");
-      setPasteStatus("📸 エラー画面のスクショを読み込みました！そのまま診断できます");
-      setTimeout(() => setPasteStatus(""), 3200);
+      const rawDataUrl = typeof reader.result === "string" ? reader.result : "";
+      if (!rawDataUrl) return;
+
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const MAX_DIM = 1600;
+          let targetWidth = img.naturalWidth || img.width;
+          let targetHeight = img.naturalHeight || img.height;
+
+          if (targetWidth > MAX_DIM || targetHeight > MAX_DIM) {
+            const scale = Math.min(
+              MAX_DIM / targetWidth,
+              MAX_DIM / targetHeight
+            );
+            targetWidth = Math.max(1, Math.round(targetWidth * scale));
+            targetHeight = Math.max(1, Math.round(targetHeight * scale));
+          }
+
+          const canvas = document.createElement("canvas");
+          canvas.width = targetWidth;
+          canvas.height = targetHeight;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, targetWidth, targetHeight);
+            ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+            const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.8);
+            setScreenshotDataUrl(compressedDataUrl || rawDataUrl);
+          } else {
+            setScreenshotDataUrl(rawDataUrl);
+          }
+        } catch {
+          setScreenshotDataUrl(rawDataUrl);
+        }
+        setScreenshotName(file.name || "error-screenshot.jpg");
+        setDiagError("");
+        setPasteStatus(
+          "📸 エラー画面のスクショを自動圧縮（最大1600px JPEG）して読み込みました！そのまま診断できます"
+        );
+        setTimeout(() => setPasteStatus(""), 3400);
+      };
+      img.onerror = () => {
+        setDiagError(
+          "スクリーンショット画像の読み込みに失敗しました。PNG / JPEG / WebP 形式で再度お試しください。"
+        );
+      };
+      img.src = rawDataUrl;
+    };
+    reader.onerror = () => {
+      setDiagError(
+        "画像ファイルの読み取りに失敗しました。もう一度お試しください。"
+      );
     };
     reader.readAsDataURL(file);
   };
@@ -734,14 +804,11 @@ export default function CodePitfallMirror() {
         paddingBottom: 64,
       }}
     >
-      {/* Top Navigation Bar */}
+      {/* Top Navigation Bar (normal static header; unified shell holds the sticky top bar) */}
       <header
         style={{
           background: "#ffffff",
           borderBottom: "1px solid #e2e8f0",
-          position: "sticky",
-          top: 0,
-          zIndex: 30,
         }}
       >
         <div
@@ -1158,23 +1225,46 @@ export default function CodePitfallMirror() {
                   : "＋ 該当コードを添える（任意）"}
               </button>
 
-              <button
-                type="button"
-                onClick={() => handleSelectPreset(ERROR_PRESETS[0])}
+              <div
                 style={{
-                  background: "transparent",
-                  border: "none",
-                  padding: 0,
-                  color: "#64748b",
-                  fontSize: 12,
-                  textDecoration: "underline",
-                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 6,
                 }}
               >
-                {activePresetId ? "✓ 例を入力中" : "例を1つ試す"}
-              </button>
+                <span style={{ fontSize: 11.5, color: "#64748b", fontWeight: 700 }}>
+                  例を試す:
+                </span>
+                {QUICK_EXAMPLE_CHIPS.map(({ presetId, chipLabel }) => {
+                  const preset = ERROR_PRESETS.find((p) => p.id === presetId);
+                  if (!preset) return null;
+                  const isActive = activePresetId === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => handleSelectPreset(preset)}
+                      style={{
+                        padding: "4px 10px",
+                        borderRadius: 999,
+                        border: isActive
+                          ? "1px solid #2563eb"
+                          : "1px solid #cbd5e1",
+                        background: isActive ? "#eff6ff" : "#f8fafc",
+                        color: isActive ? "#1d4ed8" : "#475569",
+                        fontSize: 11.5,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {isActive ? `✓ ${chipLabel}` : chipLabel}
+                    </button>
+                  );
+                })}
+              </div>
 
-              {(errorLog || screenshotDataUrl) && (
+              {(errorLog || screenshotDataUrl || diagError) && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1183,6 +1273,7 @@ export default function CodePitfallMirror() {
                     setScreenshotDataUrl("");
                     setScreenshotName("");
                     setActivePresetId("");
+                    setDiagError("");
                     setResult(null);
                   }}
                   style={{
@@ -1241,6 +1332,46 @@ export default function CodePitfallMirror() {
               </button>
             </div>
           </div>
+
+          {/* Visible Diagnosis API / Network Error Alert */}
+          {diagError && (
+            <div
+              role="alert"
+              style={{
+                marginTop: 12,
+                padding: "11px 14px",
+                borderRadius: 10,
+                background: "#fef2f2",
+                border: "1.5px solid #fca5a5",
+                color: "#b91c1c",
+                fontSize: 13,
+                fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 10,
+              }}
+            >
+              <span>⚠️ {diagError}</span>
+              <button
+                type="button"
+                onClick={() => setDiagError("")}
+                aria-label="エラー表示を閉じる"
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: "#b91c1c",
+                  fontSize: 15,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  padding: "0 4px",
+                  lineHeight: 1,
+                }}
+              >
+                ×
+              </button>
+            </div>
+          )}
 
           {/* Collapsed Optional Code Box */}
           {showCodeBox && (

@@ -228,7 +228,7 @@ const BUILTIN_SCENARIOS: ScenarioPreset[] = [
         has_license_plate: false,
         has_nameplate: false,
         warning_message:
-          "顔・ナンバープレート・表札の映り込みは検出されませんでした。コミュニティ安全マップへそのまま公開可能です。",
+          "顔・ナンバープレート・表札の映り込みは検出されませんでした。ローカル安全マップ（この端末に保存）へそのまま記録できます。",
       },
       suggested_tasks: [
         {
@@ -319,7 +319,7 @@ const BUILTIN_SCENARIOS: ScenarioPreset[] = [
         has_license_plate: false,
         has_nameplate: false,
         warning_message:
-          "顔・ナンバープレート・表札の映り込みは検出されませんでした。コミュニティ安全マップへそのまま公開可能です。",
+          "顔・ナンバープレート・表札の映り込みは検出されませんでした。ローカル安全マップ（この端末に保存）へそのまま記録できます。",
       },
       suggested_tasks: [
         {
@@ -409,7 +409,7 @@ const BUILTIN_SCENARIOS: ScenarioPreset[] = [
         has_license_plate: false,
         has_nameplate: false,
         warning_message:
-          "顔・ナンバープレート・表札の映り込みは検出されませんでした。コミュニティ安全マップへそのまま公開可能です。",
+          "顔・ナンバープレート・表札の映り込みは検出されませんでした。ローカル安全マップ（この端末に保存）へそのまま記録できます。",
       },
       suggested_tasks: [
         {
@@ -500,7 +500,7 @@ const BUILTIN_SCENARIOS: ScenarioPreset[] = [
         has_license_plate: false,
         has_nameplate: false,
         warning_message:
-          "顔・ナンバープレート・表札の映り込みは検出されませんでした。コミュニティ安全マップへそのまま公開可能です。",
+          "顔・ナンバープレート・表札の映り込みは検出されませんでした。ローカル安全マップ（この端末に保存）へそのまま記録できます。",
       },
       suggested_tasks: [
         {
@@ -591,7 +591,7 @@ const BUILTIN_SCENARIOS: ScenarioPreset[] = [
         has_license_plate: false,
         has_nameplate: false,
         warning_message:
-          "顔・ナンバープレート・表札の映り込みは検出されませんでした。コミュニティ安全マップへそのまま公開可能です。",
+          "顔・ナンバープレート・表札の映り込みは検出されませんでした。ローカル安全マップ（この端末に保存）へそのまま記録できます。",
       },
       suggested_tasks: [
         {
@@ -682,7 +682,7 @@ const BUILTIN_SCENARIOS: ScenarioPreset[] = [
         has_license_plate: false,
         has_nameplate: false,
         warning_message:
-          "顔・ナンバープレート・表札の映り込みは検出されませんでした。コミュニティ安全マップへそのまま公開可能です。",
+          "顔・ナンバープレート・表札の映り込みは検出されませんでした。ローカル安全マップ（この端末に保存）へそのまま記録できます。",
       },
       suggested_tasks: [
         {
@@ -719,7 +719,7 @@ const EXTRA_SEED_PINS: CommunitySafetyPin[] = [
       "バス通りと歩道の境目のアスファルトが直径40cm・深さ5cmほど陥没しており、雨水が溜まっています。シルバーカーや自転車のタイヤが取られて転倒しそうです。",
     upvotes: 14,
     workflowStatus: "自治体通報済",
-    usedModel: "gemini-2.5-flash",
+    usedModel: "gemini-3-flash-preview",
     analysis: {
       title: "商店街交差点の車道・歩道境界部アスファルト陥没（幅40cm・深さ5cm）",
       category: "インフラ劣化",
@@ -774,7 +774,7 @@ const EXTRA_SEED_PINS: CommunitySafetyPin[] = [
         has_license_plate: false,
         has_nameplate: false,
         warning_message:
-          "顔・ナンバープレート・表札の映り込みは検出されませんでした。コミュニティ安全マップへそのまま公開可能です。",
+          "顔・ナンバープレート・表札の映り込みは検出されませんでした。ローカル安全マップ（この端末に保存）へそのまま記録できます。",
       },
       suggested_tasks: [
         {
@@ -798,7 +798,7 @@ const EXTRA_SEED_PINS: CommunitySafetyPin[] = [
       "公園横のスロープ手すり支柱の根元が錆びてぐらついており、高齢者が体重をかけると傾いて危険です。塗装剥がれによるささくれもあります。",
     upvotes: 9,
     workflowStatus: "改善完了",
-    usedModel: "gemini-2.5-flash",
+    usedModel: "gemini-3-flash-preview",
     analysis: {
       title: "公園南側バリアフリースロープ手すり支柱の腐食・ぐらつき修繕要望",
       category: "インフラ劣化",
@@ -840,7 +840,7 @@ const EXTRA_SEED_PINS: CommunitySafetyPin[] = [
         has_license_plate: false,
         has_nameplate: false,
         warning_message:
-          "顔・ナンバープレート・表札の映り込みは検出されませんでした。コミュニティ安全マップへそのまま公開可能です。",
+          "顔・ナンバープレート・表札の映り込みは検出されませんでした。ローカル安全マップ（この端末に保存）へそのまま記録できます。",
       },
       suggested_tasks: [
         {
@@ -866,7 +866,7 @@ function createDefaultSeedPins(): CommunitySafetyPin[] {
     sourceText: sc.sourceText,
     upvotes: 18 - idx * 3,
     workflowStatus: idx === 1 ? "自治体通報済" : "未対応",
-    usedModel: "gemini-2.5-flash",
+    usedModel: "gemini-3-flash-preview",
     analysis: sc.initialAnalysis,
   }));
   return [...scenarioPins, ...EXTRA_SEED_PINS];
@@ -1034,6 +1034,114 @@ async function resizeImageToJpegBase64(
   };
 }
 
+/**
+ * Compresses any image data URL to a compact JPEG thumbnail (max 480px, quality 0.72)
+ * via browser Canvas before persisting in localStorage so storage never overflows.
+ */
+async function compressDataUrlThumbnail(
+  dataUrl: string,
+  maxDim = 480,
+  quality = 0.72
+): Promise<string> {
+  if (!dataUrl || typeof document === "undefined") return dataUrl;
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("サムネイル圧縮用の画像読み込みに失敗しました。"));
+      el.src = dataUrl;
+    });
+    const naturalW = Math.max(1, img.naturalWidth || img.width);
+    const naturalH = Math.max(1, img.naturalHeight || img.height);
+    const scale = Math.min(1, maxDim / Math.max(naturalW, naturalH));
+    const width = Math.max(1, Math.round(naturalW * scale));
+    const height = Math.max(1, Math.round(naturalH * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return dataUrl;
+    ctx.drawImage(img, 0, 0, width, height);
+    return canvas.toDataURL("image/jpeg", quality);
+  } catch {
+    return dataUrl;
+  }
+}
+
+/**
+ * 100% browser-local Canvas privacy filter (no LLM / no server):
+ * Physically pixelates (downscale + nearest-neighbor mosaic) and applies subtle
+ * Gaussian blur to destroy legible faces, license plates, and nameplates BEFORE
+ * sending to AI or saving to localStorage.
+ */
+async function applyLocalPrivacyMosaicBlur(
+  dataUrl: string,
+  strength = 1
+): Promise<{ base64: string; mimeType: string; previewUrl: string }> {
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error("プライバシー保護用の画像読み込みに失敗しました。"));
+    el.src = dataUrl;
+  });
+
+  const width = Math.max(1, img.naturalWidth || img.width);
+  const height = Math.max(1, img.naturalHeight || img.height);
+
+  // Step 1: Real downscale mosaic averaging to irreversibly remove facial / plate / nameplate OCR detail
+  const divisor = Math.max(18, 56 - strength * 12);
+  const blockSize = Math.max(8, Math.round(Math.min(width, height) / divisor));
+  const smallW = Math.max(16, Math.round(width / blockSize));
+  const smallH = Math.max(16, Math.round(height / blockSize));
+
+  const smallCanvas = document.createElement("canvas");
+  smallCanvas.width = smallW;
+  smallCanvas.height = smallH;
+  const smallCtx = smallCanvas.getContext("2d");
+  if (!smallCtx) {
+    throw new Error("Canvas の初期化に失敗しました。");
+  }
+  smallCtx.imageSmoothingEnabled = true;
+  smallCtx.drawImage(img, 0, 0, smallW, smallH);
+
+  // Step 2: Nearest-neighbor mosaic upscale
+  const mosaicCanvas = document.createElement("canvas");
+  mosaicCanvas.width = width;
+  mosaicCanvas.height = height;
+  const mosaicCtx = mosaicCanvas.getContext("2d");
+  if (!mosaicCtx) {
+    throw new Error("Canvas の初期化に失敗しました。");
+  }
+  mosaicCtx.imageSmoothingEnabled = false;
+  mosaicCtx.drawImage(smallCanvas, 0, 0, smallW, smallH, 0, 0, width, height);
+
+  // Step 3: Soft Gaussian blur pass on top of pixelation (gracefully degrades if ctx.filter unsupported)
+  const outCanvas = document.createElement("canvas");
+  outCanvas.width = width;
+  outCanvas.height = height;
+  const outCtx = outCanvas.getContext("2d");
+  if (outCtx) {
+    const blurPx = Math.min(6, 1.4 + strength * 0.9);
+    outCtx.filter = `blur(${blurPx.toFixed(1)}px)`;
+    outCtx.drawImage(mosaicCanvas, 0, 0);
+    outCtx.filter = "none";
+    const previewUrl = outCanvas.toDataURL("image/jpeg", 0.84);
+    return {
+      base64: previewUrl.split(",")[1] || "",
+      mimeType: "image/jpeg",
+      previewUrl,
+    };
+  }
+
+  const previewUrl = mosaicCanvas.toDataURL("image/jpeg", 0.84);
+  return {
+    base64: previewUrl.split(",")[1] || "",
+    mimeType: "image/jpeg",
+    previewUrl,
+  };
+}
+
 function severityColor(level: MachiEyeSeverityLevel): {
   bg: string;
   border: string;
@@ -1178,14 +1286,21 @@ export default function MachiEyeLive() {
   const [draftMapX, setDraftMapX] = useState<number>(50);
   const [draftMapY, setDraftMapY] = useState<number>(50);
   const [geminiModel, setGeminiModel] = useState<
-    "gemini-2.5-flash" | "gemini-3.8-flash" | "gemini-4-hydrogen"
-  >("gemini-2.5-flash");
+    "gemini-3-flash-preview" | "gemini-2.5-flash"
+  >("gemini-3-flash-preview");
 
   const [imageBase64, setImageBase64] = useState<string>("");
   const [imageMimeType, setImageMimeType] = useState<string>("");
   const [imagePreview, setImagePreview] = useState<string>("");
   const [imageName, setImageName] = useState<string>("");
   const [dragActive, setDragActive] = useState<boolean>(false);
+  const [privacyBlurLevel, setPrivacyBlurLevel] = useState<number>(0);
+  const [privacyBlurring, setPrivacyBlurring] = useState<boolean>(false);
+  const rawUnblurredPhotoRef = useRef<{
+    base64: string;
+    mimeType: string;
+    previewUrl: string;
+  } | null>(null);
 
   const [gpsLoading, setGpsLoading] = useState<boolean>(false);
   const [analyzing, setAnalyzing] = useState<boolean>(false);
@@ -1229,13 +1344,22 @@ export default function MachiEyeLive() {
     }
   }, []);
 
-  // Persist pins whenever updated
+  // Persist pins whenever updated (with graceful quota fallback)
   const savePins = (nextPins: CommunitySafetyPin[]) => {
     setPins(nextPins);
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextPins));
     } catch {
-      // ignore quota error
+      try {
+        const trimmed = nextPins.map((p, idx) =>
+          idx < 5
+            ? p
+            : { ...p, imagePreview: undefined, afterImagePreview: undefined }
+        );
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+      } catch {
+        // ignore storage quota errors
+      }
     }
   };
 
@@ -1470,7 +1594,7 @@ export default function MachiEyeLive() {
     activeGoogleMapCenter.lng,
   ]);
 
-  // Select a built-in scenario example only when the user clicks "例を1つ試す"
+  // Select a built-in scenario example when the user clicks a quick scenario chip
   const handleSelectScenario = async (
     scenario: ScenarioPreset,
     autoInspect: boolean
@@ -1496,6 +1620,8 @@ export default function MachiEyeLive() {
       setImageMimeType(photo.mimeType);
       setImagePreview(photo.previewUrl);
       setImageName(`scenario-${scenario.id}.jpg`);
+      setPrivacyBlurLevel(0);
+      rawUnblurredPhotoRef.current = photo;
     }
 
     // Also focus existing matching pin immediately so UI feels instant
@@ -1538,15 +1664,61 @@ export default function MachiEyeLive() {
       setImageMimeType(resized.mimeType);
       setImagePreview(resized.previewUrl);
       setImageName(file.name);
+      setPrivacyBlurLevel(0);
+      rawUnblurredPhotoRef.current = resized;
       setActiveScenarioId("");
       setStatusBanner(
-        `📸 写真「${file.name}」を読み込みました（1600px JPEG最適化済）。「AI 現場解析＆マップ登録」で診断できます。`
+        `📸 写真「${file.name}」を読み込みました（1600px JPEG最適化済）。必要に応じて「プライバシー物理ぼかし」を端末内で適用してからAI解析できます。`
       );
     } catch (err) {
       setErrorMsg(
         err instanceof Error ? err.message : "画像の処理に失敗しました。"
       );
     }
+  };
+
+  const handleApplyPrivacyBlur = async () => {
+    if (!imagePreview || privacyBlurring) return;
+    setPrivacyBlurring(true);
+    setErrorMsg("");
+    try {
+      const sourceUrl =
+        rawUnblurredPhotoRef.current?.previewUrl || imagePreview;
+      if (!rawUnblurredPhotoRef.current) {
+        rawUnblurredPhotoRef.current = {
+          base64: imageBase64,
+          mimeType: imageMimeType || "image/jpeg",
+          previewUrl: imagePreview,
+        };
+      }
+      const nextLevel = Math.min(3, privacyBlurLevel + 1);
+      const blurred = await applyLocalPrivacyMosaicBlur(sourceUrl, nextLevel);
+      setImageBase64(blurred.base64);
+      setImageMimeType(blurred.mimeType);
+      setImagePreview(blurred.previewUrl);
+      setPrivacyBlurLevel(nextLevel);
+      setStatusBanner(
+        `🕶️ 端末内 Canvas でプライバシー物理ぼかし（Lv.${nextLevel}・モザイク＋ぼかし）を適用しました。AI送信前・保存前にブラウザ内で顔・ナンバー情報を保護済みです。`
+      );
+    } catch (err) {
+      setErrorMsg(
+        err instanceof Error
+          ? err.message
+          : "プライバシー物理ぼかしの適用に失敗しました。"
+      );
+    } finally {
+      setPrivacyBlurring(false);
+    }
+  };
+
+  const handleRevertPrivacyBlur = () => {
+    const original = rawUnblurredPhotoRef.current;
+    if (!original) return;
+    setImageBase64(original.base64);
+    setImageMimeType(original.mimeType);
+    setImagePreview(original.previewUrl);
+    setPrivacyBlurLevel(0);
+    setStatusBanner("↩️ プライバシー物理ぼかし適用前の写真に戻しました。");
   };
 
   const handleGetGps = () => {
@@ -1664,6 +1836,10 @@ export default function MachiEyeLive() {
         minute: "2-digit",
       });
 
+      const compressedImagePreview = reqImgPreview
+        ? await compressDataUrlThumbnail(reqImgPreview, 480, 0.72)
+        : undefined;
+
       const newPin: CommunitySafetyPin = {
         id: `pin-${Date.now()}`,
         createdAt: `本日 ${nowStr}`,
@@ -1673,7 +1849,7 @@ export default function MachiEyeLive() {
         mapX: reqMapX,
         mapY: reqMapY,
         sourceText: reqSourceText,
-        imagePreview: reqImgPreview || undefined,
+        imagePreview: compressedImagePreview,
         upvotes: 1,
         workflowStatus: "未対応",
         usedModel: data.usedModel || geminiModel,
@@ -1687,7 +1863,7 @@ export default function MachiEyeLive() {
       setFilterCategory("すべて");
       setFilterSeverity("すべて");
       setStatusBanner(
-        `✅ AI ハザード＆バリアフリー点検が完了し、コミュニティ安全マップに新規ピン「${data.result.title}」をプロットしました！`
+        `✅ AI ハザード＆バリアフリー点検が完了し、ローカル安全マップ（この端末に保存）に新規ピン「${data.result.title}」をプロットしました！`
       );
       setTimeout(() => {
         inspectionCardRef.current?.scrollIntoView({
@@ -1764,7 +1940,7 @@ export default function MachiEyeLive() {
       if (!rawUrl) return;
       const img = new Image();
       img.onload = () => {
-        const maxDim = 640;
+        const maxDim = 480;
         const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
         const canvas = document.createElement("canvas");
         canvas.width = Math.max(1, Math.round(img.width * scale));
@@ -1772,7 +1948,7 @@ export default function MachiEyeLive() {
         const ctx = canvas.getContext("2d");
         const compactUrl = ctx
           ? (ctx.drawImage(img, 0, 0, canvas.width, canvas.height),
-            canvas.toDataURL("image/jpeg", 0.78))
+            canvas.toDataURL("image/jpeg", 0.72))
           : rawUrl;
         const next = pins.map((p) =>
           p.id === pinId
@@ -2086,6 +2262,25 @@ export default function MachiEyeLive() {
                 </p>
               </div>
             </div>
+            <Link
+              href="/"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "6px 12px",
+                borderRadius: 999,
+                border: "1px solid rgba(148, 163, 184, 0.28)",
+                background: "rgba(15, 23, 42, 0.65)",
+                color: "#cbd5e1",
+                fontSize: "0.78rem",
+                fontWeight: 600,
+                textDecoration: "none",
+                whiteSpace: "nowrap",
+              }}
+            >
+              ← トップ
+            </Link>
           </div>
         </header>
 
@@ -2296,41 +2491,124 @@ export default function MachiEyeLive() {
                           display: "block",
                         }}
                       />
+                      {privacyBlurLevel > 0 && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: 8,
+                            left: 8,
+                            padding: "4px 10px",
+                            borderRadius: 999,
+                            background: "rgba(6, 78, 59, 0.9)",
+                            border: "1px solid rgba(52, 211, 153, 0.65)",
+                            color: "#a7f3d0",
+                            fontSize: "0.72rem",
+                            fontWeight: 700,
+                          }}
+                        >
+                          🛡️ 端末内Canvas物理ぼかし適用済（Lv.{privacyBlurLevel}・AI送信前保護）
+                        </div>
+                      )}
                     </div>
                     <div
                       style={{
                         display: "flex",
+                        flexWrap: "wrap",
                         alignItems: "center",
                         justifyContent: "space-between",
+                        gap: 8,
                         fontSize: "0.78rem",
                         color: "#94a3b8",
                       }}
                     >
                       <span>
                         📎 <strong style={{ color: "#e2e8f0" }}>{imageName}</strong>{" "}
-                        （Gemini Vision マルチモーダル解析＆プライバシー監査対象）
+                        {privacyBlurLevel > 0
+                          ? "（端末内で物理モザイクぼかし済 → Gemini Vision 解析対象）"
+                          : "（Gemini Vision マルチモーダル解析＆プライバシー監査対象）"}
                       </span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setImageBase64("");
-                          setImageMimeType("");
-                          setImagePreview("");
-                          setImageName("");
-                        }}
+                      <div
                         style={{
-                          padding: "3px 10px",
-                          borderRadius: 6,
-                          border: "1px solid rgba(239, 68, 68, 0.4)",
-                          background: "rgba(239, 68, 68, 0.15)",
-                          color: "#fca5a5",
-                          fontSize: "0.74rem",
-                          cursor: "pointer",
+                          display: "flex",
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                          gap: 6,
                         }}
                       >
-                        画像をクリア
-                      </button>
+                        <button
+                          type="button"
+                          disabled={privacyBlurring}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleApplyPrivacyBlur();
+                          }}
+                          style={{
+                            padding: "4px 10px",
+                            borderRadius: 6,
+                            border:
+                              privacyBlurLevel > 0
+                                ? "1px solid rgba(52, 211, 153, 0.6)"
+                                : "1px solid rgba(56, 189, 248, 0.55)",
+                            background:
+                              privacyBlurLevel > 0
+                                ? "rgba(16, 185, 129, 0.22)"
+                                : "rgba(14, 165, 233, 0.18)",
+                            color: privacyBlurLevel > 0 ? "#6ee7b7" : "#7dd3fc",
+                            fontSize: "0.74rem",
+                            fontWeight: 700,
+                            cursor: privacyBlurring ? "wait" : "pointer",
+                          }}
+                        >
+                          {privacyBlurring
+                            ? "ぼかし処理中..."
+                            : privacyBlurLevel > 0
+                            ? `🕶️ プライバシー物理ぼかし（顔・ナンバー保護） Lv.${privacyBlurLevel}${privacyBlurLevel < 3 ? "・強化" : "・最大"}`
+                            : "🕶️ プライバシー物理ぼかし（顔・ナンバー保護）"}
+                        </button>
+                        {privacyBlurLevel > 0 && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRevertPrivacyBlur();
+                            }}
+                            style={{
+                              padding: "4px 9px",
+                              borderRadius: 6,
+                              border: "1px solid rgba(148, 163, 184, 0.35)",
+                              background: "rgba(30, 41, 59, 0.75)",
+                              color: "#cbd5e1",
+                              fontSize: "0.74rem",
+                              cursor: "pointer",
+                            }}
+                          >
+                            元に戻す
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setImageBase64("");
+                            setImageMimeType("");
+                            setImagePreview("");
+                            setImageName("");
+                            setPrivacyBlurLevel(0);
+                            rawUnblurredPhotoRef.current = null;
+                          }}
+                          style={{
+                            padding: "4px 10px",
+                            borderRadius: 6,
+                            border: "1px solid rgba(239, 68, 68, 0.4)",
+                            background: "rgba(239, 68, 68, 0.15)",
+                            color: "#fca5a5",
+                            fontSize: "0.74rem",
+                            cursor: "pointer",
+                          }}
+                        >
+                          画像をクリア
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -2356,7 +2634,7 @@ export default function MachiEyeLive() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1.6fr 0.9fr 0.9fr auto",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
                   gap: 8,
                   alignItems: "end",
                 }}
@@ -2382,6 +2660,7 @@ export default function MachiEyeLive() {
                     placeholder="例：中央駅南口 横断歩道前"
                     style={{
                       width: "100%",
+                      boxSizing: "border-box",
                       padding: "8px 10px",
                       borderRadius: 8,
                       border: "1px solid rgba(148, 163, 184, 0.3)",
@@ -2412,6 +2691,7 @@ export default function MachiEyeLive() {
                     placeholder="35.681420"
                     style={{
                       width: "100%",
+                      boxSizing: "border-box",
                       padding: "8px 10px",
                       borderRadius: 8,
                       border: "1px solid rgba(148, 163, 184, 0.3)",
@@ -2442,6 +2722,7 @@ export default function MachiEyeLive() {
                     placeholder="139.766850"
                     style={{
                       width: "100%",
+                      boxSizing: "border-box",
                       padding: "8px 10px",
                       borderRadius: 8,
                       border: "1px solid rgba(148, 163, 184, 0.3)",
@@ -2456,6 +2737,7 @@ export default function MachiEyeLive() {
                   onClick={handleGetGps}
                   disabled={gpsLoading}
                   style={{
+                    width: "100%",
                     padding: "8px 11px",
                     borderRadius: 8,
                     border: "1px solid rgba(52, 211, 153, 0.4)",
@@ -2505,6 +2787,57 @@ export default function MachiEyeLive() {
                 />
               </div>
 
+              {/* 3 Quick Scenario Chips */}
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "0.74rem",
+                    color: "#94a3b8",
+                    fontWeight: 600,
+                  }}
+                >
+                  ⚡ クイック体験シナリオ:
+                </span>
+                {[
+                  BUILTIN_SCENARIOS[0],
+                  BUILTIN_SCENARIOS[1],
+                  BUILTIN_SCENARIOS[3],
+                ].map((scenario) => {
+                  const isActive = activeScenarioId === scenario.id;
+                  const icon = scenario.badge.split(" ")[0];
+                  return (
+                    <button
+                      key={scenario.id}
+                      type="button"
+                      onClick={() => void handleSelectScenario(scenario, false)}
+                      style={{
+                        padding: "5px 10px",
+                        borderRadius: 999,
+                        border: isActive
+                          ? "1px solid rgba(56, 189, 248, 0.75)"
+                          : "1px solid rgba(148, 163, 184, 0.28)",
+                        background: isActive
+                          ? "rgba(14, 165, 233, 0.22)"
+                          : "rgba(30, 41, 59, 0.7)",
+                        color: isActive ? "#bae6fd" : "#cbd5e1",
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {icon} {scenario.shortTitle}
+                    </button>
+                  );
+                })}
+              </div>
+
               {/* Model selection & Execute button */}
               <div
                 style={{
@@ -2515,7 +2848,14 @@ export default function MachiEyeLive() {
                   gap: 10,
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
                   <label
                     htmlFor="machieye-model-select"
                     style={{
@@ -2532,9 +2872,8 @@ export default function MachiEyeLive() {
                     onChange={(e) =>
                       setGeminiModel(
                         e.target.value as
+                          | "gemini-3-flash-preview"
                           | "gemini-2.5-flash"
-                          | "gemini-3.8-flash"
-                          | "gemini-4-hydrogen"
                       )
                     }
                     style={{
@@ -2546,32 +2885,13 @@ export default function MachiEyeLive() {
                       fontSize: "0.78rem",
                     }}
                   >
+                    <option value="gemini-3-flash-preview">
+                      gemini-3-flash-preview（推奨・ライブマルチモーダル）
+                    </option>
                     <option value="gemini-2.5-flash">
-                      gemini-2.5-flash（推奨・マルチモーダル高速）
-                    </option>
-                    <option value="gemini-3.8-flash">
-                      gemini-3.8-flash（Civic Schema互換）
-                    </option>
-                    <option value="gemini-4-hydrogen">
-                      gemini-4-hydrogen
+                      gemini-2.5-flash（標準マルチモーダル）
                     </option>
                   </select>
-                  <button
-                    type="button"
-                    onClick={() => void handleSelectScenario(BUILTIN_SCENARIOS[0], false)}
-                    style={{
-                      background: "transparent",
-                      border: "none",
-                      padding: 0,
-                      color: "#94a3b8",
-                      fontSize: "0.78rem",
-                      textDecoration: "underline",
-                      cursor: "pointer",
-                      marginLeft: 6,
-                    }}
-                  >
-                    例を1つ試す
-                  </button>
                   {(sourceText || locationText || imagePreview) && (
                     <button
                       type="button"
@@ -2585,6 +2905,8 @@ export default function MachiEyeLive() {
                         setImageMimeType("");
                         setImagePreview("");
                         setImageName("");
+                        setPrivacyBlurLevel(0);
+                        rawUnblurredPhotoRef.current = null;
                         setErrorMsg("");
                         setStatusBanner("");
                       }}
@@ -2621,7 +2943,7 @@ export default function MachiEyeLive() {
                 >
                   {analyzing
                     ? "⏳ Gemini Vision が現場トリアージ中..."
-                    : "🔍 AI 現場解析 ＆ 安全マップにピン登録"}
+                    : "🔍 AI 現場解析 ＆ ローカル安全マップにピン登録"}
                 </button>
               </div>
             </form>
@@ -2657,7 +2979,7 @@ export default function MachiEyeLive() {
                     letterSpacing: "0.06em",
                   }}
                 >
-                  MODULE 02 // GOOGLE MAPS & NEIGHBORHOOD SAFETY RADAR
+                  MODULE 02 // GOOGLE MAPS & LOCAL SAFETY MAP (THIS DEVICE)
                 </span>
                 <h2
                   style={{
@@ -2667,7 +2989,16 @@ export default function MachiEyeLive() {
                     color: "#f8fafc",
                   }}
                 >
-                  🗺️ 地域コミュニティ安全ピンマップ（{filteredPins.length}件表示）
+                  🗺️ ローカル安全マップ（この端末に保存）{" "}
+                  <span
+                    style={{
+                      fontSize: "0.84rem",
+                      fontWeight: 600,
+                      color: "#94a3b8",
+                    }}
+                  >
+                    （{filteredPins.length}件表示）
+                  </span>
                 </h2>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
@@ -2975,7 +3306,7 @@ export default function MachiEyeLive() {
                       height: 295,
                       background: "#071222",
                     }}
-                    aria-label="Google マップ（地域コミュニティ安全ピン）"
+                    aria-label="Google マップ（ローカル安全マップ・この端末に保存）"
                   />
                 ) : (
                   <iframe

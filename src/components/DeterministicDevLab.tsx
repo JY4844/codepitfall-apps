@@ -25,108 +25,151 @@ interface GitDisasterScenario {
   afterEdges: Array<[number, number]>;
 }
 
-const GIT_DISASTERS: GitDisasterScenario[] = [
-  {
-    id: "push-rejected",
-    label: "push rejected (fetch first) で弾かれた",
-    badge: "コード消失ゼロ",
-    safeDataGuarantee: "手元のコミットは1行も消えません（最新の後ろに綺麗に並び直します）",
-    beforeCaption: "リモート (origin/main) が先に進んで枝分かれしている状態",
-    afterCaption: "git pull --rebase 後：最新のリモート変更の後ろに自分のコミットが安全に整列",
-    command: "git pull --rebase origin main && git push origin main",
-    whySafe:
-      "force push（--force）を使わず、リモートの変更を先に取り込んでから自分の変更を重ねるため、チームメイトの作業も自分の作業も消えません。",
-    beforeNodes: [
-      { x: 60, y: 70, id: "C1", color: "#64748b" },
-      { x: 165, y: 40, id: "R2", tag: "origin/main", color: "#0284c7" },
-      { x: 165, y: 105, id: "L2", tag: "HEAD (あなた)", color: "#ef4444" },
-    ],
-    beforeEdges: [
-      [0, 1],
-      [0, 2],
-    ],
-    afterNodes: [
-      { x: 60, y: 70, id: "C1", color: "#64748b" },
-      { x: 155, y: 70, id: "R2", color: "#0284c7" },
-      { x: 260, y: 70, id: "L2'", tag: "HEAD & origin/main", color: "#16a34a" },
-    ],
-    afterEdges: [
-      [0, 1],
-      [1, 2],
-    ],
-  },
-  {
-    id: "undo-commit-keep-code",
-    label: "直前のコミットだけ取り消したい（コードは残す！）",
-    badge: "編集内容そのまま保持",
-    safeDataGuarantee: "書いたコードはすべて VS Code にそのまま残ります（--hard ではありません）",
-    beforeCaption: "誤ってコミットした C3 に HEAD がある状態",
-    afterCaption: "git reset --soft HEAD~1 後：HEAD だけ C2 に戻り、C3 の変更はステージに残る",
-    command: "git reset --soft HEAD~1",
-    whySafe:
-      "--hard は編集内容を完全消去して危険ですが、--soft はコミット履歴の1歩だけを戻し、書いたコードは1文字も消しません。",
-    beforeNodes: [
-      { x: 60, y: 70, id: "C1", color: "#64748b" },
-      { x: 155, y: 70, id: "C2", color: "#64748b" },
-      { x: 255, y: 70, id: "C3", tag: "HEAD (誤コミット)", color: "#ef4444" },
-    ],
-    beforeEdges: [
-      [0, 1],
-      [1, 2],
-    ],
-    afterNodes: [
-      { x: 60, y: 70, id: "C1", color: "#64748b" },
-      { x: 155, y: 70, id: "C2", tag: "HEAD", color: "#16a34a" },
-      { x: 260, y: 70, id: "変更", tag: "ステージに残存✓", color: "#f59e0b" },
-    ],
-    afterEdges: [
-      [0, 1],
-      [1, 2],
-    ],
-  },
-  {
-    id: "committed-to-main",
-    label: "main に直接コミットしてしまった（別ブランチへ退避）",
-    badge: "PR作成前に最適",
-    safeDataGuarantee: "変更を新しい feature ブランチに丸ごと移してから main を綺麗に戻します",
-    beforeCaption: "main ブランチに直接作業コミット (M2) を積んでしまった状態",
-    afterCaption: "作業コミットは feature/fix に安全退避し、main は元の C1 へ復旧",
-    command: "git branch feature/fix && git reset --hard origin/main && git switch feature/fix",
-    whySafe:
-      "最初に git branch feature/fix でコミットへのポインタ（退避先）を作ってから main を戻すため、作業内容は100% feature/fix に残ります。",
-    beforeNodes: [
-      { x: 60, y: 70, id: "C1", tag: "origin/main", color: "#0284c7" },
-      { x: 195, y: 70, id: "M2", tag: "HEAD -> main (誤)", color: "#ef4444" },
-    ],
-    beforeEdges: [[0, 1]],
-    afterNodes: [
-      { x: 60, y: 70, id: "C1", tag: "main & origin/main", color: "#0284c7" },
-      { x: 215, y: 40, id: "M2", tag: "HEAD -> feature/fix", color: "#16a34a" },
-    ],
-    afterEdges: [[0, 1]],
-  },
-  {
-    id: "staged-env-secret",
-    label: ".env / APIキーを直前のコミットに混ぜてしまった",
-    badge: "push前の緊急対処",
-    safeDataGuarantee: "手元の .env ファイル自体は消さず、Gitの追跡対象だけから除外します",
-    beforeCaption: ".env が Git 履歴に含まれたまま push しようとしている危険状態",
-    afterCaption: "Git の追跡から .env を外し、.gitignore に追記してクリーンな履歴に修正",
-    command: "git rm --cached .env && echo .env >> .gitignore && git commit --amend --no-edit",
-    whySafe:
-      "--cached を付けることでパソコン内の .env 本体は消さずに、Git に上げるリストからだけ安全に除外できます（※既に push 済みの場合は必ずキーを再発行してください）。",
-    beforeNodes: [
-      { x: 60, y: 70, id: "C1", color: "#64748b" },
-      { x: 205, y: 70, id: "C2+.env", tag: "HEAD (秘密鍵混入!)", color: "#dc2626" },
-    ],
-    beforeEdges: [[0, 1]],
-    afterNodes: [
-      { x: 60, y: 70, id: "C1", color: "#64748b" },
-      { x: 205, y: 70, id: "C2'", tag: "HEAD (.env除外済✓)", color: "#16a34a" },
-    ],
-    afterEdges: [[0, 1]],
-  },
-];
+const DEFAULT_BRANCH_NAME = "feature/my-fix";
+
+function truncateBranchForSvg(branch: string, maxLen = 22): string {
+  return branch.length > maxLen ? `${branch.slice(0, maxLen - 1)}…` : branch;
+}
+
+function buildGitDisasters(branchName: string): GitDisasterScenario[] {
+  const svgBranch = truncateBranchForSvg(branchName);
+  const rescueBranch = branchName === "main" ? DEFAULT_BRANCH_NAME : branchName;
+  const svgRescueBranch = truncateBranchForSvg(rescueBranch);
+
+  return [
+    {
+      id: "push-rejected",
+      label: "push rejected (fetch first) で弾かれた",
+      badge: "コード消失ゼロ",
+      safeDataGuarantee:
+        "手元のコミットは1行も消えません（最新の後ろに綺麗に並び直します）",
+      beforeCaption: `リモート (origin/${branchName}) が先に進んで枝分かれしている状態`,
+      afterCaption:
+        "git pull --rebase 後：最新のリモート変更の後ろに自分のコミットが安全に整列",
+      command: `git pull --rebase origin ${branchName} && git push origin ${branchName}`,
+      whySafe:
+        "force push（--force）を使わず、リモートの変更を先に取り込んでから自分の変更を重ねるため、チームメイトの作業も自分の作業も消えません。",
+      beforeNodes: [
+        { x: 60, y: 70, id: "C1", color: "#64748b" },
+        { x: 185, y: 40, id: "R2", tag: `origin/${svgBranch}`, color: "#0284c7" },
+        { x: 185, y: 105, id: "L2", tag: `HEAD (${svgBranch})`, color: "#ef4444" },
+      ],
+      beforeEdges: [
+        [0, 1],
+        [0, 2],
+      ],
+      afterNodes: [
+        { x: 55, y: 70, id: "C1", color: "#64748b" },
+        { x: 150, y: 70, id: "R2", color: "#0284c7" },
+        {
+          x: 255,
+          y: 70,
+          id: "L2'",
+          tag: `HEAD & origin/${svgBranch}`,
+          color: "#16a34a",
+        },
+      ],
+      afterEdges: [
+        [0, 1],
+        [1, 2],
+      ],
+    },
+    {
+      id: "undo-commit-keep-code",
+      label: "直前のコミットだけ取り消したい（コードは残す！）",
+      badge: "編集内容そのまま保持",
+      safeDataGuarantee:
+        "書いたコードはすべて VS Code にそのまま残ります（--hard ではありません）",
+      beforeCaption: `誤ってコミットした C3 に ${branchName} の HEAD がある状態`,
+      afterCaption:
+        "git reset --soft HEAD~1 後：HEAD だけ C2 に戻り、C3 の変更はステージに残る",
+      command: "git reset --soft HEAD~1",
+      whySafe:
+        "--hard は編集内容を完全消去して危険ですが、--soft はコミット履歴の1歩だけを戻し、書いたコードは1文字も消しません。",
+      beforeNodes: [
+        { x: 60, y: 70, id: "C1", color: "#64748b" },
+        { x: 155, y: 70, id: "C2", color: "#64748b" },
+        { x: 255, y: 70, id: "C3", tag: `HEAD (${svgBranch})`, color: "#ef4444" },
+      ],
+      beforeEdges: [
+        [0, 1],
+        [1, 2],
+      ],
+      afterNodes: [
+        { x: 60, y: 70, id: "C1", color: "#64748b" },
+        { x: 155, y: 70, id: "C2", tag: `HEAD (${svgBranch})`, color: "#16a34a" },
+        { x: 265, y: 70, id: "変更", tag: "ステージに残存✓", color: "#f59e0b" },
+      ],
+      afterEdges: [
+        [0, 1],
+        [1, 2],
+      ],
+    },
+    {
+      id: "committed-to-main",
+      label: "main に直接コミットしてしまった（別ブランチへ退避）",
+      badge: "PR作成前に最適",
+      safeDataGuarantee:
+        "変更を新しい feature ブランチに丸ごと移してから main を綺麗に戻します",
+      beforeCaption: "main ブランチに直接作業コミット (M2) を積んでしまった状態",
+      afterCaption: `作業コミットは ${rescueBranch} に安全退避し、main は元の C1 へ復旧`,
+      command: `git branch ${rescueBranch} && git reset --hard origin/main && git switch ${rescueBranch}`,
+      whySafe: `最初に git branch ${rescueBranch} でコミットへのポインタ（退避先）を作ってから main を戻すため、作業内容は100% ${rescueBranch} に残ります。`,
+      beforeNodes: [
+        { x: 70, y: 70, id: "C1", tag: "origin/main", color: "#0284c7" },
+        { x: 220, y: 70, id: "M2", tag: "HEAD -> main (誤)", color: "#ef4444" },
+      ],
+      beforeEdges: [[0, 1]],
+      afterNodes: [
+        { x: 70, y: 70, id: "C1", tag: "main & origin/main", color: "#0284c7" },
+        {
+          x: 230,
+          y: 40,
+          id: "M2",
+          tag: `HEAD -> ${svgRescueBranch}`,
+          color: "#16a34a",
+        },
+      ],
+      afterEdges: [[0, 1]],
+    },
+    {
+      id: "staged-env-secret",
+      label: ".env / APIキーを直前のコミットに混ぜてしまった",
+      badge: "push前の緊急対処",
+      safeDataGuarantee:
+        "手元の .env ファイル自体は消さず、Gitの追跡対象だけから除外します",
+      beforeCaption: `${branchName} の履歴に .env が含まれたまま push しようとしている危険状態`,
+      afterCaption:
+        "Git の追跡から .env を外し、.gitignore に追記してクリーンな履歴に修正",
+      command:
+        "git rm --cached .env && echo .env >> .gitignore && git commit --amend --no-edit",
+      whySafe:
+        "--cached を付けることでパソコン内の .env 本体は消さずに、Git に上げるリストからだけ安全に除外できます（※既に push 済みの場合は必ずキーを再発行してください）。",
+      beforeNodes: [
+        { x: 65, y: 70, id: "C1", color: "#64748b" },
+        {
+          x: 220,
+          y: 70,
+          id: "C2+.env",
+          tag: `HEAD -> ${svgBranch} (秘密鍵混入!)`,
+          color: "#dc2626",
+        },
+      ],
+      beforeEdges: [[0, 1]],
+      afterNodes: [
+        { x: 65, y: 70, id: "C1", color: "#64748b" },
+        {
+          x: 220,
+          y: 70,
+          id: "C2'",
+          tag: `HEAD -> ${svgBranch} (.env除外済✓)`,
+          color: "#16a34a",
+        },
+      ],
+      afterEdges: [[0, 1]],
+    },
+  ];
+}
 
 function CommitGraphSvg({
   nodes,
@@ -137,7 +180,7 @@ function CommitGraphSvg({
 }) {
   return (
     <svg
-      viewBox="0 0 340 140"
+      viewBox="0 0 360 140"
       style={{
         width: "100%",
         height: 140,
@@ -202,10 +245,10 @@ function CommitGraphSvg({
 }
 
 export default function DeterministicDevLab() {
-  // ③ Git Visual Simulator state
-  const [selectedDisasterId, setSelectedDisasterId] = useState<string>(
-    GIT_DISASTERS[0].id
-  );
+  // ③ Git Safe Recovery Visual Guide state
+  const [selectedDisasterId, setSelectedDisasterId] =
+    useState<string>("push-rejected");
+  const [branchName, setBranchName] = useState<string>(DEFAULT_BRANCH_NAME);
   const [simulated, setSimulated] = useState<boolean>(false);
   const [copiedGitCmd, setCopiedGitCmd] = useState<boolean>(false);
 
@@ -232,8 +275,18 @@ export default function DeterministicDevLab() {
     }
   }, []);
 
+  const safeBranch = useMemo(() => {
+    const cleaned = branchName
+      .trim()
+      .replace(/\s+/g, "-")
+      .replace(/[^A-Za-z0-9._/-]/g, "");
+    return cleaned || DEFAULT_BRANCH_NAME;
+  }, [branchName]);
+
+  const disasters = useMemo(() => buildGitDisasters(safeBranch), [safeBranch]);
+
   const disaster =
-    GIT_DISASTERS.find((d) => d.id === selectedDisasterId) ?? GIT_DISASTERS[0];
+    disasters.find((d) => d.id === selectedDisasterId) ?? disasters[0];
 
   const hookScript = useMemo(() => generatePreCommitHook(habits), [habits]);
 
@@ -317,14 +370,14 @@ export default function DeterministicDevLab() {
           </span>
         </div>
         <h2 style={{ margin: "10px 0 6px", fontSize: 20, fontWeight: 800 }}>
-          🛡️ 非AI 安全ツール（Git図解シミュレーター・実リポ生監査・pre-commit生成）
+          🛡️ 非AI 安全ツール（Git安全リカバリー図解・実リポ生監査・pre-commit生成）
         </h2>
         <p style={{ margin: 0, fontSize: 13, color: "#cbd5e1", lineHeight: 1.6 }}>
-          LLM の推測やハルシネーションに頼らず、<strong>Gitコミット木の視覚シミュレーション</strong>・<strong>GitHub API による実ファイル生監査</strong>・<strong>本物の `.git/hooks/pre-commit` 物理ガード生成</strong>をゼロAIトークンで実行します。
+          LLM の推測やハルシネーションに頼らず、<strong>Git安全リカバリー視覚ガイド</strong>・<strong>GitHub API による実ファイル生監査</strong>・<strong>本物の `.git/hooks/pre-commit` 物理ガード生成</strong>をゼロAIトークンで実行します。
         </p>
       </section>
 
-      {/* FEATURE ③: Visual Git Disaster Recovery Simulator */}
+      {/* FEATURE ③: Git Safe Recovery Visual Guide */}
       <section
         style={{
           background: "#ffffff",
@@ -337,7 +390,7 @@ export default function DeterministicDevLab() {
         <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
           <div>
             <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>
-              🌳 1. 視覚的 Git 事故リカバリー・シミュレーター（git-sim インスパイア）
+              🌳 1. Git 安全リカバリー視覚ガイド（0msローカル図解）
             </h3>
             <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#64748b" }}>
               コマンドを打つ前に「コミット木がどう動くか・コードが消えないか」を図で事前確認できます。
@@ -359,8 +412,8 @@ export default function DeterministicDevLab() {
         </div>
 
         {/* Scenario Pills */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
-          {GIT_DISASTERS.map((d) => (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+          {disasters.map((d) => (
             <button
               key={d.id}
               type="button"
@@ -385,6 +438,49 @@ export default function DeterministicDevLab() {
               {d.label}
             </button>
           ))}
+        </div>
+
+        {/* Live Branch Name Input (updates SVG branch tags & copyable Git commands in real time) */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 10,
+            padding: "10px 12px",
+            borderRadius: 10,
+            background: "#f8fafc",
+            border: "1px solid #e2e8f0",
+            marginBottom: 14,
+          }}
+        >
+          <label
+            htmlFor="git-branch-name-input"
+            style={{ fontSize: 12.5, fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}
+          >
+            🌿 作業・退避ブランチ名:
+          </label>
+          <input
+            id="git-branch-name-input"
+            type="text"
+            value={branchName}
+            onChange={(e) => setBranchName(e.target.value)}
+            placeholder={DEFAULT_BRANCH_NAME}
+            style={{
+              flex: "1 1 200px",
+              maxWidth: 280,
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: "1.5px solid #cbd5e1",
+              background: "#ffffff",
+              color: "#0f172a",
+              fontSize: 12.5,
+              fontFamily: "ui-monospace, Consolas, monospace",
+            }}
+          />
+          <span style={{ fontSize: 11.5, color: "#64748b" }}>
+            入力すると下の SVG ブランチタグと Git コマンドがリアルタイムに書き換わります
+          </span>
         </div>
 
         {/* Before / After SVG Graph */}
@@ -440,7 +536,7 @@ export default function DeterministicDevLab() {
               cursor: "pointer",
             }}
           >
-            {simulated ? "↺ Before に戻す" : "▶ After をシミュレート確認"}
+            {simulated ? "↺ Before に戻す" : "▶ After 状態を確認"}
           </button>
 
           <code
@@ -507,6 +603,17 @@ export default function DeterministicDevLab() {
             type="text"
             value={repoUrl}
             onChange={(e) => setRepoUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (
+                e.key === "Enter" &&
+                !e.nativeEvent.isComposing &&
+                !auditing &&
+                repoUrl.trim()
+              ) {
+                e.preventDefault();
+                void handleRunRepoAudit();
+              }
+            }}
             placeholder="https://github.com/owner/repo または owner/repo"
             style={{
               flex: 1,
@@ -539,7 +646,7 @@ export default function DeterministicDevLab() {
             type="button"
             onClick={() =>
               void handleRunRepoAudit(
-                "https://github.com/JY4844/codepitfall-kit"
+                "https://github.com/JY4844/codepitfall-apps"
               )
             }
             style={{

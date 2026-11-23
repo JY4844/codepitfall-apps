@@ -36,6 +36,7 @@ export interface PersistedChecklistItem extends OtayoriChecklistItem {
 interface PersistedBatonState {
   checklistByDoc: Record<string, PersistedChecklistItem[]>;
   eventAssigneesByDoc: Record<string, Record<number, FamilyRole>>;
+  lastActiveDocKey?: string;
 }
 
 interface ArchivedOtayoriDoc {
@@ -809,10 +810,12 @@ function ensureCompactIso(
   const mdSlash = dateText.match(/(?:20\d{2}[/\-.])?(\d{1,2})\s*[/\-.]\s*(\d{1,2})/);
   if (mdKanji) {
     month = Math.min(12, Math.max(1, Number(mdKanji[1])));
-    day = Math.min(28, Math.max(1, Number(mdKanji[2])));
+    const maxDay = new Date(year, month, 0).getDate();
+    day = Math.min(maxDay, Math.max(1, Number(mdKanji[2])));
   } else if (mdSlash) {
     month = Math.min(12, Math.max(1, Number(mdSlash[1])));
-    day = Math.min(28, Math.max(1, Number(mdSlash[2])));
+    const maxDay = new Date(year, month, 0).getDate();
+    day = Math.min(maxDay, Math.max(1, Number(mdSlash[2])));
   }
 
   const times = [...dateText.matchAll(/(\d{1,2}):(\d{2})/g)];
@@ -1113,12 +1116,123 @@ function defaultChecklistForAnalysis(
   }));
 }
 
+const SAMPLE_CHIP_LABELS: Record<PresetDefinition["id"], string> = {
+  undokai: "運動会",
+  ensoku: "遠足",
+  vaccine: "予防接種",
+  kenshin: "自治体健診",
+};
+
+function readBatonState(): PersistedBatonState {
+  if (typeof window === "undefined") {
+    return { checklistByDoc: {}, eventAssigneesByDoc: {} };
+  }
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { checklistByDoc: {}, eventAssigneesByDoc: {} };
+    const parsed = JSON.parse(raw) as Partial<PersistedBatonState>;
+    return {
+      checklistByDoc:
+        parsed &&
+        typeof parsed.checklistByDoc === "object" &&
+        parsed.checklistByDoc !== null
+          ? parsed.checklistByDoc
+          : {},
+      eventAssigneesByDoc:
+        parsed &&
+        typeof parsed.eventAssigneesByDoc === "object" &&
+        parsed.eventAssigneesByDoc !== null
+          ? parsed.eventAssigneesByDoc
+          : {},
+      lastActiveDocKey:
+        typeof parsed?.lastActiveDocKey === "string"
+          ? parsed.lastActiveDocKey
+          : undefined,
+    };
+  } catch {
+    return { checklistByDoc: {}, eventAssigneesByDoc: {} };
+  }
+}
+
+function restoreBatonForAnalysis(
+  baseAnalysis: OtayoriAnalysis,
+  currentMembers: string[],
+  batonState: PersistedBatonState
+): {
+  restoredAnalysis: OtayoriAnalysis;
+  restoredChecklist: PersistedChecklistItem[];
+} {
+  const key = (baseAnalysis.title || "custom").trim();
+  const savedEventAssignees = batonState.eventAssigneesByDoc[key];
+  const restoredEvents = savedEventAssignees
+    ? baseAnalysis.events.map((ev, idx) => ({
+        ...ev,
+        assignee: savedEventAssignees[idx] || ev.assignee,
+      }))
+    : baseAnalysis.events;
+
+  const restoredAnalysis: OtayoriAnalysis = {
+    ...baseAnalysis,
+    events: restoredEvents,
+  };
+
+  const defaultItems = defaultChecklistForAnalysis(
+    restoredAnalysis,
+    currentMembers
+  );
+  const savedItems = batonState.checklistByDoc[key];
+  if (!Array.isArray(savedItems) || savedItems.length === 0) {
+    return { restoredAnalysis, restoredChecklist: defaultItems };
+  }
+
+  const savedById = new Map<string, PersistedChecklistItem>();
+  const savedByLabel = new Map<string, PersistedChecklistItem>();
+  savedItems.forEach((item) => {
+    if (item && typeof item.id === "string") savedById.set(item.id, item);
+    if (item && typeof item.label === "string") savedByLabel.set(item.label, item);
+  });
+
+  const consumedIds = new Set<string>();
+  const consumedLabels = new Set<string>();
+
+  const mergedDefaults = defaultItems.map((def) => {
+    const match = savedById.get(def.id) ?? savedByLabel.get(def.label);
+    if (!match) return def;
+    consumedIds.add(match.id);
+    consumedLabels.add(match.label);
+    return {
+      ...def,
+      checked: Boolean(match.checked),
+      assignee:
+        typeof match.assignee === "string" && match.assignee.trim()
+          ? match.assignee
+          : def.assignee,
+    };
+  });
+
+  const extraCustomItems = savedItems.filter(
+    (item) =>
+      item &&
+      typeof item.label === "string" &&
+      !consumedIds.has(item.id) &&
+      !consumedLabels.has(item.label)
+  );
+
+  return {
+    restoredAnalysis,
+    restoredChecklist: [...mergedDefaults, ...extraCustomItems],
+  };
+}
+
 export default function OtayoriUltra() {
   // Starts COMPLETELY EMPTY by default (初期状態は情報が入っていない空の状態)
   const [sourceText, setSourceText] = useState<string>("");
   const [analysis, setAnalysis] = useState<OtayoriAnalysis | null>(null);
-  const [usedModelLabel, setUsedModelLabel] = useState<string>("gemini-2.5-flash");
+  const [usedModelLabel, setUsedModelLabel] = useState<string>("gemini-3-flash-preview");
   const [activePresetId, setActivePresetId] = useState<PresetDefinition["id"] | "">("");
+  const [savedChecklistByDoc, setSavedChecklistByDoc] = useState<
+    Record<string, PersistedChecklistItem[]>
+  >({});
 
   // Household members: starts empty [] (do NOT hardcode ママ/パパ/子ども/祖父母)
   const [members, setMembers] = useState<string[]>([]);
@@ -1195,18 +1309,19 @@ export default function OtayoriUltra() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Load user's saved custom household members & optional userLocation from localStorage
+  // Load user's saved custom household members, location, archive & baton checklist states from localStorage
   useEffect(() => {
+    let loadedMembers: string[] = [];
     try {
       const saved = window.localStorage.getItem(MEMBERS_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          const valid = parsed.map((m) => String(m ?? "").trim()).filter(Boolean);
-          setMembers(valid);
-          if (valid.length > 0) {
-            setNewItemRole(valid[0]);
-            setManualEventAssignee(valid[0]);
+          loadedMembers = parsed.map((m) => String(m ?? "").trim()).filter(Boolean);
+          setMembers(loadedMembers);
+          if (loadedMembers.length > 0) {
+            setNewItemRole(loadedMembers[0]);
+            setManualEventAssignee(loadedMembers[0]);
           }
         }
       }
@@ -1230,6 +1345,45 @@ export default function OtayoriUltra() {
       }
     } catch {
       // ignore
+    }
+
+    let loadedArchivedDocs: ArchivedOtayoriDoc[] = [];
+    try {
+      const rawArchive = window.localStorage.getItem(ARCHIVE_STORAGE_KEY);
+      if (rawArchive) {
+        const parsedArchive = JSON.parse(rawArchive);
+        if (Array.isArray(parsedArchive)) {
+          loadedArchivedDocs = parsedArchive as ArchivedOtayoriDoc[];
+          setArchivedDocs(loadedArchivedDocs);
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    const batonState = readBatonState();
+    setSavedChecklistByDoc(batonState.checklistByDoc);
+    if (batonState.lastActiveDocKey && loadedArchivedDocs.length > 0) {
+      const activeDoc = loadedArchivedDocs.find(
+        (d) => d.title.trim() === batonState.lastActiveDocKey?.trim()
+      );
+      if (activeDoc) {
+        const { restoredAnalysis, restoredChecklist } = restoreBatonForAnalysis(
+          activeDoc.analysis,
+          loadedMembers,
+          batonState
+        );
+        setAnalysis(restoredAnalysis);
+        setSourceText(activeDoc.sourceText);
+        setImagePreview(activeDoc.thumbnailDataUrl || null);
+        setChecklist(restoredChecklist);
+        const venueIdx = restoredAnalysis.events.findIndex(
+          (ev) =>
+            ev.location &&
+            !/^(自宅|プリント記載|予定記載|おたより記載)/.test(ev.location)
+        );
+        setSelectedMapEventIdx(venueIdx >= 0 ? venueIdx : 0);
+      }
     }
   }, []);
 
@@ -1442,35 +1596,44 @@ export default function OtayoriUltra() {
   const persistState = useCallback(
     (
       nextChecklist: PersistedChecklistItem[],
-      nextEvents?: OtayoriEvent[]
+      nextEvents?: OtayoriEvent[],
+      overrideDocKey?: string
     ) => {
-      if (!docKey) return;
+      const targetKey = (overrideDocKey ?? docKey).trim();
+      if (!targetKey) return;
       try {
-        const raw = window.localStorage.getItem(STORAGE_KEY);
-        const parsed: PersistedBatonState = raw
-          ? (JSON.parse(raw) as PersistedBatonState)
-          : { checklistByDoc: {}, eventAssigneesByDoc: {} };
-
-        parsed.checklistByDoc = parsed.checklistByDoc || {};
-        parsed.eventAssigneesByDoc = parsed.eventAssigneesByDoc || {};
-
-        parsed.checklistByDoc[docKey] = nextChecklist;
+        const parsed = readBatonState();
+        parsed.checklistByDoc[targetKey] = nextChecklist;
+        parsed.lastActiveDocKey = targetKey;
 
         if (nextEvents) {
           const map: Record<number, FamilyRole> = {};
           nextEvents.forEach((ev, i) => {
             map[i] = ev.assignee || "未割り当て";
           });
-          parsed.eventAssigneesByDoc[docKey] = map;
+          parsed.eventAssigneesByDoc[targetKey] = map;
         }
 
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+        setSavedChecklistByDoc({ ...parsed.checklistByDoc });
       } catch {
         // Ignore quota errors
       }
     },
     [docKey]
   );
+
+  const clearLastActiveDocKey = useCallback(() => {
+    try {
+      const parsed = readBatonState();
+      if ("lastActiveDocKey" in parsed) {
+        delete parsed.lastActiveDocKey;
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
 
   // Stop speech on unmount
   useEffect(() => {
@@ -1650,14 +1813,13 @@ export default function OtayoriUltra() {
     processImageFile(file, sourceLabel);
   }
 
-  function handleLoadOneExample() {
+  function handleLoadPresetSample(sample: PresetDefinition) {
     stopSpeaking();
-    const sample = PRESETS[0];
     setActivePresetId(sample.id);
     setSourceText(sample.sourceText);
     setError(null);
     setNotice(
-      "✨ 例を入力欄にセットしました。「AI でおたよりを解析」を押すと予定・注意点・持ち物を作成します。"
+      `✨ サンプル「${sample.label}」を入力欄にセットしました。「AI でおたよりを解析」を押すと予定・注意点・持ち物を作成します。`
     );
   }
 
@@ -1706,17 +1868,26 @@ export default function OtayoriUltra() {
         setSelectedMapEventIdx(venueIdx >= 0 ? venueIdx : 0);
         const freshChecklist = defaultChecklistForAnalysis(nextAnalysis, members);
         setChecklist(freshChecklist);
-        persistState(freshChecklist, nextAnalysis.events);
+        persistState(freshChecklist, nextAnalysis.events, nextAnalysis.title);
         void saveDocToArchive(nextAnalysis, sourceText.trim(), imagePreview);
       }
       if (typeof data.usedModel === "string") {
         setUsedModelLabel(data.usedModel);
       }
-      setNotice(
-        imageBase64
-          ? "📸 おたより画像とテキストを解析し、予定・Gemini注意点アドバイス・持ち物チェックリストを作成しました！"
-          : "✨ 予定・Gemini注意点アドバイス・持ち物チェックリストを作成しました！"
-      );
+      if (data.warning) {
+        setError(String(data.warning));
+      }
+      if (data.mode === "fallback") {
+        setNotice(
+          "📝 入力されたテキストから予定・持ち物チェックリストを作成しました（ローカルテキスト解析モード）。"
+        );
+      } else {
+        setNotice(
+          imageBase64
+            ? "📸 おたより画像とテキストを解析し、予定・Gemini注意点アドバイス・持ち物チェックリストを作成しました！"
+            : "✨ 予定・Gemini注意点アドバイス・持ち物チェックリストを作成しました！"
+        );
+      }
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "解析中にエラーが発生しました。"
@@ -1725,21 +1896,6 @@ export default function OtayoriUltra() {
       setAnalyzing(false);
     }
   }
-
-  // Load saved local handout archive on mount (starts empty [])
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(ARCHIVE_STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          setArchivedDocs(parsed as ArchivedOtayoriDoc[]);
-        }
-      }
-    } catch {
-      // Ignore storage errors
-    }
-  }, []);
 
   const persistArchivedDocs = useCallback((next: ArchivedOtayoriDoc[]) => {
     setArchivedDocs(next);
@@ -1817,16 +1973,45 @@ export default function OtayoriUltra() {
   );
 
   const handleOpenArchivedDoc = (doc: ArchivedOtayoriDoc) => {
-    setAnalysis(doc.analysis);
+    stopSpeaking();
+    const batonState = readBatonState();
+    setSavedChecklistByDoc(batonState.checklistByDoc);
+    const { restoredAnalysis, restoredChecklist } = restoreBatonForAnalysis(
+      doc.analysis,
+      members,
+      batonState
+    );
+    setAnalysis(restoredAnalysis);
     setSourceText(doc.sourceText);
     setImagePreview(doc.thumbnailDataUrl || null);
-    const restoredChecklist = defaultChecklistForAnalysis(doc.analysis, members);
+    setImageBase64("");
+    setImageMimeType("");
+    setImageSourceLabel("");
     setChecklist(restoredChecklist);
+    const venueIdx = restoredAnalysis.events.findIndex(
+      (ev) =>
+        ev.location &&
+        !/^(自宅|プリント記載|予定記載|おたより記載)/.test(ev.location)
+    );
+    setSelectedMapEventIdx(venueIdx >= 0 ? venueIdx : 0);
+    try {
+      const nextState: PersistedBatonState = {
+        ...batonState,
+        lastActiveDocKey: restoredAnalysis.title.trim(),
+      };
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+    } catch {
+      // Ignore storage errors
+    }
     setNotice(`🗂️ 保存済みおたより「${doc.title}」を開きました！`);
   };
 
   const handleDeleteArchivedDoc = (docId: string) => {
+    const target = archivedDocs.find((d) => d.id === docId);
     persistArchivedDocs(archivedDocs.filter((d) => d.id !== docId));
+    if (target && readBatonState().lastActiveDocKey === target.title.trim()) {
+      clearLastActiveDocKey();
+    }
   };
 
   // Manually add a schedule and have Gemini (/api/otayori) automatically generate schedule_cautions & event cautions
@@ -1942,7 +2127,7 @@ export default function OtayoriUltra() {
         setSelectedMapEventIdx(0);
         const freshChecklist = defaultChecklistForAnalysis(nextAnalysis, members);
         setChecklist(freshChecklist);
-        persistState(freshChecklist, nextAnalysis.events);
+        persistState(freshChecklist, nextAnalysis.events, nextAnalysis.title);
         void saveDocToArchive(nextAnalysis, sourceText.trim(), imagePreview);
       } else {
         const mergedCautions = Array.from(
@@ -1969,7 +2154,8 @@ export default function OtayoriUltra() {
         };
         setAnalysis(nextAnalysis);
         setSelectedMapEventIdx(updatedEvents.length - 1);
-        persistState(checklist, updatedEvents);
+        persistState(checklist, updatedEvents, nextAnalysis.title);
+        void saveDocToArchive(nextAnalysis, sourceText.trim(), imagePreview);
       }
 
       if (typeof data.usedModel === "string") {
@@ -2059,7 +2245,7 @@ export default function OtayoriUltra() {
     if (!analysis) return;
     const fresh = defaultChecklistForAnalysis(analysis, members);
     setChecklist(fresh);
-    persistState(fresh, analysis.events);
+    persistState(fresh, analysis.events, analysis.title);
     setNotice("チェックリストをリセットしました。");
   }
 
@@ -2359,8 +2545,13 @@ export default function OtayoriUltra() {
             </span>
             <span className="ou-brand">おたよりバトン Ultra</span>
             <span className="ou-badge-ai">
-              ✦ Gemini 2.5 Flash Vision + 予定・注意点・持ち物整理
+              ✦ Gemini 3 Flash Vision + 予定・注意点・持ち物整理
             </span>
+          </div>
+          <div className="ou-nav-links">
+            <Link href="/" className="ou-nav-link">
+              ← トップ
+            </Link>
           </div>
         </div>
       </nav>
@@ -2429,264 +2620,310 @@ export default function OtayoriUltra() {
             </button>
           </div>
 
-          {/* Inline Custom Household Members Manager (starts empty [], persisted in localStorage) */}
-          <div
+          {/* Collapsible Optional Setup Panels (Members & GPS Location) — closed by default so photo/text input stays above the fold */}
+          <details
             style={{
-              padding: "12px 14px",
+              marginBottom: 14,
               borderRadius: 12,
-              background: "#fffaf5",
               border: "1px solid #efe5db",
-              marginBottom: 16,
+              background: "#fffaf5",
+              padding: "9px 12px",
             }}
           >
-            <div
+            <summary
               style={{
-                display: "flex",
-                flexWrap: "wrap",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 8,
-                marginBottom: 8,
+                cursor: "pointer",
+                fontSize: "0.8rem",
+                fontWeight: 700,
+                color: "#57534e",
+                lineHeight: 1.45,
               }}
             >
-              <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#44403c" }}>
-                👥 担当メンバー設定（任意・自由に追加／削除できます）
+              ⚙️ 任意設定：
+              <span style={{ color: "#1c1917" }}>
+                {members.length > 0
+                  ? `👥 担当 ${members.join("・")}`
+                  : "👥 担当未設定"}
+                {" ／ "}
+                {userLocation.areaName?.trim()
+                  ? `📍 ${userLocation.areaName.trim()}`
+                  : typeof userLocation.lat === "number" &&
+                    typeof userLocation.lng === "number"
+                  ? `📍 GPS (${userLocation.lat.toFixed(2)}, ${userLocation.lng.toFixed(2)})`
+                  : "📍 現在地未設定"}
               </span>
-              <span style={{ fontSize: "0.75rem", color: "#78716c" }}>
-                {members.length === 0
-                  ? "未設定（予定と持ち物は「未割り当て」になります）"
-                  : `登録中: ${members.length}名`}
+              <span
+                style={{
+                  marginLeft: 8,
+                  fontSize: "0.72rem",
+                  color: "#9a3412",
+                  fontWeight: 700,
+                }}
+              >
+                （クリックで設定）
               </span>
-            </div>
+            </summary>
 
-            {/* Added Member Pills */}
-            {members.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              {/* Inline Custom Household Members Manager (starts empty [], persisted in localStorage) */}
               <div
                 style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: 6,
+                  padding: "12px 14px",
+                  borderRadius: 12,
+                  background: "#ffffff",
+                  border: "1px solid #efe5db",
                   marginBottom: 10,
                 }}
               >
-                {members.map((m) => {
-                  const st = getMemberStyle(m);
-                  return (
-                    <span
-                      key={m}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                        padding: "4px 11px",
-                        borderRadius: 999,
-                        background: st.bgSoft,
-                        border: `1px solid ${st.borderSoft}`,
-                        color: st.accent,
-                        fontSize: "0.78rem",
-                        fontWeight: 800,
-                      }}
-                    >
-                      <span>{st.icon}</span>
-                      <span>{m}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveMember(m)}
-                        aria-label={`${m}を削除`}
-                        style={{
-                          border: "none",
-                          background: "transparent",
-                          color: st.accent,
-                          cursor: "pointer",
-                          fontSize: "0.85rem",
-                          padding: 0,
-                          lineHeight: 1,
-                        }}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Quick Optional Member Chips + Free-text Input */}
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {QUICK_MEMBER_PRESETS.map((presetName) => {
-                  const added = members.includes(presetName);
-                  return (
-                    <button
-                      key={presetName}
-                      type="button"
-                      disabled={added}
-                      onClick={() => handleAddMember(presetName)}
-                      style={{
-                        padding: "4px 10px",
-                        borderRadius: 999,
-                        border: "1px dashed #d6c7b8",
-                        background: added ? "#f5f5f4" : "#ffffff",
-                        color: added ? "#a8a29e" : "#57534e",
-                        fontSize: "0.75rem",
-                        fontWeight: 700,
-                        cursor: added ? "default" : "pointer",
-                      }}
-                    >
-                      {added ? `✓ ${presetName}` : `＋ ${presetName}`}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  flex: 1,
-                  minWidth: 210,
-                }}
-              >
-                <input
-                  type="text"
-                  value={customMemberInput}
-                  onChange={(e) => setCustomMemberInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleAddMember(customMemberInput);
-                    }
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    marginBottom: 8,
                   }}
-                  placeholder="カスタム名を追加... (例: 長男、母、シェアメイト)"
-                  className="ou-text-input"
-                  style={{ padding: "5px 10px", fontSize: "0.78rem" }}
-                />
-                <button
-                  type="button"
-                  className="ou-btn-secondary"
-                  style={{ whiteSpace: "nowrap", padding: "5px 10px" }}
-                  onClick={() => handleAddMember(customMemberInput)}
                 >
-                  ＋ 担当メンバーを追加
-                </button>
-              </div>
-            </div>
-          </div>
+                  <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#44403c" }}>
+                    👥 担当メンバー設定（任意・自由に追加／削除できます）
+                  </span>
+                  <span style={{ fontSize: "0.75rem", color: "#78716c" }}>
+                    {members.length === 0
+                      ? "未設定（予定と持ち物は「未割り当て」になります）"
+                      : `登録中: ${members.length}名`}
+                  </span>
+                </div>
 
-          {/* Optional Clean Current Location Bar ("📍 現在地を設定（GPS / エリア名）", starts empty by default, persisted in localStorage) */}
-          <div
-            style={{
-              padding: "11px 14px",
-              borderRadius: 12,
-              background: "#f8fafc",
-              border: "1px solid #e2e8f0",
-              marginBottom: 16,
-              display: "flex",
-              flexWrap: "wrap",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 10,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#1e293b" }}>
-                📍 現在地を設定（GPS / エリア名）
-              </span>
-              <span style={{ fontSize: "0.74rem", color: "#64748b" }}>
-                ※任意・設定すると予定会場へのルート案内と地域別アドバイスを最適化します
-              </span>
-              {typeof userLocation.lat === "number" &&
-                typeof userLocation.lng === "number" && (
-                  <span
+                {/* Added Member Pills */}
+                {members.length > 0 && (
+                  <div
                     style={{
-                      fontSize: "0.73rem",
-                      fontWeight: 800,
-                      padding: "2px 8px",
-                      borderRadius: 999,
-                      background: "#dcfce7",
-                      border: "1px solid #86efac",
-                      color: "#166534",
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 6,
+                      marginBottom: 10,
                     }}
                   >
-                    🛰️ GPS設定済 ({userLocation.lat.toFixed(4)}, {userLocation.lng.toFixed(4)})
-                  </span>
+                    {members.map((m) => {
+                      const st = getMemberStyle(m);
+                      return (
+                        <span
+                          key={m}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                            padding: "4px 11px",
+                            borderRadius: 999,
+                            background: st.bgSoft,
+                            border: `1px solid ${st.borderSoft}`,
+                            color: st.accent,
+                            fontSize: "0.78rem",
+                            fontWeight: 800,
+                          }}
+                        >
+                          <span>{st.icon}</span>
+                          <span>{m}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveMember(m)}
+                            aria-label={`${m}を削除`}
+                            style={{
+                              border: "none",
+                              background: "transparent",
+                              color: st.accent,
+                              cursor: "pointer",
+                              fontSize: "0.85rem",
+                              padding: 0,
+                              lineHeight: 1,
+                            }}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
                 )}
-            </div>
 
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                alignItems: "center",
-                gap: 8,
-                flex: 1,
-                minWidth: 260,
-                justifyContent: "flex-end",
-              }}
-            >
-              <button
-                type="button"
-                onClick={handleGetGps}
-                disabled={gpsLoading}
-                className="ou-btn-secondary"
-                style={{
-                  whiteSpace: "nowrap",
-                  padding: "6px 11px",
-                  borderColor: "#93c5fd",
-                  background: "#eff6ff",
-                  color: "#1d4ed8",
-                }}
-              >
-                {gpsLoading ? "GPS取得中..." : "📍 GPSで現在地を取得"}
-              </button>
-              <input
-                type="text"
-                aria-label="現在地・お住まいのエリア名"
-                value={userLocation.areaName || ""}
-                onChange={(e) =>
-                  persistUserLocation({
-                    ...userLocation,
-                    areaName: e.target.value,
-                  })
-                }
-                placeholder="またはエリア・最寄り駅名を入力（例：世田谷区、横浜駅、さくら市）"
-                className="ou-text-input"
-                style={{
-                  padding: "6px 10px",
-                  fontSize: "0.78rem",
-                  flex: 1,
-                  minWidth: 210,
-                  maxWidth: 340,
-                }}
-              />
-              {(userLocation.areaName ||
-                typeof userLocation.lat === "number") && (
-                <button
-                  type="button"
-                  onClick={() => persistUserLocation({})}
+                {/* Quick Optional Member Chips + Free-text Input */}
+                <div
                   style={{
-                    border: "none",
-                    background: "transparent",
-                    color: "#64748b",
-                    fontSize: "0.75rem",
-                    cursor: "pointer",
-                    textDecoration: "underline",
-                    whiteSpace: "nowrap",
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    gap: 8,
                   }}
                 >
-                  位置リセット
-                </button>
-              )}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {QUICK_MEMBER_PRESETS.map((presetName) => {
+                      const added = members.includes(presetName);
+                      return (
+                        <button
+                          key={presetName}
+                          type="button"
+                          disabled={added}
+                          onClick={() => handleAddMember(presetName)}
+                          style={{
+                            padding: "4px 10px",
+                            borderRadius: 999,
+                            border: "1px dashed #d6c7b8",
+                            background: added ? "#f5f5f4" : "#ffffff",
+                            color: added ? "#a8a29e" : "#57534e",
+                            fontSize: "0.75rem",
+                            fontWeight: 700,
+                            cursor: added ? "default" : "pointer",
+                          }}
+                        >
+                          {added ? `✓ ${presetName}` : `＋ ${presetName}`}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      flex: 1,
+                      minWidth: 210,
+                    }}
+                  >
+                    <input
+                      type="text"
+                      value={customMemberInput}
+                      onChange={(e) => setCustomMemberInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddMember(customMemberInput);
+                        }
+                      }}
+                      placeholder="カスタム名を追加... (例: 長男、母、シェアメイト)"
+                      className="ou-text-input"
+                      style={{ padding: "5px 10px", fontSize: "0.78rem" }}
+                    />
+                    <button
+                      type="button"
+                      className="ou-btn-secondary"
+                      style={{ whiteSpace: "nowrap", padding: "5px 10px" }}
+                      onClick={() => handleAddMember(customMemberInput)}
+                    >
+                      ＋ 担当メンバーを追加
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Optional Clean Current Location Bar ("📍 現在地を設定（GPS / エリア名）", starts empty by default, persisted in localStorage) */}
+              <div
+                style={{
+                  padding: "11px 14px",
+                  borderRadius: 12,
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 10,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#1e293b" }}>
+                    📍 現在地を設定（GPS / エリア名）
+                  </span>
+                  <span style={{ fontSize: "0.74rem", color: "#64748b" }}>
+                    ※任意・設定すると予定会場へのルート案内と地域別アドバイスを最適化します
+                  </span>
+                  {typeof userLocation.lat === "number" &&
+                    typeof userLocation.lng === "number" && (
+                      <span
+                        style={{
+                          fontSize: "0.73rem",
+                          fontWeight: 800,
+                          padding: "2px 8px",
+                          borderRadius: 999,
+                          background: "#dcfce7",
+                          border: "1px solid #86efac",
+                          color: "#166534",
+                        }}
+                      >
+                        🛰️ GPS設定済 ({userLocation.lat.toFixed(4)}, {userLocation.lng.toFixed(4)})
+                      </span>
+                    )}
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    gap: 8,
+                    flex: 1,
+                    minWidth: 260,
+                    justifyContent: "flex-end",
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={handleGetGps}
+                    disabled={gpsLoading}
+                    className="ou-btn-secondary"
+                    style={{
+                      whiteSpace: "nowrap",
+                      padding: "6px 11px",
+                      borderColor: "#93c5fd",
+                      background: "#eff6ff",
+                      color: "#1d4ed8",
+                    }}
+                  >
+                    {gpsLoading ? "GPS取得中..." : "📍 GPSで現在地を取得"}
+                  </button>
+                  <input
+                    type="text"
+                    aria-label="現在地・お住まいのエリア名"
+                    value={userLocation.areaName || ""}
+                    onChange={(e) =>
+                      persistUserLocation({
+                        ...userLocation,
+                        areaName: e.target.value,
+                      })
+                    }
+                    placeholder="またはエリア・最寄り駅名を入力（例：世田谷区、横浜駅、さくら市）"
+                    className="ou-text-input"
+                    style={{
+                      padding: "6px 10px",
+                      fontSize: "0.78rem",
+                      flex: 1,
+                      minWidth: 210,
+                      maxWidth: 340,
+                    }}
+                  />
+                  {(userLocation.areaName ||
+                    typeof userLocation.lat === "number") && (
+                    <button
+                      type="button"
+                      onClick={() => persistUserLocation({})}
+                      style={{
+                        border: "none",
+                        background: "transparent",
+                        color: "#64748b",
+                        fontSize: "0.75rem",
+                        cursor: "pointer",
+                        textDecoration: "underline",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      位置リセット
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
+          </details>
 
           {/* Optional Direct Manual Schedule Form ("＋ 予定を追加") */}
           {showAddEventForm && (
@@ -2909,22 +3146,47 @@ export default function OtayoriUltra() {
                     />
                   </details>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <button
-                      type="button"
-                      onClick={handleLoadOneExample}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      gap: 6,
+                    }}
+                  >
+                    <span
                       style={{
-                        background: "transparent",
-                        border: "none",
-                        padding: 0,
+                        fontSize: "0.74rem",
                         color: "#78716c",
-                        fontSize: "0.8rem",
-                        textDecoration: "underline",
-                        cursor: "pointer",
+                        fontWeight: 700,
                       }}
                     >
-                      例を1つ試す
-                    </button>
+                      サンプル:
+                    </span>
+                    {PRESETS.slice(0, 3).map((sample) => {
+                      const isActive = activePresetId === sample.id;
+                      return (
+                        <button
+                          key={sample.id}
+                          type="button"
+                          onClick={() => handleLoadPresetSample(sample)}
+                          style={{
+                            padding: "3px 10px",
+                            borderRadius: 999,
+                            border: isActive
+                              ? "1.5px solid #ea580c"
+                              : "1px solid #e7ddd3",
+                            background: isActive ? "#fff7ed" : "#fffaf5",
+                            color: isActive ? "#c2410c" : "#57534e",
+                            fontSize: "0.76rem",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {sample.icon} {SAMPLE_CHIP_LABELS[sample.id]}
+                        </button>
+                      );
+                    })}
                     {(sourceText || imagePreview || analysis) && (
                       <button
                         type="button"
@@ -2935,13 +3197,14 @@ export default function OtayoriUltra() {
                           setAnalysis(null);
                           setChecklist([]);
                           clearImage();
+                          clearLastActiveDocKey();
                           setError(null);
                           setNotice(null);
                         }}
                         style={{
                           background: "transparent",
                           border: "none",
-                          padding: 0,
+                          padding: "0 4px",
                           color: "#a8a29e",
                           fontSize: "0.8rem",
                           cursor: "pointer",
@@ -4393,6 +4656,18 @@ export default function OtayoriUltra() {
                       }}
                     >
                       <span>📅 予定 {doc.eventCount}件</span>
+                      {(() => {
+                        const savedItems = savedChecklistByDoc[doc.title.trim()];
+                        if (!Array.isArray(savedItems) || savedItems.length === 0) {
+                          return null;
+                        }
+                        const done = savedItems.filter((c) => c.checked).length;
+                        return (
+                          <span style={{ color: "#15803d", fontWeight: 700 }}>
+                            ✅ 準備 {done}/{savedItems.length}
+                          </span>
+                        );
+                      })()}
                       <span>🕒 {doc.savedAt}</span>
                     </div>
                   </div>

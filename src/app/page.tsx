@@ -229,6 +229,21 @@ export default function HomePage() {
             >
               🌉 GitBridge
             </Link>
+            <Link
+              href="/whatif"
+              style={{
+                fontSize: 12.5,
+                fontWeight: 700,
+                color: "#6b21a8",
+                background: "#faf5ff",
+                border: "1px solid #e9d5ff",
+                padding: "7px 12px",
+                borderRadius: 8,
+                textDecoration: "none",
+              }}
+            >
+              🧪 Labs
+            </Link>
           </nav>
         </div>
       </header>
@@ -535,6 +550,94 @@ export default function HomePage() {
           </Link>
         </section>
 
+        {/* Experimental Labs Section: WhatIf Mirror */}
+        <section
+          aria-label="実験ツール・Labs"
+          style={{
+            marginTop: 18,
+            background: "#ffffff",
+            borderRadius: 16,
+            border: "1px dashed #c084fc",
+            padding: "18px 24px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 16,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <span
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 12,
+                background: "#f5f3ff",
+                border: "1px solid #ddd6fe",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 20,
+                flexShrink: 0,
+              }}
+            >
+              🧪
+            </span>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <h3
+                  style={{
+                    fontSize: 15.5,
+                    fontWeight: 800,
+                    margin: 0,
+                    color: "#0f172a",
+                  }}
+                >
+                  🧪 Labs（実験ツール）：WhatIf Mirror
+                </h3>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    padding: "2px 8px",
+                    borderRadius: 999,
+                    background: "#f3e8ff",
+                    color: "#7e22ce",
+                  }}
+                >
+                  反実仮想 do(X) シミュレーター
+                </span>
+              </div>
+              <p
+                style={{
+                  fontSize: 13,
+                  color: "#475569",
+                  margin: "4px 0 0 0",
+                }}
+              >
+                「もし別の選択をしたら？」と見落としがちな隠れ要因（交絡因子）をブラウザ内0msリアルタイムSVG＋Gemini構造分析で可視化します。
+              </p>
+            </div>
+          </div>
+
+          <Link
+            href="/whatif"
+            style={{
+              padding: "10px 16px",
+              borderRadius: 10,
+              background: "#f5f3ff",
+              border: "1px solid #ddd6fe",
+              color: "#7e22ce",
+              fontSize: 13,
+              fontWeight: 800,
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            🧪 反実仮想を試す →
+          </Link>
+        </section>
+
         {/* Minimalist Footer */}
         <footer
           style={{
@@ -554,7 +657,7 @@ export default function HomePage() {
             ログイン不要・データはお使いのブラウザとPC/スマホに保存 • Apache-2.0 Open Source
           </div>
           <a
-            href="https://github.com/JY4844/codepitfall-kit/issues/new?title=%5BFlagship%5D+%E6%84%9F%E6%83%B3%E3%83%BB%E6%94%B9%E5%96%84%E8%A6%81%E6%9C%9B"
+            href="https://github.com/JY4844/codepitfall-apps/issues/new?title=%5BFlagship%5D+%E6%84%9F%E6%83%B3%E3%83%BB%E6%94%B9%E5%96%84%E8%A6%81%E6%9C%9B"
             target="_blank"
             rel="noopener noreferrer"
             style={{

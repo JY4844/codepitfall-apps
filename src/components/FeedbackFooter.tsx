@@ -7,7 +7,7 @@ interface FeedbackFooterProps {
   theme?: "light" | "dark";
 }
 
-const REPO_URL = "https://github.com/JY4844/codepitfall-kit";
+const REPO_URL = "https://github.com/JY4844/codepitfall-apps";
 
 export default function FeedbackFooter({
   appName,

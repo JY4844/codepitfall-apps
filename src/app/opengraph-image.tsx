@@ -56,7 +56,7 @@ export default function OpenGraphImage() {
         >
           <span>OtayoriBaton Ultra • MachiEye Live • GitBridge</span>
           <span style={{ color: "#34d399", fontWeight: 700 }}>
-            github.com/JY4844/codepitfall-kit
+            github.com/JY4844/codepitfall-apps
           </span>
         </div>
       </div>

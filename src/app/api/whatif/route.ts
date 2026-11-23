@@ -23,6 +23,61 @@ export interface WhatIfResponse {
   source: "gemini" | "local-causal";
 }
 
+const WHATIF_RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    situationSummary: { type: "STRING" },
+    factualBaseline: {
+      type: "OBJECT",
+      properties: {
+        outcome: { type: "STRING" },
+        riskScore: { type: "INTEGER" },
+        benefitScore: { type: "INTEGER" },
+      },
+      required: ["outcome", "riskScore", "benefitScore"],
+    },
+    branches: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          label: { type: "STRING" },
+          intervention: { type: "STRING" },
+          outcomeSummary: { type: "STRING" },
+          riskScore: { type: "INTEGER" },
+          benefitScore: { type: "INTEGER" },
+          hiddenConfounder: { type: "STRING" },
+          firstAction: { type: "STRING" },
+        },
+        required: [
+          "label",
+          "intervention",
+          "outcomeSummary",
+          "riskScore",
+          "benefitScore",
+          "hiddenConfounder",
+          "firstAction",
+        ],
+      },
+    },
+    hiddenConfounders: {
+      type: "ARRAY",
+      items: { type: "STRING" },
+    },
+    regretPreventionChecklist: {
+      type: "ARRAY",
+      items: { type: "STRING" },
+    },
+  },
+  required: [
+    "situationSummary",
+    "factualBaseline",
+    "branches",
+    "hiddenConfounders",
+    "regretPreventionChecklist",
+  ],
+};
+
 function buildLocalFallback(
   situation: string,
   interventionA: string,
@@ -123,6 +178,7 @@ export async function POST(request: Request) {
               generationConfig: {
                 temperature: 0.3,
                 responseMimeType: "application/json",
+                responseSchema: WHATIF_RESPONSE_SCHEMA,
               },
             }),
           }
