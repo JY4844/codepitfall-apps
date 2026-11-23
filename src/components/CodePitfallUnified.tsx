@@ -1,18 +1,53 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import CodePitfallMirror from "./CodePitfallMirror";
 import GitBridge from "./GitBridge";
 import DeterministicDevLab from "./DeterministicDevLab";
 
+type UnifiedTab = "error" | "github" | "guard";
+
 interface Props {
-  initialTab?: "error" | "github" | "guard";
+  initialTab?: UnifiedTab;
+}
+
+function parseTabParam(raw: string | null): UnifiedTab | null {
+  if (!raw) return null;
+  const v = raw.toLowerCase().trim();
+  if (v === "guard" || v === "git" || v === "safety" || v === "tools") return "guard";
+  if (v === "github" || v === "gitbridge" || v === "publish") return "github";
+  if (v === "error" || v === "mirror") return "error";
+  return null;
 }
 
 export default function CodePitfallUnified({ initialTab = "error" }: Props) {
-  const [activeTab, setActiveTab] = useState<"error" | "github" | "guard">(
-    initialTab
-  );
+  const [activeTab, setActiveTab] = useState<UnifiedTab>(initialTab);
+
+  // Deep-link support: /codemistake?tab=guard (or #guard / ?tab=git) opens straight to that tab
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const fromQuery = parseTabParam(params.get("tab"));
+      const fromHash = parseTabParam(window.location.hash.replace(/^#/, ""));
+      const target = fromQuery || fromHash;
+      if (target) {
+        setActiveTab(target);
+      }
+    } catch {
+      // Ignore URL parse errors
+    }
+  }, []);
+
+  const handleSelectTab = (tab: UnifiedTab) => {
+    setActiveTab(tab);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", tab);
+      window.history.replaceState({}, "", url.toString());
+    } catch {
+      // Ignore history API errors
+    }
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
@@ -72,7 +107,7 @@ export default function CodePitfallUnified({ initialTab = "error" }: Props) {
               type="button"
               role="tab"
               aria-selected={activeTab === "error"}
-              onClick={() => setActiveTab("error")}
+              onClick={() => handleSelectTab("error")}
               style={{
                 border: "none",
                 borderRadius: 9,
@@ -94,7 +129,7 @@ export default function CodePitfallUnified({ initialTab = "error" }: Props) {
               type="button"
               role="tab"
               aria-selected={activeTab === "github"}
-              onClick={() => setActiveTab("github")}
+              onClick={() => handleSelectTab("github")}
               style={{
                 border: "none",
                 borderRadius: 9,
@@ -116,7 +151,7 @@ export default function CodePitfallUnified({ initialTab = "error" }: Props) {
               type="button"
               role="tab"
               aria-selected={activeTab === "guard"}
-              onClick={() => setActiveTab("guard")}
+              onClick={() => handleSelectTab("guard")}
               style={{
                 border: "none",
                 borderRadius: 9,
