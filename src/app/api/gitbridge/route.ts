@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const GEMINI_MODEL = "gemini-3.8-flash";
+const GEMINI_MODEL = "gemini-3-flash-preview";
 const GEMINI_TIMEOUT_MS = 35_000;
 
 const LEARN_SCHEMA = {

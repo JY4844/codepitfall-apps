@@ -1,43 +1,52 @@
-# 個人開発AIアプリ集（Next.js + Gemini API + Neon + GAS）
+# CodePitfall Apps — Non-LLM Deterministic Guardrails × Gemini 3 Flash Suite
 
-個人開発で制作した **マルチモーダル AI アプリ** を 1 つの Next.js (App Router) プロジェクトに統合したリポジトリです。
+> **Zero-login, Apache-2.0 Open-Source Web Apps** combining fast **browser-local deterministic safety engines (0ms, 0 AI tokens)** with **Google Gemini 3 Flash (`gemini-3-flash-preview`)** multimodal reasoning.
 
-## 収録アプリ（全 3 部門）
+- **Live Demo (Zero Login):** https://codepitfall-mirror.vercel.app
+- **License:** Apache-2.0
 
-| 部門 | アプリ名 | ルート | 主な機能 |
+---
+
+## Included Applications
+
+| App | Route | Core Non-LLM Deterministic Engine | Gemini 3 Flash AI Role |
 | :--- | :--- | :--- | :--- |
-| **はたらく・まなぶ部門** | **GapTutor** | `/` | 数式・論文・手書きノートから不足している前提知識を特定し、知識依存マップ・段階解説・適応型クイズ・復習タスク（Neon / GAS）を生成 |
-| **暮らしと家族の部門** | **おたよりバトン** | `/otayori` | 学校プリント・自治体通知・お薬手帳から日程・持ち物・集金を抽出し、母/父/祖母の 3 世代バトン振り分け＋大きい文字のやさしい 3 行要約＋GAS 連携 |
-| **まちと地球の未来部門** | **MachiEye** | `/machieye` | 街の危険箇所写真から深刻度 1〜5 トリアージ・担当部署推定・自治体提出レポートを生成し、顔/ナンバー/表札の公開前プライバシー警告＋Google マップピン＋GAS 連携 |
-| **はたらく・まなぶ部門** | **GitBridge** | `/gitbridge` | コード初心者向けに GitHub リポジトリの「読む順番・用語・クイズ」を自動生成し、API キー漏れ防止チェック＋意味つきコマンドで初めての GitHub 公開まで伴走 |
-| **暮らしと家族の部門** | **おくすりミマモリ** | `/okusuri` | 処方箋・お薬手帳・市販薬の写真から服用タイミングと飲み合わせ確認ポイントを構造化し、家族の Google カレンダーへ服薬リマインドを自動登録 |
-| **暮らしと家族の部門** | **レシート家計コーチ** | `/receipt` | スーパーのレシートからカテゴリ別支出・栄養バランス診断・3 日分の節約献立を生成し、Google シートへ自動記帳 |
-| **はたらく・まなぶ部門** | **規約・契約書イエローカード** | `/contract` | 業務委託・バイト・賃貸契約の不利な条項を 3 段階リスクで検出し、先方への丁寧な確認メール文面まで自動生成 |
-| **まちと地球の未来部門** | **ごみ分別カメラ** | `/gomi` | 迷うごみの写真と自治体ルールから正確な分別区分・リチウム電池火災防止手順を判定し、収集日を Google カレンダーへ登録 |
-| **まちと地球の未来部門** | **バリアフリー街歩きマップ** | `/barrierfree` | 車いす・ベビーカー目線の現場写真から通行難易度と迂回ルートを構造化し、Google マップ＆シートで地域の安心マップを共創 |
-| **暮らしと家族の部門** | **アレルゲン安心レンズ** | `/allergy` | 食品パッケージの原材料表示やメニューから家族のアレルゲンと交差接触リスクを即警告 |
-| **暮らしと家族の部門** | **わが家の防災バッグ診断** | `/disaster` | 備蓄棚や防災リュックから家族構成別の不足品と賞味期限を診断し、点検予定をカレンダー登録 |
-| **暮らしと家族の部門** | **ペット症状メモ＆受診ガイド** | `/petcare` | 犬・猫の症状メモから獣医師へ見せる時系列問診票と緊急度目安・持ち物を構造化 |
-| **暮らしと家族の部門** | **介護・通院バトンノート** | `/kaigo` | デイサービス連絡帳や診察メモから体調変化と家族・きょうだい間の引き継ぎを自動化 |
-| **はたらく・まなぶ部門** | **90秒ピッチ・面接リハーサルコーチ** | `/pitch` | 発表原稿やESから審査員・面接官の鋭い想定質問と説得力を高める改善原稿を生成 |
-| **はたらく・まなぶ部門** | **専門英語・論文スキャナー** | `/english` | 英語論文や海外エラー画面から背景前提・3行要約・英語質問文まで一括生成 |
-| **はたらく・まなぶ部門** | **ホワイトボード＆会議アクション化** | `/minutes` | 会議後のホワイトボード写真やメモから決定事項・担当者別タスク・議事録を抽出 |
-| **まちと地球の未来部門** | **地域の熱中症・みまもり予報** | `/heatstroke` | 気象と屋外行事情報から子ども・高齢者別の危険度と予防アクション・連絡文を生成 |
-| **まちと地球の未来部門** | **まちのフードドライブ支援** | `/foodloss` | 余剰食品からフードバンク受入可否を仕分けし、寄付品目リストと持ち込み予定を作成 |
-| **まちと地球の未来部門** | **まちの多言語あんしん案内メーカー** | `/inbound` | 避難所チラシや商店街POPからやさしい日本語＋英中韓の多言語案内カードを自動生成 |
+| **🪞 CodePitfall × 🌉 GitBridge** | [`/codemistake`](https://codepitfall-mirror.vercel.app/codemistake) | • **0ms Browser Secret Redactor** (`AIza`/`AQ.`/`ghp_`/`sk-`/`sk-ant-`/`AKIA`/DB URLs) before anything leaves the browser<br>• **Real `.git/hooks/pre-commit` Generator** from Personal Mistake DNA<br>• **Live GitHub Public Repo Auditor** (0–100 score via GitHub REST API)<br>• **Git Safe Recovery Visual Guide** (live branch-name SVG & command sync) | Multimodal error screenshot (Ctrl+V, 1600px Canvas compressed) & stack-trace diagnosis + 1-click `AGENTS.md` export |
+| **📄 OtayoriBaton Ultra** | [`/otayori`](https://codepitfall-mirror.vercel.app/otayori) | • Clean empty-state custom household members & persistent `localStorage` checklist<br>• Month-accurate Google Calendar & RFC 5545 `.ics` export<br>• Local original-photo thumbnail archive & Web Speech readout | Multimodal Vision handout parsing + automatic schedule "watch-out / pitfall" cautions + Google Maps route prep |
+| **🗺️ MachiEye Live** | [`/machieye`](https://codepitfall-mirror.vercel.app/machieye) | • **Browser-local Canvas Privacy Mosaic/Blur** (Lv.1–3, runs locally before AI upload/save)<br>• Nationwide 1-click municipal reporting desk & hazard map lookup<br>• Local Before/After photo tracking + 480px thumbnail compression | Multimodal hazard severity scoring, barrier-free detour advice & 4-language (JA/EN/ZH/KO) safety cards |
+| **🔀 WhatIf Mirror *(Labs)*** | [`/whatif`](https://codepitfall-mirror.vercel.app/whatif) | • 0ms interactive `do(X)` intervention sensitivity SVG branching map<br>• Controlled checklist & local Markdown report export | Structured JSON (`responseSchema`) counterfactual analysis & hidden confounder detection |
 
-## 主な技術スタック
-- **AI**: Google Gemini API（`gemini-3.8-flash` / `gemini-4-hydrogen` マルチモーダル＋構造化 JSON Schema 出力）、ローカル LLM フォールバック（Ollama / XeStrata）
-- **フレームワーク**: Next.js 15 (App Router) + TypeScript
-- **データベース**: Neon (Serverless PostgreSQL / `@neondatabase/serverless`)
-- **Google Workspace 連携**: Google Apps Script（`gas/Code.gs` → Google カレンダー & Google スプレッドシート自動登録）
+---
 
-## セットアップ手順
-1. Neon の **SQL Editor** で `sql/schema.sql` を実行する
-2. Google スプレッドシートの Apps Script に `gas/Code.gs` を貼り付けてウェブアプリとしてデプロイする
-3. `.env.local.example` を `.env.local` にコピーして `DATABASE_URL`・`GEMINI_API_KEY`・`GAS_WEBHOOK_URL` を設定する
-4. 起動する：
-   ```bash
-   npm install
-   npm run dev
-   ```
+## Quick Start (Local Development)
+
+```bash
+git clone https://github.com/JY4844/codepitfall-apps.git
+cd codepitfall-apps
+npm install
+```
+
+Create `.env.local` (optional — all deterministic non-LLM tools work 100% offline without an API key):
+
+```env
+GEMINI_API_KEY="your_google_ai_studio_key"
+# Optional: increases GitHub Repo Auditor rate limit from 60/hr to 5,000/hr
+GITHUB_TOKEN=""
+# Optional: enables interactive Google Maps JS API (zero-config Embed works without it)
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=""
+```
+
+Run locally:
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:3000/codemistake`.
+
+---
+
+## Feedback & Contributing
+
+Found a bug or want a new secret pattern / Git recovery guide?
+👉 [Open an Issue](https://github.com/JY4844/codepitfall-apps/issues/new)

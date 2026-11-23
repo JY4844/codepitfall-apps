@@ -283,7 +283,7 @@ export default function HomePage() {
               boxShadow: "0 1px 3px rgba(15, 23, 42, 0.04)",
             }}
           >
-            <span>🇯🇵 Google Gemini 2.5 Flash マルチモーダル搭載</span>
+            <span>🇯🇵 Google Gemini 3 Flash マルチモーダル × 非AI決定的ガード搭載</span>
             <span style={{ color: "#cbd5e1" }}>•</span>
             <span>完全無料・ローカルSSD保存対応</span>
           </div>
