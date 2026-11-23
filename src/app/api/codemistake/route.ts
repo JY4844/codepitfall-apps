@@ -44,6 +44,13 @@ export interface FixStep {
   codeOrCommand?: string;
 }
 
+export interface CalibratedDecisionItem {
+  id: string;
+  label: string;
+  probability: number; // 0-100 (%)
+  confidence: number; // 0-100 (%)
+}
+
 export interface AuditResponse {
   // ① 3秒で分かる原因＆あなたの過去クセ一致アラート
   quickCause: string;
@@ -67,6 +74,7 @@ export interface AuditResponse {
   source: "gemini" | "local-analyzer";
   taskType: string;
   errorLog: string;
+  calibratedDecisions?: CalibratedDecisionItem[];
 }
 
 const TASK_CHECKLIST_TEMPLATES: Record<
@@ -969,6 +977,78 @@ function runDeterministicErrorDiagnosis(
   };
 }
 
+async function fetchCalibratedDecisions(
+  apiKey: string,
+  inputText: string
+): Promise<CalibratedDecisionItem[] | undefined> {
+  if (!inputText.trim()) return undefined;
+  try {
+    const resp = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/decisions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        signal: AbortSignal.timeout(8000),
+        body: JSON.stringify({
+          model: "gemini-decision-1",
+          input: inputText.slice(0, 4000),
+          questions: {
+            async_bug: {
+              type: "noul",
+              instructions:
+                "Is this developer error caused by async/await misuse, Promise handling, or API response parsing?",
+            },
+            config_env: {
+              type: "noul",
+              instructions:
+                "Is this error caused by missing modules, file path/case mismatch, environment variables, or build config?",
+            },
+            git_deploy: {
+              type: "noul",
+              instructions:
+                "Is this error caused by Git push/pull conflicts, branch divergence, or deployment/CI blockers?",
+            },
+            security_mcp: {
+              type: "noul",
+              instructions:
+                "Does this error involve MCP stdio/JSON-RPC transport failure, supply-chain hooks, or security/secret risks?",
+            },
+          },
+        }),
+      }
+    );
+    if (!resp.ok) return undefined;
+    const data = await resp.json();
+    const ans = data?.answers;
+    if (!ans || typeof ans !== "object") return undefined;
+
+    const specs: Array<{ key: string; label: string }> = [
+      { key: "async_bug", label: "非同期 / await・API パース起因" },
+      { key: "config_env", label: "環境変数・パス・ビルド設定起因" },
+      { key: "git_deploy", label: "Git / Push・デプロイ阻害起因" },
+      { key: "security_mcp", label: "MCP 通信 / セキュリティリスク起因" },
+    ];
+    const items: CalibratedDecisionItem[] = [];
+    for (const s of specs) {
+      const a = ans[s.key];
+      if (a && typeof a.noul === "number" && typeof a.confidence === "number") {
+        items.push({
+          id: s.key,
+          label: s.label,
+          probability: Math.round(a.noul * 100),
+          confidence: Math.round(a.confidence * 100),
+        });
+      }
+    }
+    return items.length > 0 ? items : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -1087,20 +1167,28 @@ export async function POST(request: Request) {
           }
         }
 
-        const resp = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts }],
-              generationConfig: {
-                temperature: 0.2,
-                responseMimeType: "application/json",
-              },
-            }),
-          }
-        );
+        const decisionText = [errorLog, code].filter(Boolean).join("\n\n");
+        const [resp, calibratedDecisions] = await Promise.all([
+          fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{ parts }],
+                generationConfig: {
+                  temperature: 0.2,
+                  responseMimeType: "application/json",
+                },
+              }),
+            }
+          ),
+          fetchCalibratedDecisions(apiKey, decisionText),
+        ]);
+
+        if (calibratedDecisions) {
+          fallback.calibratedDecisions = calibratedDecisions;
+        }
 
         if (resp.ok) {
           const data = await resp.json();
@@ -1142,6 +1230,7 @@ export async function POST(request: Request) {
                     : fallback.terminalCommand,
                 summary: parsed.quickCause,
                 source: "gemini",
+                calibratedDecisions,
               } satisfies AuditResponse);
             }
           }

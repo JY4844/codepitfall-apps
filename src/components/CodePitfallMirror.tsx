@@ -1427,6 +1427,129 @@ export default function CodePitfallMirror() {
               marginBottom: 24,
             }}
           >
+            {/* 🎯 Gemini Decision 1 Calibrated Probabilities (0 Output Tokens) */}
+            {result.calibratedDecisions && result.calibratedDecisions.length > 0 && (
+              <section
+                style={{
+                  background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+                  color: "#f8fafc",
+                  borderRadius: 16,
+                  border: "1px solid #334155",
+                  padding: "16px 20px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    flexWrap: "wrap",
+                    gap: 8,
+                    marginBottom: 12,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 800,
+                        padding: "3px 9px",
+                        borderRadius: 999,
+                        background: "#38bdf8",
+                        color: "#082f49",
+                      }}
+                    >
+                      Gemini Decision 1
+                    </span>
+                    <strong style={{ fontSize: 13.5 }}>
+                      🎯 校正済み確率スコア（0出力トークン・単一パス判定）
+                    </strong>
+                  </div>
+                  <span style={{ fontSize: 11.5, color: "#94a3b8" }}>
+                    POST /v1beta/decisions
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                    gap: 10,
+                  }}
+                >
+                  {result.calibratedDecisions.map((d) => (
+                    <div
+                      key={d.id}
+                      style={{
+                        background: "rgba(15, 23, 42, 0.7)",
+                        border: "1px solid #334155",
+                        borderRadius: 10,
+                        padding: "10px 12px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          color: "#cbd5e1",
+                          marginBottom: 6,
+                        }}
+                      >
+                        {d.label}
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "baseline",
+                          justifyContent: "space-between",
+                          marginBottom: 5,
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: 18,
+                            fontWeight: 900,
+                            color:
+                              d.probability >= 60
+                                ? "#38bdf8"
+                                : d.probability >= 30
+                                ? "#fbbf24"
+                                : "#94a3b8",
+                          }}
+                        >
+                          {d.probability}%
+                        </span>
+                        <span style={{ fontSize: 11, color: "#94a3b8" }}>
+                          確信度 {d.confidence}%
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          height: 6,
+                          borderRadius: 999,
+                          background: "#1e293b",
+                          overflow: "hidden",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: `${d.probability}%`,
+                            height: "100%",
+                            background:
+                              d.probability >= 60
+                                ? "#38bdf8"
+                                : d.probability >= 30
+                                ? "#fbbf24"
+                                : "#475569",
+                            borderRadius: 999,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             {/* ① 3秒で分かる原因 ＆ あなたの過去クセ一致アラート */}
             <section
               style={{
