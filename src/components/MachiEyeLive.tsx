@@ -1814,7 +1814,7 @@ export default function MachiEyeLive() {
         }),
       });
 
-      const data = (await res.json()) as {
+      const data = (await res.json().catch(() => ({}))) as {
         result?: MachiEyeAnalysis;
         usedModel?: string;
         error?: string;
@@ -2108,7 +2108,7 @@ export default function MachiEyeLive() {
         }),
       });
 
-      const data = (await res.json()) as Record<string, unknown>;
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       if (!res.ok) {
         throw new Error(
           typeof data.error === "string"

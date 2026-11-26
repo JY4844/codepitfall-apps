@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { TaskPriority } from "@/types/task";
+import { enforceRateLimit } from "@/lib/rateLimit";
 
 export type FamilyRole = string;
 
@@ -65,10 +66,9 @@ const ALLOWED_IMAGE_MIME_TYPES = new Set([
   "image/png",
   "image/jpeg",
   "image/webp",
-  "image/gif",
 ]);
-// 5 MB binary ≈ 6.67 MB base64
-const MAX_IMAGE_BASE64_LENGTH = 7_000_000;
+// Vercel body limit is 4.5 MB
+const MAX_IMAGE_BASE64_LENGTH = 4_000_000;
 
 const RESPONSE_SCHEMA = {
   type: "OBJECT",
@@ -1447,6 +1447,8 @@ function adaptAnalysisToCustomMembers(
 }
 
 export async function POST(request: NextRequest) {
+  const limited = enforceRateLimit(request, "otayori");
+  if (limited) return limited;
   let body: Record<string, unknown>;
   try {
     const parsed = await request.json();
@@ -1459,9 +1461,9 @@ export async function POST(request: NextRequest) {
   }
 
   const sourceText =
-    typeof body.sourceText === "string" ? body.sourceText.trim() : "";
+    typeof body.sourceText === "string" ? body.sourceText.trim().slice(0, 8_000) : "";
   const familyRoles =
-    typeof body.familyRoles === "string" ? body.familyRoles.trim() : "";
+    typeof body.familyRoles === "string" ? body.familyRoles.trim().slice(0, 1_000) : "";
   const imageBase64 =
     typeof body.imageBase64 === "string" ? body.imageBase64.trim() : "";
   const imageMimeType =
@@ -1470,8 +1472,9 @@ export async function POST(request: NextRequest) {
     typeof body.presetId === "string" ? body.presetId.trim() : "";
   const customMembers = Array.isArray(body.customMembers)
     ? body.customMembers
-        .map((m) => String(m ?? "").trim())
+        .map((m) => String(m ?? "").trim().slice(0, 40))
         .filter(Boolean)
+        .slice(0, 12)
     : [];
 
   let userLocation: OtayoriUserLocation | undefined;
@@ -1573,17 +1576,19 @@ export async function POST(request: NextRequest) {
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     GEMINI_MODEL
-  )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  )}:generateContent`;
 
   try {
     const geminiRes = await fetch(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
       signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
       body: JSON.stringify({
         contents: [{ parts }],
         generationConfig: {
-          temperature: 0.2,
           responseMimeType: "application/json",
           responseSchema: RESPONSE_SCHEMA,
         },
@@ -1601,18 +1606,38 @@ export async function POST(request: NextRequest) {
     const candidates = geminiJson?.candidates as
       | Array<Record<string, unknown>>
       | undefined;
+    const finishReason = candidates?.[0]?.finishReason;
+    if (finishReason === "MAX_TOKENS") {
+      return respondWhenVisionUnavailable(
+        "Gemini Vision API の出力が最大トークン数で途中終了したため、安全のためローカル解析へフォールバックしました。",
+        "ローカルテキスト解析 (MAX_TOKENSフォールバック)"
+      );
+    }
     const content = candidates?.[0]?.content as Record<string, unknown> | undefined;
     const contentParts = content?.parts as Array<Record<string, unknown>> | undefined;
-    const rawText = contentParts?.[0]?.text;
+    const rawText = Array.isArray(contentParts)
+      ? contentParts
+          .filter((p) => typeof p?.text === "string" && !p?.thought)
+          .map((p) => String(p.text))
+          .join("")
+      : "";
 
-    if (typeof rawText !== "string" || !rawText.trim()) {
+    if (!rawText.trim()) {
       return respondWhenVisionUnavailable(
         "Gemini Vision API から有効な解析結果が返らなかったため、画像を読み取れませんでした。時間をおいて再試行するか、おたよりの主要テキストを貼り付けて解析してください。",
         "ローカルテキスト解析 (Gemini空応答フォールバック)"
       );
     }
 
-    const analysis = extractJsonObject(rawText, customMembers, userLocation);
+    let analysis;
+    try {
+      analysis = extractJsonObject(rawText, customMembers, userLocation);
+    } catch {
+      return respondWhenVisionUnavailable(
+        "Gemini Vision API の出力 JSON 解析に失敗したため、画像を正しく読み取れませんでした。時間をおいて再試行するか、おたよりの主要テキストを貼り付けて解析してください。",
+        "ローカルテキスト解析 (AI出力JSON解析フォールバック)"
+      );
+    }
     return NextResponse.json({
       analysis,
       usedModel: GEMINI_MODEL,

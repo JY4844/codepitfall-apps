@@ -2,30 +2,9 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
+import { scanAndRedactLocally } from "@/lib/deterministicGuard";
+import type { LearnResult, PublishResult } from "@/types/gitbridge";
 import styles from "./GitBridge.module.css";
-
-interface LearnResult {
-  title: string;
-  repo_summary: string;
-  reading_order: { file_path: string; role: string; beginner_tip: string }[];
-  key_concepts: { term: string; plain_explanation: string }[];
-  quiz: {
-    question: string;
-    choices: string[];
-    correct_index: number;
-    explanation: string;
-  }[];
-  suggested_tasks: { title: string; priority: "high" | "medium" | "low"; memo: string }[];
-}
-
-interface PublishResult {
-  title: string;
-  summary: string;
-  safety_checks: { item: string; why_important: string; how_to_fix: string }[];
-  publish_steps: { step_title: string; command: string; meaning: string }[];
-  common_errors: { error_pattern: string; recovery: string }[];
-  suggested_tasks: { title: string; priority: "high" | "medium" | "low"; memo: string }[];
-}
 
 const FALLBACK_PUBLISH_GUIDE: PublishResult = {
   title: "🌉 GitHub 安全公開・更新ステップガイド",
@@ -123,13 +102,16 @@ export default function GitBridge() {
       showRepoUrlInput && repoUrl.trim() ? "learn_repo" : "publish_guide";
 
     try {
+      const safeProjectNote = projectNote.trim()
+        ? scanAndRedactLocally(projectNote.trim()).redactedText
+        : "";
       const res = await fetch("/api/gitbridge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: apiMode,
           repoUrl: repoUrl.trim(),
-          projectNote: projectNote.trim(),
+          projectNote: safeProjectNote,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -142,6 +124,13 @@ export default function GitBridge() {
       } else {
         setPublishResult(data.result as PublishResult);
         setLearnResult(null);
+      }
+      if (data.isFallback) {
+        setNotice("ローカル安全解析（フォールバックモード）でガイドを生成しました。");
+      } else if (apiMode === "learn_repo" && data.ghContextAvailable === false) {
+        setNotice(`Gemini (${data.usedModel || "3 Flash"}) で生成しました（GitHub メタデータ未取得のため入力内容ベース）。`);
+      } else if (data.usedModel) {
+        setNotice(`Gemini (${data.usedModel}) で構造化ガイドを生成しました。`);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "エラーが発生しました。";
@@ -185,7 +174,7 @@ export default function GitBridge() {
           tasks: active.suggested_tasks ?? [],
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(data.error || "Google Workspace 連携に失敗しました。");
       }

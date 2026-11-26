@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { TaskPriority } from "@/types/task";
+import { enforceRateLimit } from "@/lib/rateLimit";
 
 const ALLOWED_GEMINI_MODELS = [
   "gemini-3-flash-preview",
@@ -72,12 +73,11 @@ export interface MachiEyeAnalysis {
 
 const DEFAULT_GEMINI_MODEL: GeminiModel = "gemini-3-flash-preview";
 const GEMINI_TIMEOUT_MS = 30_000;
-const MAX_IMAGE_BASE64_LENGTH = 7_000_000;
+const MAX_IMAGE_BASE64_LENGTH = 4_000_000;
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
   "image/png",
   "image/jpeg",
   "image/webp",
-  "image/gif",
 ]);
 
 const RESPONSE_SCHEMA = {
@@ -1151,6 +1151,8 @@ async function safeParseJson(res: Response): Promise<Record<string, unknown> | n
 }
 
 export async function POST(request: NextRequest) {
+  const limited = enforceRateLimit(request, "machieye");
+  if (limited) return limited;
   try {
     let body: Record<string, unknown>;
     try {
@@ -1164,7 +1166,7 @@ export async function POST(request: NextRequest) {
     }
 
     const sourceText =
-      typeof body?.sourceText === "string" ? body.sourceText.trim() : "";
+      typeof body?.sourceText === "string" ? body.sourceText.trim().slice(0, 8_000) : "";
     const locationText =
       typeof body?.locationText === "string" && body.locationText.trim()
         ? body.locationText.trim()
@@ -1262,18 +1264,20 @@ export async function POST(request: NextRequest) {
 
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
       geminiModel
-    )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    )}:generateContent`;
 
     let geminiRes: Response;
     try {
       geminiRes = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
         signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
         body: JSON.stringify({
           contents: [{ parts }],
           generationConfig: {
-            temperature: 0.2,
             responseMimeType: "application/json",
             responseSchema: RESPONSE_SCHEMA,
           },
@@ -1301,14 +1305,27 @@ export async function POST(request: NextRequest) {
     const candidates = geminiJson?.candidates as
       | Array<Record<string, unknown>>
       | undefined;
+    if (candidates?.[0]?.finishReason === "MAX_TOKENS") {
+      return NextResponse.json({
+        result: fallbackResult(),
+        usedProvider: "gemini-fallback" as const,
+        usedModel: `${geminiModel} (MAX_TOKENS Fallback)`,
+        isFallback: true,
+      });
+    }
     const content = candidates?.[0]?.content as
       | Record<string, unknown>
       | undefined;
     const contentParts = content?.parts as
       | Array<Record<string, unknown>>
       | undefined;
-    const rawText = contentParts?.[0]?.text;
-    if (typeof rawText !== "string" || !rawText.trim()) {
+    const rawText = Array.isArray(contentParts)
+      ? contentParts
+          .filter((p) => typeof p?.text === "string" && !p?.thought)
+          .map((p) => String(p.text))
+          .join("")
+      : "";
+    if (!rawText.trim()) {
       return NextResponse.json({
         result: fallbackResult(),
         usedProvider: "gemini-fallback" as const,

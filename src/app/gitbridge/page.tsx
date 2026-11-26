@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import CodePitfallUnified from "@/components/CodePitfallUnified";
 
 export const metadata: Metadata = {
-  title: "CodePitfall × GitBridge — はじめての GitHub 安全公開＆エラー即解決コンパニオン",
+  title: "GitBridge — はじめての GitHub 読解＆秘密漏洩ゼロ安全公開ガイド",
   description:
-    "初心者向け GitHub 安全公開ガイド（GitBridge）とエラー即レス診断（CodePitfall Mirror）をひとつに統合した開発補助アプリ",
+    "外部 GitHub リポジトリの読解ガイド生成から .env 秘密情報自動マスキング付き安全公開手順まで、初心者を導く Gemini 3 開発コンパニオン",
 };
 
 export default function GitBridgePage() {

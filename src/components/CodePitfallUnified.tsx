@@ -75,7 +75,11 @@ export default function CodePitfallUnified({ initialTab = "error" }: Props) {
         >
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 16, fontWeight: 800, color: "#0f172a" }}>
-              🪞 CodePitfall × 🌉 GitBridge
+              {activeTab === "github"
+                ? "🌉 GitBridge — GitHub 読解＆安全公開ガイド"
+                : activeTab === "guard"
+                ? "🛡️ Safety Guard Lab — 秘密漏洩・AGENTS.md 防御"
+                : "🪞 CodePitfallMirror Pro — エラー即解決＆ミスDNA"}
             </span>
             <span
               style={{

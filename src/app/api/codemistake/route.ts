@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { enforceRateLimit } from "@/lib/rateLimit";
 
 export type MistakeCategory =
   | "Async"
@@ -1049,16 +1050,83 @@ async function fetchCalibratedDecisions(
   }
 }
 
+const ALLOWED_CATEGORIES = new Set([
+  "Async",
+  "API",
+  "Logic",
+  "Config",
+  "Security",
+  "DB",
+  "Env",
+  "Hydration",
+  "Git",
+  "MCP",
+]);
+const ALLOWED_SEVERITIES = new Set(["high", "medium", "low"]);
+const MAX_IMAGE_DATA_URL_LENGTH = 4_000_000;
+const CODEMISTAKE_RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    quickCause: { type: "STRING" },
+    whyItHappened: { type: "STRING" },
+    category: {
+      type: "STRING",
+      enum: ["Async", "API", "Logic", "Config", "Security", "DB", "Env", "Hydration", "Git", "MCP"],
+    },
+    severity: { type: "STRING", enum: ["high", "medium", "low"] },
+    matchedHabitPattern: { type: "STRING", nullable: true },
+    suggestedHabitPattern: { type: "STRING" },
+    fixSteps: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          stepNumber: { type: "INTEGER" },
+          where: { type: "STRING" },
+          instruction: { type: "STRING" },
+          codeOrCommand: { type: "STRING", nullable: true },
+        },
+        required: ["stepNumber", "where", "instruction"],
+      },
+    },
+    aiFixPrompt: { type: "STRING" },
+    terminalCommand: { type: "STRING", nullable: true },
+  },
+  required: ["quickCause", "whyItHappened", "category", "severity", "fixSteps"],
+};
+
 export async function POST(request: Request) {
+  const limited = enforceRateLimit(request, "codemistake");
+  if (limited) return limited;
   try {
-    const body = await request.json();
-    const errorLog = String(body.errorLog ?? "");
-    const code = String(body.code ?? "");
-    const taskType = String(body.taskType ?? "Next.js API / フォーム送信");
-    const imageDataUrl =
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return NextResponse.json(
+        { error: "リクエスト本文が有効な JSON ではありません。" },
+        { status: 400 }
+      );
+    }
+    const errorLog = String(body.errorLog ?? "").slice(0, 8_000);
+    const code = String(body.code ?? "").slice(0, 8_000);
+    const taskType = String(body.taskType ?? "Next.js API / フォーム送信").slice(0, 200);
+    const rawImageDataUrl =
       typeof body.imageDataUrl === "string" ? body.imageDataUrl : "";
+    if (rawImageDataUrl.length > MAX_IMAGE_DATA_URL_LENGTH) {
+      return NextResponse.json(
+        { error: "画像サイズが大きすぎます（3MB以下にしてください）。" },
+        { status: 413 }
+      );
+    }
+    const imageDataUrl = rawImageDataUrl;
     const habits: PersonalMistake[] = Array.isArray(body.habits)
       ? body.habits
+          .filter(
+            (h: unknown): h is PersonalMistake =>
+              typeof h === "object" &&
+              h !== null &&
+              typeof (h as PersonalMistake).pattern === "string"
+          )
+          .slice(0, 30)
       : [];
 
     const hasImage = /^data:image\/(png|jpeg|jpg|webp);base64,/i.test(
@@ -1170,15 +1238,19 @@ export async function POST(request: Request) {
         const decisionText = [errorLog, code].filter(Boolean).join("\n\n");
         const [resp, calibratedDecisions] = await Promise.all([
           fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent",
             {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: {
+                "Content-Type": "application/json",
+                "x-goog-api-key": apiKey,
+              },
+              signal: AbortSignal.timeout(30_000),
               body: JSON.stringify({
                 contents: [{ parts }],
                 generationConfig: {
-                  temperature: 0.2,
                   responseMimeType: "application/json",
+                  responseSchema: CODEMISTAKE_RESPONSE_SCHEMA,
                 },
               }),
             }
@@ -1191,14 +1263,42 @@ export async function POST(request: Request) {
         }
 
         if (resp.ok) {
-          const data = await resp.json();
-          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+          const data = await resp.json().catch(() => null);
+          const finishReason = data?.candidates?.[0]?.finishReason;
+          const candidateParts = data?.candidates?.[0]?.content?.parts as
+            | Array<{ text?: string; thought?: boolean }>
+            | undefined;
+          const text =
+            finishReason !== "MAX_TOKENS" && Array.isArray(candidateParts)
+              ? candidateParts
+                  .filter((p) => typeof p?.text === "string" && !p?.thought)
+                  .map((p) => p.text)
+                  .join("")
+              : "";
           if (text) {
             const parsed = JSON.parse(text);
             if (
               typeof parsed.quickCause === "string" &&
               Array.isArray(parsed.fixSteps)
             ) {
+              const sanitizedFixSteps = parsed.fixSteps
+                .filter((s: unknown) => typeof s === "object" && s !== null)
+                .slice(0, 8)
+                .map((s: Record<string, unknown>, idx: number) => ({
+                  stepNumber: Number(s.stepNumber) || idx + 1,
+                  where: String(s.where ?? "VS Code エディタ"),
+                  instruction: String(s.instruction ?? ""),
+                  ...(typeof s.codeOrCommand === "string" && s.codeOrCommand.trim()
+                    ? { codeOrCommand: s.codeOrCommand }
+                    : {}),
+                }))
+                .filter((s: { instruction: string }) => s.instruction.trim().length > 0);
+              const safeCategory = ALLOWED_CATEGORIES.has(String(parsed.category))
+                ? (String(parsed.category) as AuditResponse["category"])
+                : fallback.category;
+              const safeSeverity = ALLOWED_SEVERITIES.has(String(parsed.severity))
+                ? (String(parsed.severity) as AuditResponse["severity"])
+                : fallback.severity;
               const matchedHabit =
                 (parsed.matchedHabitPattern &&
                   habits.find(
@@ -1213,15 +1313,15 @@ export async function POST(request: Request) {
                 quickCause: parsed.quickCause,
                 whyItHappened:
                   parsed.whyItHappened || fallback.whyItHappened,
-                category: parsed.category || fallback.category,
-                severity: parsed.severity || fallback.severity,
+                category: safeCategory,
+                severity: safeSeverity,
                 matchedHabit,
                 suggestedHabitPattern:
                   parsed.suggestedHabitPattern ||
                   fallback.suggestedHabitPattern,
                 fixSteps:
-                  parsed.fixSteps.length > 0
-                    ? parsed.fixSteps
+                  sanitizedFixSteps.length > 0
+                    ? sanitizedFixSteps
                     : fallback.fixSteps,
                 aiFixPrompt: parsed.aiFixPrompt || fallback.aiFixPrompt,
                 terminalCommand:
@@ -1244,7 +1344,7 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json(
       { error: "エラー診断リクエストの処理に失敗しました。" },
-      { status: 400 }
+      { status: 500 }
     );
   }
 }
